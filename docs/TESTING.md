@@ -140,13 +140,13 @@ Validate isolated business logic and edge cases. Model providers are always mock
 Validate boundaries such as database, filesystem, network API, authentication, or platform adapters.
 
 **Project commands:**  
-`pnpm test:integration` runs the real baseline runner in a throwaway git copy to prove dirty evidence fails closed (needs Chromium; not part of the default CI steps). `pnpm inference:status -- --discover` (non-billable provider discovery; requires a configured key; manual only). Real billable inference tests require separate owner authorization.
+`pnpm test:integration` (needs Chromium **and** ffmpeg; not part of the default CI steps) runs: the real baseline runner in a throwaway copy to prove dirty evidence fails closed, and real-media tests (genuine MP4 accepted; truncated, bit-flipped, garbage, over-long, wrong-codec and audio-only files rejected; WebM refused then converted). The C2A unit and security suites (media logic with injected probe, consent, `Symptom`, mocked Meta Files + Responses contract, CLI) need no ffmpeg and run in CI under `test:unit` / `test:security`. `pnpm inference:status -- --discover` (non-billable provider discovery; requires a configured key; manual only). Real billable inference tests require separate owner authorization.
 
 ### End-to-end / acceptance tests
 Validate critical user journeys or release flows.
 
 **Project commands:**  
-`pnpm f01:baseline`: runs the trusted F01 oracle. Exit 0 only when the expected baseline failure is REPRODUCED, the desktop control passes, **and** the evidence-relevant paths (fixture, verifier, classifier, runner) are committed/clean. Exit 2 means reproduced but not certifiable as exact-SHA evidence (dirty or unverifiable worktree; diagnostic artifacts are kept). Exit 1 means not reproduced/inconclusive.
+`pnpm record:f01`: records the real mobile-defect and desktop-control clips (needs Chromium and ffmpeg; exit 0 / 1 / 2 as for the baseline). `pnpm analyze:video -- --video <file> --run-id <id>`: dry run by default, no network. `pnpm f01:baseline`: runs the trusted F01 oracle. Exit 0 only when the expected baseline failure is REPRODUCED, the desktop control passes, **and** the evidence-relevant paths (fixture, verifier, classifier, runner) are committed/clean. Exit 2 means reproduced but not certifiable as exact-SHA evidence (dirty or unverifiable worktree; diagnostic artifacts are kept). Exit 1 means not reproduced/inconclusive.
 
 `pnpm test:e2e:f01`: the raw oracle. On the unpatched baseline it **exits non-zero by design** (1 failed, 1 passed). Never mark the mobile oracle `test.fail()` or otherwise disguise that failure.
 

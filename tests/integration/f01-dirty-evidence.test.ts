@@ -4,7 +4,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { appendFileSync, cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { appendFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -24,7 +24,12 @@ function runBaseline() {
 
 before(() => {
   copy = mkdtempSync(path.join(os.tmpdir(), 'proofpilot-dirty-'));
-  for (const file of execFileSync('git', ['ls-files'], { cwd: repoRoot, encoding: 'utf8' }).split('\n').filter(Boolean)) {
+  // Copy the working tree as it is (tracked + untracked, minus ignored), so the test also works
+  // before new files are committed. A file deleted from the tree is simply not copied.
+  const files = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard'], { cwd: repoRoot, encoding: 'utf8' })
+    .split('\n')
+    .filter((file) => file.length > 0 && existsSync(path.join(repoRoot, file)));
+  for (const file of files) {
     mkdirSync(path.dirname(path.join(copy, file)), { recursive: true });
     cpSync(path.join(repoRoot, file), path.join(copy, file));
   }

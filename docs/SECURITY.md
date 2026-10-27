@@ -63,10 +63,14 @@ Security-sensitive authorization must be enforced server-side or at the authorit
 | Fixture code, page text, recordings, model output | Untrusted data | Never executed as instructions; verdicts come only from Playwright results via deterministic code |
 | Run evidence (`.proofpilot/`) | Local, gitignored | SHA-256 hashed per run; contains no credentials |
 | Billable inference | Owner-gated | Off unless `PROOFPILOT_ALLOW_BILLABLE_CALLS=1` |
+| User recording (C2A) | Untrusted input; leaves the machine only with consent | Validated locally first (real signature, size, duration, codec, full decode); consent bound to run + provider + SHA-256; bytes re-verified before upload; second opt-in `PROOFPILOT_ALLOW_VIDEO_UPLOAD=1`; expiring remote file deleted in `finally`; no retry of upload; local copy under gitignored `.proofpilot/` |
+| Media tools (`ffprobe`/`ffmpeg`) | Run on untrusted bytes | Only on a private 0700 temp copy of the validated bytes; `-protocol_whitelist file`; credential-scrubbed env; timeouts; no shell; temp dir always removed |
+| Model output (Symptom) | Untrusted hypothesis | Strict local schema; unknown keys rejected; `provenance` set by code; can never become a verdict or oracle evidence; text rendered as data |
+| Provider-returned file ids | Untrusted | Must match `^file-[A-Za-z0-9_-]{1,64}$` before any request path is built |
 
 Data classification: the MVP handles only synthetic fixtures and owner-made recordings. Model inputs are sent to Meta (or Baseten if selected); this is not an offline-privacy product.
 
-Known gaps (C1): no container sandbox yet (container validation NOT VERIFIED — agent environment lacks Docker access; required before executing AI-generated code or candidate patches); the policy lint is a pattern check, not a full secret scanner.
+Known gaps (C1/C2A): real Meta video/Responses behaviour is unverified (mocks only; live smoke needs owner authorization); the `text.format` and response shapes are OpenAI-compatible assumptions; H.264-only acceptance is a deliberate fail-safe pending live confirmation of other codecs; no container sandbox yet (container validation NOT VERIFIED — agent environment lacks Docker access; required before executing AI-generated code or candidate patches); the policy lint is a pattern check, not a full secret scanner.
 
 ## AI-agent boundaries
 

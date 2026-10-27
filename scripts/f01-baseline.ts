@@ -16,7 +16,7 @@ import {
   extractOracleResults,
   F01_EVIDENCE_PATHS,
   F01_OBSERVATION_ATTACHMENT,
-  parsePorcelainPaths,
+  readWorktreeState,
   scrubEnv,
   startClock,
   validateImpactMetrics,
@@ -34,22 +34,8 @@ const runId = `f01-baseline-${stamp}-${randomBytes(3).toString('hex')}`;
 const runDir = path.join(repoRoot, '.proofpilot/runs', runId);
 await mkdir(runDir, { recursive: true });
 
-// Untrimmed on purpose: the first porcelain line starts with a significant status column.
-function worktreeState(): WorktreeState {
-  try {
-    const porcelain = execFileSync('git', ['status', '--porcelain', '--untracked-files=all', '--', ...F01_EVIDENCE_PATHS], {
-      cwd: repoRoot,
-      encoding: 'utf8',
-    });
-    const paths = parsePorcelainPaths(porcelain);
-    return paths.length === 0 ? { kind: 'clean' } : { kind: 'dirty', paths };
-  } catch (err) {
-    return { kind: 'unknown', reason: String((err as Error).message).split('\n')[0]! };
-  }
-}
-
 const gitHead = git('rev-parse', 'HEAD');
-const worktreeBefore = worktreeState();
+const worktreeBefore = readWorktreeState(repoRoot, F01_EVIDENCE_PATHS);
 let fixtureTree: string | null = null;
 try {
   fixtureTree = git('rev-parse', 'HEAD:fixtures/sample-store');
@@ -71,7 +57,7 @@ const exitCode: number = await new Promise((resolve, reject) => {
 });
 const verificationExecutionMs = verification.elapsedMs();
 // Re-check after the oracle ran: the tested bytes must also be unchanged during the run.
-const worktreeAfter = worktreeState();
+const worktreeAfter = readWorktreeState(repoRoot, F01_EVIDENCE_PATHS);
 const worktree: WorktreeState =
   worktreeBefore.kind !== 'clean' ? worktreeBefore : worktreeAfter;
 const worktreeDirty = worktree.kind !== 'clean';

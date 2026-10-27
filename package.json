@@ -19,7 +19,9 @@
     "test": "pnpm test:unit && pnpm test:security",
     "test:e2e:f01": "playwright test -c verifier/playwright.config.ts",
     "f01:baseline": "node scripts/f01-baseline.ts",
-    "inference:status": "node --env-file-if-exists=.env.local scripts/inference-status.ts"
+    "inference:status": "node --env-file-if-exists=.env.local scripts/inference-status.ts",
+    "record:f01": "node scripts/f01-record.ts",
+    "analyze:video": "node --env-file-if-exists=.env.local scripts/analyze-video.ts"
   },
   "devDependencies": {
     "@playwright/test": "1.64.1",

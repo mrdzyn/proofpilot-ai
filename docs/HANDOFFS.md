@@ -249,4 +249,65 @@ Auditor: clean clone of the Draft PR head; run the validation commands; review t
 ### Next action
 GPT-6: re-audit the exact PR head; confirm MINOR-1 and MINOR-2 are closed; report PASS / FIX REQUIRED / PARTIAL.
 
+## Handoff: PP-META-I1-C2A-C1
+
+- **Task / phase:** `tasks/PP-META-I1-C2A.md`
+- **From:** Implementation agent (Claude Code, Claude Sonnet 5.5)
+- **To:** GPT-6 independent audit (read-only), then project owner
+- **Branch:** `phase/pp-meta-i1-c2a` (local commits only; **not pushed**, no PR)
+- **Implementation head:** `444f7d9037ad2cf5d033a0c669f92846ee06b677` (starting point `7066ae47a9deff232589cb8720a04ac4b226d344`; audit the branch head, which adds only this docs commit)
+- **PR:** N/A (owner authorization required to push or open a Draft PR)
+- **State:** READY FOR REVIEW
+
+### Completed
+- **REAL VIDEO RECORDED** (local, gitignored, `.proofpilot/recordings/f01-20261027T075549Z-d6dcfd/`, certified exact-SHA at `e68cf31`; the later commit `444f7d9` changed no recording path):
+  - mobile defect `mobile-defect/f01-mobile-defect.mp4`: MP4/H.264, 390×844, 10.04 s, 58,249 B, no audio, SHA-256 `6e45b6822b09ea65c3fef67e3bac0327bd664463e1fcde547ce128820fe45c4f`. Two real coordinate clicks on Add to cart, both received by `promo-overlay`, cart stays `0`.
+  - desktop control `desktop-control/f01-desktop-control.mp4`: 1280×800, 7.32 s, 41,584 B, SHA-256 `8fa93fac4ac76d97bfcb7894efd899d290c6e4cc276a70652cf2e05f39e3d6cb`. One click received by `add-to-cart`, cart `1`.
+  - Each set has `recording.json` (metadata and artifact hashes), `trace.zip`, `before/after-tap.png`, reference frames, and the raw WebM. SHA-256 was independently recomputed with `shasum`. Frames from the final clips were inspected visually. A yellow press ring is a recorder-injected aid and is disclosed in `recording.json`.
+- **Intake** (`packages/intake`): signature/size/duration/codec/full-decode validation (a bare `ffprobe` accepts truncated MP4; decode stderr is what catches it), lexical-first path containment (no existence oracle), no-follow open, private 0700/0600 temp copy always removed, WebM→MP4 converter (exclusive output, deleted if it fails validation), re-verification of bytes before upload, consent bound to run + provider + SHA-256.
+- **Symptom** (`packages/core/src/symptom.ts`): strict validator (unknown keys, types, size, control chars, timestamps within the clip, contradictory claims); `provenance:'model-hypothesis'` set by code; deterministic `assessSymptom`. No path to VERIFIED.
+- **Meta contract, MOCK TESTED** (`packages/inference`): `POST /files` multipart (`purpose=user_data`, `expires_after[anchor|seconds]`, `file` last, video/mp4) → `POST /responses` (`input_file` by `file_id`, `text.format` json_schema strict) → local validation → `DELETE /files/{id}` in `finally`. Upload and generation are never retried. Needs `PROOFPILOT_ALLOW_BILLABLE_CALLS=1` **and** new `PROOFPILOT_ALLOW_VIDEO_UPLOAD=1`. File ids are validated before use in a path. Non-array/malformed Responses output now yields typed `INVALID_RESPONSE` (closes the earlier audit follow-up).
+- **CLI:** `pnpm analyze:video` is a dry run by default (zero network calls); `--live` also needs `--consent-meta-video-analysis` and both opt-ins. Results carry `evidenceKind` live|mock.
+- **Design (proposal only):** `design/screens/PP-PRODUCT-SCREEN-MAP.md`. No UI code.
+- **Only C1 file touched:** `scripts/f01-baseline.ts` now uses the shared `readWorktreeState` (certification logic unchanged; C1 dirty-evidence integration tests pass). Also fixed `tests/integration/f01-dirty-evidence.test.ts` to copy the working tree (it copied only tracked files). `verifier/`, `fixtures/`, `config/`, `.github/` are unchanged.
+
+### Validation (local, macOS arm64, Node v24.21.0, pnpm 12.6.0, Playwright 1.64.1 / Chromium 156, FFmpeg 9.0.1, at `444f7d9`, clean tree)
+- frozen install, lint, typecheck, profile validator, `git diff --check`, tracked-env guard: exit 0
+- `pnpm test:unit` 88/88; `pnpm test:security` 27/27; `pnpm test:integration` 9/9
+- `pnpm f01:baseline`: exit 0, REPRODUCED, desktop PASS, certified exact-SHA (C1 regression). `pnpm test:e2e:f01`: exit 1 (expected).
+- Mutation check: 17 guard removals (consent, byte re-verification, delete-in-finally, upload opt-in, no-retry, file-id checks ×2, hardened extraction, consent bindings ×2, decode check, size, duration, WebM signature, symptom timestamps/unknown keys/cross-field) were all caught.
+- Acceptance map: T01 PASS (real MP4 + SHA; consent bound) · T02 PASS (unsupported/oversize/over-duration/corrupt/truncated/missing metadata rejected, zero provider calls) · T03 PASS (mock transport sees zero calls without consent) · T04 **NOT TESTED** · T05 PASS (mock) · T06 PASS (mock).
+- Hosted CI: NOT RUN. The new unit and security suites need no ffmpeg and will run in the existing required `Stack validation`; the real-media and browser integration suite is local only.
+
+### Continuation notes
+- Real Meta behaviour is unverified. Assumed, not documented by Meta: the Responses `text.format` wrapper and the `output[].content[].output_text` response shape. H.264-only is a deliberate fail-safe.
+- Audit hints: confirm no network path precedes consent/validation/opt-ins (`video-analysis.ts`, `client.ts`); confirm ffmpeg runs only on the private temp copy (`media.ts`); confirm `.proofpilot/` stays untracked.
+- Not done on purpose: any live call or upload, UI shell, patch execution, C3, push.
+
+### Next action
+GPT-6: audit the branch head against the C2A contract, regenerate evidence with `pnpm record:f01` and the commands above (needs Chromium and ffmpeg), report PASS / FIX REQUIRED / PARTIAL. Owner: decide push/Draft PR, the screen-map direction, and whether to authorize one capped live smoke.
+
+## Handoff: PP-META-I1-C2A-R1
+
+- **Task / phase:** `tasks/PP-META-I1-C2A.md` (remediation of GPT-6 audit comment 6438633690 on PR #2)
+- **From:** Implementation agent (Claude Code, Claude Sonnet 5.5)
+- **To:** GPT-6 independent re-audit (read-only), then project owner
+- **Branch / PR:** `phase/pp-meta-i1-c2a`, Draft PR #2. Audited head `ff5157240c34caa95d8bb306c1898039479e6aae`; code fix `01da814da136f9ea982624414ec5baf9569f24eb` (audit the branch head, which adds only this docs commit)
+- **State:** READY FOR RE-AUDIT
+
+### Completed
+- **MAJOR-1:** `packages/inference/src/analyze-command.ts` reserves the run directory atomically (non-recursive `mkdir`) before any provider call; transport is wrapped to count calls. Duplicates and simultaneous same-id launches (2 and 8 concurrent tested) make zero network calls and exactly one run proceeds. Unused reservations (pre-flight refusals) are released; a reservation that reached the network is kept even if an unexpected error follows. Other run ids are never blocked. `analysis.json` is still `wx` (never overwritten).
+- **MINOR-2:** `certifyRecording` (`packages/core/src/worktree.ts`) decides certification once after recording; `scripts/f01-record.ts` writes `recording.json` only afterwards. Real-browser regression (`tests/integration/f01-record-certification.test.ts`) edits a fixture file mid-recording: exit 2, every clip `certifiedExactSha:false`, before=clean/after=dirty; control run is certified/exit 0.
+- Trusted oracle and protected paths (`verifier/`, `fixtures/`, `config/`, `.github/`) unchanged. No live Meta call, upload or patch execution.
+
+### Validation (local, at `01da814`)
+lint/typecheck/`git diff --check` clean; unit 97/97; security 27/27; integration 11/11; `pnpm f01:baseline` exit 0 REPRODUCED certified; `pnpm test:e2e:f01` exit 1 (expected); new certified recording set (see STATUS). Mutations: no-reservation killed (5 tests), always-release killed (new test), certify-ignores-after killed (unit + integration), certify-ignores-failure killed.
+
+### Continuation notes
+- A crashed live run leaves its run directory, so the id is burned by design (fail-closed against double billing); use a new `--run-id`.
+- Unchanged open items: real Meta model NOT TESTED (T04), `text.format`/response-shape assumptions, Docker NOT VERIFIED, screen map not approved, no C3.
+
+### Next action
+GPT-6: re-audit the exact head against both findings; then owner decisions as in STATUS.
+
 <!-- HANDOFF_ENTRIES_END -->

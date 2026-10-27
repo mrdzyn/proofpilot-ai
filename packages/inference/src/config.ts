@@ -13,6 +13,8 @@ type ProviderDefinition = {
   apiKeyEnv: string;
   baseUrlEnv: string;
   textApi: TextApi;
+  /** Accepts a Files-API video reference in Responses (Meta Muse Spark). */
+  nativeVideo: boolean;
   models: Partial<Record<ModelRole, { env: string; default: string }>>;
 };
 
@@ -24,6 +26,7 @@ export const PROVIDERS: Record<ProviderId, ProviderDefinition> = {
     apiKeyEnv: 'MODEL_API_KEY',
     baseUrlEnv: 'META_API_BASE_URL',
     textApi: 'responses',
+    nativeVideo: true,
     models: {
       visual: { env: 'META_MODEL_VISUAL', default: 'muse-spark-1.3' },
       code: { env: 'META_MODEL_CODE', default: 'muse-wonder-1.0' },
@@ -36,6 +39,7 @@ export const PROVIDERS: Record<ProviderId, ProviderDefinition> = {
     apiKeyEnv: 'BASETEN_API_KEY',
     baseUrlEnv: 'BASETEN_API_BASE_URL',
     textApi: 'chat.completions',
+    nativeVideo: false,
     // Hackathon-specific versioned ID (participant guide p.7); do not replace
     // with the unversioned public `meta-models/muse-spark-open`.
     models: {
@@ -58,6 +62,9 @@ export type ProviderConfig = {
   timeoutMs: number;
   maxRetries: number;
   billableCallsAllowed: boolean;
+  nativeVideo: boolean;
+  /** Separate opt-in: a recording may be transmitted to the provider. Off by default. */
+  videoUploadAllowed: boolean;
 };
 
 type Env = Record<string, string | undefined>;
@@ -130,5 +137,7 @@ export function loadProviderConfig(id: ProviderId, env: Env): ProviderConfig {
     ),
     maxRetries: intInRange(id, 'PROOFPILOT_INFERENCE_MAX_RETRIES', env.PROOFPILOT_INFERENCE_MAX_RETRIES, 0, MAX_RETRIES_BOUND, 0),
     billableCallsAllowed: env.PROOFPILOT_ALLOW_BILLABLE_CALLS === '1',
+    nativeVideo: def.nativeVideo,
+    videoUploadAllowed: env.PROOFPILOT_ALLOW_VIDEO_UPLOAD === '1',
   };
 }
