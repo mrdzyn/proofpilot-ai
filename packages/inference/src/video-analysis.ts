@@ -18,12 +18,13 @@ import {
   type Symptom,
   type SymptomAssessment,
 } from '../../core/src/symptom.ts';
-import { FILE_EXPIRY_SECONDS, type InferenceProvider, type ResponseLifecycle, type VideoUsage } from './client.ts';
+import { FILE_EXPIRY_SECONDS, LIMITS, type InferenceProvider, type ResponseLifecycle, type VideoUsage } from './client.ts';
 import { InferenceError } from './errors.ts';
 
 export const SYMPTOM_SCHEMA_NAME = 'proofpilot_symptom';
 export const DESCRIPTION_MAX_CHARS = 1_000;
-const DEFAULT_MAX_OUTPUT_TOKENS = 1_500;
+/** Includes reasoning tokens. Raised from 1500 after the first live run stopped `incomplete` at that cap. */
+const DEFAULT_MAX_OUTPUT_TOKENS = 3_072;
 const CONTROL_CHARS = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/;
 /** Errors that mean "not authorized / misconfigured": thrown, never reported as an analysis result. */
 const PREFLIGHT_CODES = new Set(['BILLABLE_NOT_AUTHORIZED', 'INVALID_INPUT', 'CONFIG']);
@@ -118,6 +119,11 @@ export async function analyzeRecording(input: AnalyzeRecordingInput): Promise<An
   const description = validateDescription(input.description);
   const model = provider.models.visual;
   if (!model) throw new InferenceError('CONFIG', provider.id, `${provider.id} has no configured visual model`);
+  const maxOutputTokens = input.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS;
+  if (!Number.isInteger(maxOutputTokens) || maxOutputTokens < 1 || maxOutputTokens > LIMITS.maxOutputTokens) {
+    // Checked here so an invalid cap can never be discovered after the upload has been made.
+    throw new InferenceError('INVALID_INPUT', provider.id, `maxOutputTokens must be an integer in 1..${LIMITS.maxOutputTokens}`);
+  }
   const expiry = input.fileExpirySeconds ?? FILE_EXPIRY_SECONDS.default;
   const bytes = await readVerifiedVideoBytes(video); // throws MEDIA_CHANGED if the clip is not the validated one
 
@@ -160,7 +166,7 @@ export async function analyzeRecording(input: AnalyzeRecordingInput): Promise<An
       fileId: uploaded.fileId,
       schemaName: SYMPTOM_SCHEMA_NAME,
       schema: SYMPTOM_JSON_SCHEMA,
-      maxOutputTokens: input.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
+      maxOutputTokens,
     });
     prov.latencyMs.response = Math.round(now() - responseStart);
     prov.respondedModel = response.model;

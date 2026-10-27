@@ -96,7 +96,8 @@ test('responses request: native video via input_file, text.format json_schema (n
   assert.deepEqual(msg.content[1], { type: 'input_file', file_id: FILE_ID });
   assert.deepEqual(body.text, { format: { type: 'json_schema', name: SYMPTOM_SCHEMA_NAME, schema: SYMPTOM_JSON_SCHEMA, strict: true } });
   assert.ok(!('response_format' in body));
-  assert.equal(body.max_output_tokens, 1500);
+  assert.equal(body.max_output_tokens, 3072);
+  assert.deepEqual(body.reasoning, { effort: 'low' });
   assert.equal(headersOf(calls[1]!.init)['content-type'], 'application/json');
 });
 
