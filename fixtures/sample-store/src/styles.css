@@ -1,0 +1,107 @@
+:root {
+  --color-bg: #fafaf7;
+  --color-surface: #ffffff;
+  --color-text: #1d2420;
+  --color-muted: #5b655f;
+  --color-accent: #1f5d3a;
+  --color-accent-text: #ffffff;
+  --color-promo: #f1e7c8;
+  --radius: 10px;
+  --space: 16px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.site-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space);
+  background: var(--color-surface);
+  border-bottom: 1px solid #e3e6e2;
+}
+
+.brand { font-weight: 700; color: var(--color-text); text-decoration: none; }
+.cart { color: var(--color-text); text-decoration: none; }
+
+.cart-count {
+  display: inline-block;
+  min-width: 1.6em;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--color-accent);
+  color: var(--color-accent-text);
+  text-align: center;
+}
+
+.product {
+  display: grid;
+  gap: var(--space);
+  padding: var(--space);
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+.product-media {
+  height: 300px;
+  border-radius: var(--radius);
+  background: linear-gradient(135deg, #2e6b48, #9cc5a8);
+}
+
+.product-title { margin: 0; font-size: 1.5rem; }
+.product-price { margin: 0; font-size: 1.25rem; font-weight: 600; }
+.product-copy { margin: 0; color: var(--color-muted); }
+
+.add-to-cart {
+  width: 100%;
+  min-height: 48px;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--color-accent);
+  color: var(--color-accent-text);
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.promo {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 12px var(--space);
+  background: var(--color-promo);
+  text-align: center;
+}
+
+.promo-text { margin: 0; font-size: 0.875rem; }
+
+.promo-overlay {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 50vh;
+  background: transparent;
+  z-index: 10;
+}
+
+@media (min-width: 768px) {
+  .product {
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+  }
+
+  .product-media { height: 420px; }
+
+  .add-to-cart { width: auto; padding: 0 32px; }
+
+  .promo-overlay { display: none; }
+}

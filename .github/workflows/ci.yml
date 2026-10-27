@@ -1,0 +1,60 @@
+name: Project Baseline CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: project-baseline-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  project-baseline:
+    name: Project baseline
+    permissions:
+      contents: read
+    uses: ./.github/workflows/common-validation.yml
+
+  stack-validation:
+    name: Stack validation
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24"
+
+      - name: Install pnpm and dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          corepack enable
+          corepack prepare pnpm@12.6.0 --activate
+          pnpm install --frozen-lockfile
+
+      - name: Lint, typecheck, unit and security tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm lint
+          pnpm typecheck
+          pnpm test:unit
+          pnpm test:security
+
+      - name: F01 baseline reproduction (expected oracle failure must be observed)
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm exec playwright install --with-deps chromium
+          pnpm f01:baseline
