@@ -1,7 +1,7 @@
 // `pnpm analyze:video`: validate a recording and (only with --live and every
 // opt-in) ask Muse Spark to describe it. The DEFAULT is a dry run that makes no
 // network call. The CLI never builds consent on its own: it needs the explicit flag.
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, rmdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { ConsentError, createVideoConsent, MediaError, validateVideoFile, MEDIA_LIMITS, type MediaDeps } from '../../intake/src/index.ts';
@@ -84,12 +84,33 @@ export async function runAnalyzeCommand(argv: string[], deps: AnalyzeCommandDeps
 
     if (!consentGiven) throw new ConsentError('CONSENT_MISSING', 'pass --consent-meta-video-analysis to confirm this video may be sent to Meta');
     const consent = createVideoConsent({ runId, videoSha256: video.sha256 });
-    const provider = createProvider(loadProviderConfig('meta', deps.env), { fetch: deps.fetch });
-    log(`mode:          ${deps.transport.toUpperCase()} analysis requested (pre-flight checks run first; no call is made if any fails)`);
-    const result = await analyzeRecording({ provider, video, consent, runId, description, clock: deps.clock });
+    // Wrap the transport so we know whether anything left this process.
+    const baseFetch: FetchLike = deps.fetch ?? ((input, init) => fetch(input, init));
+    let networkCalls = 0;
+    const countingFetch: FetchLike = (input, init) => {
+      networkCalls += 1;
+      return baseFetch(input, init);
+    };
+    const provider = createProvider(loadProviderConfig('meta', deps.env), { fetch: countingFetch });
 
+    // Reserve the run id BEFORE any upload or model call. mkdir without `recursive` is atomic and
+    // fails with EEXIST for an existing or concurrently launched run, so a duplicate id can never
+    // reach the billable path. A reservation that is never used is released; one that may have
+    // reached the network is kept so the id cannot be spent twice.
     const outDir = path.join(deps.outRoot, runId);
-    await mkdir(outDir, { recursive: true, mode: 0o700 });
+    await mkdir(deps.outRoot, { recursive: true, mode: 0o700 });
+    await mkdir(outDir, { mode: 0o700 });
+    log(`reserved:      run id ${runId}`);
+
+    let result: Awaited<ReturnType<typeof analyzeRecording>>;
+    try {
+      log(`mode:          ${deps.transport.toUpperCase()} analysis requested (pre-flight checks run first; no call is made if any fails)`);
+      result = await analyzeRecording({ provider, video, consent, runId, description, clock: deps.clock });
+    } catch (e) {
+      if (networkCalls === 0) await rmdir(outDir).catch(() => undefined); // nothing was sent: free the id
+      throw e;
+    }
+
     const outFile = path.join(outDir, 'analysis.json');
     await writeFile(
       outFile,
@@ -109,7 +130,7 @@ export async function runAnalyzeCommand(argv: string[], deps: AnalyzeCommandDeps
     }
     const code = (e as NodeJS.ErrnoException)?.code;
     if (code === 'EEXIST') {
-      log('refused:       an analysis for this run id already exists; choose a new --run-id');
+      log('refused:       this run id already exists or is in progress (no call was made); choose a new --run-id');
       return 2;
     }
     throw e;

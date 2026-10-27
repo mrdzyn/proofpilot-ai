@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { runAnalyzeCommand, type AnalyzeCommandDeps } from '../../packages/inference/src/index.ts';
 import { deleteOk, fakeDeps, fakeMp4Bytes, liveEnv, mockFetch, responsesOk, SENTINEL_KEY, tempDir, uploadOk, validSymptom } from '../helpers.ts';
@@ -109,6 +109,66 @@ test('mocked live run: writes a result labelled with its transport, deletes the 
   again.deps.allowedRoot = s.root;
   assert.equal(await runAnalyzeCommand(['--video', s.file, '--run-id', 'r1', '--live', '--consent-meta-video-analysis'], again.deps), 2);
   assert.match(again.out(), /already exists/);
+  assert.equal(again.calls.length, 0, 'a duplicate run id makes ZERO upload / Responses / delete calls');
+  assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')), saved, 'the first result is untouched');
+});
+
+const LIVE = ['--live', '--consent-meta-video-analysis'];
+const happy = () => [uploadOk(), responsesOk(JSON.stringify(validSymptom())), deleteOk()];
+
+test('a run id that already exists (completed, crashed or foreign) is refused with ZERO network calls', async () => {
+  const s = setup(liveEnv(), happy());
+  mkdirSync(path.join(s.root, 'analysis', 'dup'), { recursive: true }); // e.g. a crashed earlier run
+  assert.equal(await runAnalyzeCommand(['--video', s.file, '--run-id', 'dup', ...LIVE], s.deps), 2);
+  assert.match(s.out(), /already exists or is in progress \(no call was made\)/);
+  assert.equal(s.calls.length, 0);
+  assert.deepEqual(readdirSync(path.join(s.root, 'analysis', 'dup')), [], 'the existing directory is not modified');
+  // An unrelated run id is not blocked by it.
+  assert.equal(await runAnalyzeCommand(['--video', s.file, '--run-id', 'other', ...LIVE], s.deps), 0, s.out());
+  assert.equal(s.calls.length, 3);
+});
+
+test('two simultaneous launches with the same run id: exactly one reaches the network', async () => {
+  const s = setup(liveEnv(), happy());
+  const a = { ...s.deps, log: () => undefined };
+  const b = { ...s.deps, log: () => undefined };
+  const argv = ['--video', s.file, '--run-id', 'race', ...LIVE];
+  const codes = (await Promise.all([runAnalyzeCommand(argv, a), runAnalyzeCommand(argv, b)])).sort();
+  assert.deepEqual(codes, [0, 2]);
+  assert.equal(s.calls.length, 3, 'one upload, one Responses call, one delete, never two');
+  assert.equal(s.calls.filter((c) => c.init.method === 'POST').length, 2);
+  assert.equal(readdirSync(path.join(s.root, 'analysis', 'race')).join(), 'analysis.json');
+});
+
+test('many simultaneous launches with the same run id: still exactly one billable run', async () => {
+  const s = setup(liveEnv(), happy());
+  const argv = ['--video', s.file, '--run-id', 'storm', ...LIVE];
+  const codes = await Promise.all(Array.from({ length: 8 }, () => runAnalyzeCommand(argv, { ...s.deps, log: () => undefined })));
+  assert.equal(codes.filter((c) => c === 0).length, 1);
+  assert.equal(codes.filter((c) => c === 2).length, 7);
+  assert.equal(s.calls.length, 3);
+});
+
+test('a reservation that never reached the network is released so the id stays usable', async () => {
+  const s = setup({ MODEL_API_KEY: SENTINEL_KEY }, happy()); // opt-ins off: refused inside the pre-flight
+  assert.equal(await runAnalyzeCommand(['--video', s.file, '--run-id', 'again', ...LIVE], s.deps), 2);
+  assert.match(s.out(), /BILLABLE_NOT_AUTHORIZED/);
+  assert.equal(s.calls.length, 0);
+  assert.ok(!existsSync(path.join(s.root, 'analysis', 'again')), 'the unused reservation is removed');
+  const ok = setup(liveEnv(), happy());
+  ok.deps.outRoot = s.deps.outRoot;
+  ok.deps.allowedRoot = s.root;
+  assert.equal(await runAnalyzeCommand(['--video', s.file, '--run-id', 'again', ...LIVE], ok.deps), 0, ok.out());
+});
+
+test('a reservation that reached the network is kept: the id cannot be spent twice', async () => {
+  const s = setup(liveEnv(), [uploadOk(), responsesOk('not json'), deleteOk()]);
+  assert.equal(await runAnalyzeCommand(['--video', s.file, '--run-id', 'spent', ...LIVE], s.deps), 1);
+  const retry = setup(liveEnv(), happy());
+  retry.deps.outRoot = s.deps.outRoot;
+  retry.deps.allowedRoot = s.root;
+  assert.equal(await runAnalyzeCommand(['--video', s.file, '--run-id', 'spent', ...LIVE], retry.deps), 2);
+  assert.equal(retry.calls.length, 0);
 });
 
 test('mocked live run with a bad model answer exits 1 and still records the failure', async () => {
@@ -126,4 +186,16 @@ test('a leading `--` (as forwarded by `pnpm run script -- ...`) is accepted', as
   assert.match(s.out(), /DRY RUN/);
   // Only a single leading `--` is dropped: a stray positional after it is still refused.
   assert.equal(await runAnalyzeCommand(['--', '--video', s.file, '--run-id', 'r1', 'extra'], s.deps), 2);
+});
+
+test('an unexpected throw AFTER the upload keeps the reservation (empty dir must not free a spent id)', async () => {
+  const s = setup(liveEnv(), happy());
+  let ticks = 0;
+  s.deps.clock = () => {
+    if (++ticks > 2) throw new Error('clock exploded after the upload');
+    return ticks;
+  };
+  await assert.rejects(runAnalyzeCommand(['--video', s.file, '--run-id', 'boom', ...LIVE], s.deps), /clock exploded/);
+  assert.ok(s.calls.length >= 1, 'the upload happened');
+  assert.ok(existsSync(path.join(s.root, 'analysis', 'boom')), 'the id stays reserved');
 });

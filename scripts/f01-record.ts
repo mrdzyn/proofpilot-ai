@@ -12,7 +12,7 @@ import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { chromium, type Page } from '@playwright/test';
-import { F01_RECORDING_PATHS, readWorktreeState, scrubEnv, type WorktreeState } from '../packages/core/src/index.ts';
+import { certifyRecording, F01_RECORDING_PATHS, readWorktreeState, scrubEnv } from '../packages/core/src/index.ts';
 import { convertWebmToMp4, MediaError } from '../packages/intake/src/index.ts';
 
 const repoRoot = path.resolve(import.meta.dirname, '..');
@@ -72,7 +72,7 @@ async function startFixture(): Promise<{ stop: () => void }> {
 
 const cartCount = (page: Page) => page.getByTestId('cart-count').textContent();
 
-async function recordClip(clip: (typeof CLIPS)[number], outDir: string, worktree: WorktreeState, gitHead: string, fixtureTree: string | null) {
+async function recordClip(clip: (typeof CLIPS)[number], outDir: string) {
   const rawDir = path.join(outDir, 'raw');
   await mkdir(rawDir, { recursive: true });
   const browser = await chromium.launch({ headless: true, env: scrubEnv(process.env) as Record<string, string> });
@@ -156,7 +156,6 @@ async function recordClip(clip: (typeof CLIPS)[number], outDir: string, worktree
     kind: clip.kind,
     recordedAt: new Date().toISOString(),
     synthetic: true, // the owned sample-store fixture; no real customer or payment data
-    source: { gitHead, fixtureTree, worktree, certifiedExactSha: worktree.kind === 'clean' },
     viewport: clip.viewport,
     browser: { name: 'chromium', version: browserVersion, headless: true },
     playwright: JSON.parse(await readFile(path.join(repoRoot, 'node_modules/@playwright/test/package.json'), 'utf8')).version,
@@ -181,8 +180,9 @@ async function recordClip(clip: (typeof CLIPS)[number], outDir: string, worktree
     frames,
     artifacts,
   };
-  await writeFile(path.join(outDir, 'recording.json'), JSON.stringify(meta, null, 2) + '\n');
-  return meta;
+  // recording.json is written by main() only after the post-recording worktree check, so the
+  // persisted certification can never claim more than the whole run proved.
+  return { ...meta, outDir };
 }
 
 // ---------------- main ----------------
@@ -205,7 +205,7 @@ const results: Array<Awaited<ReturnType<typeof recordClip>>> = [];
 let failure: string | null = null;
 try {
   for (const clip of CLIPS) {
-    results.push(await recordClip(clip, path.join(root, clip.kind), before, gitHead, fixtureTree));
+    results.push(await recordClip(clip, path.join(root, clip.kind)));
   }
 } catch (e) {
   failure = e instanceof MediaError ? `${e.code}: ${e.message}` : String((e as Error).message ?? e);
@@ -213,7 +213,17 @@ try {
   fixture.stop();
 }
 const after = readWorktreeState(repoRoot, F01_RECORDING_PATHS);
-const worktree: WorktreeState = before.kind !== 'clean' ? before : after;
+const allOk = !failure && results.length === CLIPS.length && results.every((r) => r.outcomeAsExpected);
+const cert = certifyRecording({ before, after, allClipsAsExpected: allOk, failure });
+const worktree = cert.worktree;
+// One attestation for the whole set, persisted into every clip's metadata.
+for (const { outDir, ...meta } of results) {
+  const persisted = {
+    ...meta,
+    source: { gitHead, fixtureTree, worktreeBefore: before, worktreeAfter: after, certifiedExactSha: cert.certifiedExactSha, reasons: cert.reasons },
+  };
+  await writeFile(path.join(outDir, 'recording.json'), JSON.stringify(persisted, null, 2) + '\n');
+}
 
 console.log('\n=== F01 recording ===');
 console.log(`recording set: .proofpilot/recordings/${recId}`);
@@ -226,10 +236,10 @@ for (const r of results) {
   console.log(`  cart:     before=${r.interaction.cartCountBefore} after=${r.interaction.taps.map((t) => t.cartCountAfter).join(',')}  hit-test=${r.interaction.taps.map((t) => t.hitTestTarget).join(',')}`);
 }
 if (failure) console.log(`\nFAILED: ${failure}`);
-const allOk = !failure && results.length === CLIPS.length && results.every((r) => r.outcomeAsExpected);
-console.log(`\ncertified exact-SHA: ${allOk && worktree.kind === 'clean' ? 'YES' : 'NO'}`);
-if (allOk && worktree.kind !== 'clean') {
+console.log(`\ncertified exact-SHA: ${cert.certifiedExactSha ? 'YES' : 'NO'}`);
+if (allOk && !cert.certifiedExactSha) {
   console.log('NOT CERTIFIED: clips were recorded, but uncommitted/unverifiable evidence paths mean HEAD does not identify the tested bytes.');
+  for (const reason of cert.reasons) console.log(`  ${reason}`);
   if (worktree.kind === 'dirty') console.log(`  changed: ${worktree.paths.join(', ')}`);
 }
-process.exitCode = !allOk ? 1 : worktree.kind === 'clean' ? 0 : 2;
+process.exitCode = !allOk ? 1 : cert.certifiedExactSha ? 0 : 2;
