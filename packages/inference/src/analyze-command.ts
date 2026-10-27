@@ -118,6 +118,10 @@ export async function runAnalyzeCommand(argv: string[], deps: AnalyzeCommandDeps
       { flag: 'wx', mode: 0o600 }, // never overwrite a previous analysis
     );
     log(`result:        ${result.status}  (evidence kind: ${deps.transport})`);
+    const lc = result.provenance.responseLifecycle;
+    if (lc) log(`response:      status=${lc.status ?? 'not reported'}, completed=${lc.completed}; model=${result.provenance.respondedModel ?? 'n/a'}; request ids upload=${result.provenance.requestIds.upload ?? 'n/a'} response=${result.provenance.requestIds.response ?? 'n/a'}`);
+    const u = result.provenance.usage;
+    if (u) log(`usage:         input=${u.inputTokens ?? 'n/a'} output=${u.outputTokens ?? 'n/a'} total=${u.totalTokens ?? 'n/a'} (provider-reported; no cost is computed)`);
     if (result.status === 'ANALYSIS_FAILED') log(`failure:       ${result.failure.code}: ${result.failure.message}`);
     else log(`assessment:    can attempt reproduction = ${result.assessment.canAttemptReproduction} (${result.assessment.reasons.join('; ')})`);
     log(`cleanup:       ${result.provenance.cleanup.deleted ? 'remote file deleted' : (result.provenance.cleanup.note ?? 'n/a')}`);

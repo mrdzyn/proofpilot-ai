@@ -18,7 +18,7 @@ import {
   type Symptom,
   type SymptomAssessment,
 } from '../../core/src/symptom.ts';
-import { FILE_EXPIRY_SECONDS, type InferenceProvider } from './client.ts';
+import { FILE_EXPIRY_SECONDS, type InferenceProvider, type ResponseLifecycle, type VideoUsage } from './client.ts';
 import { InferenceError } from './errors.ts';
 
 export const SYMPTOM_SCHEMA_NAME = 'proofpilot_symptom';
@@ -31,6 +31,7 @@ const PREFLIGHT_CODES = new Set(['BILLABLE_NOT_AUTHORIZED', 'INVALID_INPUT', 'CO
 export type AnalysisFailureCode =
   | 'PROVIDER_FAILED'
   | 'EMPTY_OR_INVALID_RESPONSE'
+  | 'RESPONSE_NOT_COMPLETED'
   | 'MODEL_OUTPUT_NOT_JSON'
   | 'SCHEMA_VALIDATION_FAILED';
 
@@ -50,7 +51,9 @@ export type AnalysisProvenance = {
   /** Remote Files API id, kept so a failed delete can be completed manually. */
   fileId: string | null;
   requestIds: { upload: string | null; response: string | null };
-  usage: { inputTokens: number | null; outputTokens: number | null } | null;
+  usage: VideoUsage | null;
+  /** Provider-reported lifecycle of the generation (sanitized codes only). */
+  responseLifecycle: ResponseLifecycle | null;
   latencyMs: { upload: number | null; response: number | null; total: number };
   /** SHA-256 and length of the raw model text (the text itself is not retained here). */
   rawResponse: { sha256: string; chars: number } | null;
@@ -127,6 +130,7 @@ export async function analyzeRecording(input: AnalyzeRecordingInput): Promise<An
     fileId: null,
     requestIds: { upload: null, response: null },
     usage: null,
+    responseLifecycle: null,
     latencyMs: { upload: null, response: null, total: 0 },
     rawResponse: null,
     cleanup: { attempted: false, deleted: false, note: 'no file was uploaded' },
@@ -162,13 +166,20 @@ export async function analyzeRecording(input: AnalyzeRecordingInput): Promise<An
     prov.respondedModel = response.model;
     prov.requestIds.response = response.requestId;
     prov.usage = response.usage;
-    prov.rawResponse = { sha256: createHash('sha256').update(response.text).digest('hex'), chars: response.text.length };
+    prov.responseLifecycle = response.lifecycle;
+    prov.rawResponse = response.text.length > 0 ? { sha256: createHash('sha256').update(response.text).digest('hex'), chars: response.text.length } : null;
 
     let parsed: unknown;
-    try {
-      parsed = JSON.parse(response.text);
-    } catch {
-      result = fail('MODEL_OUTPUT_NOT_JSON', 'the model response was not valid JSON');
+    if (!response.lifecycle.completed) {
+      const l = response.lifecycle;
+      const why = [l.status && l.status !== 'completed' ? `status=${l.status}` : null, l.errorCode ? `error=${l.errorCode}` : null, l.incompleteReason ? `incomplete=${l.incompleteReason}` : null, l.refusal ? 'refusal' : null].filter(Boolean).join(', ');
+      result = fail('RESPONSE_NOT_COMPLETED', `the provider response did not complete (${why})`, l.errorCode ?? l.incompleteReason ?? l.status);
+    } else {
+      try {
+        parsed = JSON.parse(response.text);
+      } catch {
+        result = fail('MODEL_OUTPUT_NOT_JSON', 'the model response was not valid JSON');
+      }
     }
     if (!result) {
       try {
