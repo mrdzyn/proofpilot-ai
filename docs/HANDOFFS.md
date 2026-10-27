@@ -363,4 +363,24 @@ lint/typecheck/`git diff --check` clean; unit 115/115; security 27/27; integrati
 ### Next action
 GPT-6: audit the exact head. Owner: after merge, decide on a second live attempt.
 
+## Handoff: PP-META-I1-C2B-DOC-1
+
+- **Task / phase:** C2B completion documentation (docs only; no task file, scope given by the owner request referencing PR #4 comment 6446824225)
+- **From:** Implementation agent (Claude Code, Claude Sonnet 5.5)
+- **To:** GPT-6 independent review, then project owner
+- **Branch:** `docs/pp-meta-i1-c2b-completion` from `main` `9103d00e1b82f260a41498e7c64201ccd398be15`; Draft PR (audit the branch head)
+- **State:** READY FOR REVIEW
+
+### Completed
+- STATUS, HANDOFFS and `docs/LIVE-SMOKE.md` now record: C2B-R1 merged via PR #4 (audit PASS at `47926fb`); T04 **completed on the agent-reported** run `c2b-live-smoke-002` (provider `completed`, local `VIDEO_ANALYZED`, schema-valid `model-hypothesis` Symptom); the cart failure is consistent with F01 but does not establish the overlay as root cause; runs 001 and 002 are permanently spent; remote files reported deleted; actual charge unverified and every cost figure illustrative, not a cap; Docker/ARM64 isolation NOT VERIFIED so no generated patch may execute.
+- LIVE-SMOKE "NOT AUTHORIZED" banner replaced by "no live run authorized, both runs spent"; the old command is labelled a historical template; the $0.02 "worst case" wording is removed.
+- Gitignored live evidence untouched (run 001 `analysis.json` SHA-256 `51c26b9ddc255ab21b496c25751c904a8dac2f686789c7e2b498cca8c8e2f7f7` unchanged; run 002 file mode 0600). No code, test, `verifier/`, `fixtures/`, `config/` or `.github/` change. No Meta request made.
+
+### Open items
+- Run 002 traffic, usage, deletion and Symptom content are agent-reported, not independently confirmed; billing unverified.
+- Docker NOT VERIFIED; no patch execution; screen map not approved; C3 not started.
+
+### Next action
+GPT-6: review the exact head. Owner: decide when to start C3 (proposal only).
+
 <!-- HANDOFF_ENTRIES_END -->
