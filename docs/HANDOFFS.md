@@ -383,4 +383,25 @@ GPT-6: audit the exact head. Owner: after merge, decide on a second live attempt
 ### Next action
 GPT-6: review the exact head. Owner: decide when to start C3 (proposal only).
 
+## Handoff: PP-META-I2-C3-PIVOT-1
+
+- **Task / phase:** PP-META-I2-C3, hackathon pivot contract (docs only)
+- **From:** Owner-directed planning session (Claude, Sonnet 5.5)
+- **To:** GPT-6 independent review, then the implementation agent
+- **Branch:** documentation drafted on a local checkout of `main` at `5658529`; not pushed
+- **State:** READY FOR REVIEW
+
+### Completed
+- `tasks/PP-META-I2-C3.md` written: verified candidate scoreboard, work packages C3-A to C3-F with PHT dates, execution controls replacing Docker, verdict rules, acceptance criteria, stop conditions.
+- `docs/STATUS.md` updated: phase, authorization, open gates, next action. Wonder, Docker and the five-screen UI are recorded as cut or unverified, not as done.
+- No code, test, `verifier/`, `fixtures/`, `config/` or `.github/` change. No Meta request made.
+
+### Open items
+- Live-call cap (12 Spark + 4 Spark Open) is a proposal until the owner confirms.
+- The sandbox decision is a security-boundary change accepted by the owner in chat; the independent reviewer must accept or reject it, and `docs/SECURITY.md` still needs the matching text (assigned to C3-B).
+- Muse Wonder's role is unconfirmed.
+
+### Next action
+GPT-6: review the contract and the sandbox decision. Owner: confirm the cap, ask about Wonder, authorize the start of C3-A.
+
 <!-- HANDOFF_ENTRIES_END -->

@@ -5,13 +5,13 @@
 ## Project
 
 - **Name:** ProofPilot AI — Meta Global AI Developer Hackathon (Push the Frontier)
-- **Current phase:** PP-META-I1-C2B complete (docs closure); C3 not started
-- **Status:** C2B closed as **T04 completed (agent-reported live result)**. This docs-only branch awaits independent exact-head review. No Meta request of any kind is currently authorized.
+- **Current phase:** PP-META-I1-C2B complete (docs closure); **hackathon pivot contracted 2026-10-28 as PP-META-I2-C3** (verified candidate scoreboard); C3 implementation not started
+- **Status:** C2B closed as **T04 completed (agent-reported live result)**. The v1.1 plan (Muse Wonder patcher, Docker-isolated verifier, five-screen UI) is replaced by `tasks/PP-META-I2-C3.md`: Muse Spark proposes several candidate patches, the trusted oracle scores each, output is a scoreboard, hashed evidence and a static HTML report. Contract awaits owner confirmation of the live-call cap and independent review of the sandbox decision.
 - **Primary branch:** protected `main` at `9103d00e1b82f260a41498e7c64201ccd398be15` (C2B-R1 squash merge; PR #4)
-- **Working branch:** `docs/pp-meta-i1-c2b-completion` (docs only)
-- **Active task:** None (C3 requires a new task contract and owner start)
-- **Active handoff:** PP-META-I1-C2B-DOC-1
-- **Authorization:** Both single-use live smokes are **spent**. **Not authorized:** any further Meta upload or inference, merge by the agent, deployment, product UI shell, Docker bypass, C3, or AI-generated patch execution.
+- **Working branch:** `docs/pp-meta-i1-c2b-completion` (docs only); implementation branch will be `phase/pp-meta-i2-c3`
+- **Active task:** `PP-META-I2-C3` (status Ready, not started)
+- **Active handoff:** PP-META-I2-C3-PIVOT-1
+- **Authorization:** Both single-use live smokes are **spent**. **Owner-accepted 2026-10-28 (chat), conditional on independent review:** replacing "no AI-generated patch executes until Docker is verified" with the execution controls in `tasks/PP-META-I2-C3.md` (front-end `src/` only, executed in headless Chromium, no Node execution of AI code). **Proposed live-call cap, owner to confirm before C3-B:** 12 Muse Spark patch-proposal calls plus 4 Muse Spark Open (Baseten) calls, fresh run ID and consent each. **Still not authorized:** merge by the agent, deployment, push to `main`, submission by the agent, Docker work, product UI shell, any live call beyond the confirmed cap.
 
 ## Completed milestones
 
@@ -62,11 +62,14 @@
 |---|---|
 | C2B (Workstream A, R1, live smokes) | DONE; this docs closure pending review |
 | T04 real Muse Spark video analysis | **COMPLETED (agent-reported)** |
-| Product five-screen design `design/screens/PP-PRODUCT-SCREEN-MAP.md` | PROPOSED; awaiting owner's higher-fidelity visual approval |
-| Isolated Docker/ARM64 patch runner | **NOT VERIFIED; no AI-generated patch may execute** |
-| C3 patch proposal (Muse Wonder, proposal only), C4 trusted candidate verification, evidence export, demo/submission | NOT STARTED |
+| Product five-screen design `design/screens/PP-PRODUCT-SCREEN-MAP.md` | CUT for the hackathon; stays PROPOSED and unbuilt |
+| Isolated Docker/ARM64 patch runner | CUT. Replaced by the execution controls in `tasks/PP-META-I2-C3.md`, pending independent review. Not a verified sandbox |
+| C3-A patch proposal (Muse Spark), C3-B candidate runner, C3-C scoreboard/evidence, C3-D report + replay + audit, C3-E demo, C3-F submission | NOT STARTED (see schedule in the task file; go/no-go Oct 31 PHT) |
+| Muse Wonder as patcher | UNVERIFIED. Guide lists Wonder under creative/image use; owner to ask in #office-hours. Not a dependency |
 | Baseten | NOT TESTED |
 
 ## Next action
 
-Independent exact-head review of this docs-only Draft PR. Then the owner decides when to start C3 (proposal only: no generated patch executes until the sandbox is independently verified). No further live Meta request without a new task and fresh owner authorization.
+1. Owner confirms or edits the live-call cap in `tasks/PP-META-I2-C3.md`, and asks about Muse Wonder in #office-hours.
+2. Independent reviewer (GPT-6) reviews the contract, in particular the sandbox decision, then the implementation agent starts C3-A on `phase/pp-meta-i2-c3`.
+3. No live Meta request beyond the confirmed cap; each run needs a fresh run ID and consent.
