@@ -6,54 +6,63 @@
 
 - **Name:** ProofPilot AI — Meta Global AI Developer Hackathon (Push the Frontier)
 - **Current phase:** PP-META-I1-C2A — genuine F01 video + video intake/consent + mocked Muse Spark video integration
-- **Status:** ACTIVE — C2A task contract created; implementation/evidence NOT YET DONE
-- **Primary branch:** `main`, C1 squash-merge `c55795eab20466d917847c964ace377b57d4edc6` (PR #1 merged)
-- **Working branch:** `phase/pp-meta-i1-c2a` (based directly on merged C1)
+- **Status:** Implemented locally; **awaiting independent exact-head audit.** Not pushed; no Draft PR (owner authorization required).
+- **Primary branch:** `main` at C1 squash-merge `c55795eab20466d917847c964ace377b57d4edc6`
+- **Working branch:** `phase/pp-meta-i1-c2a` (local commits ahead of `origin/phase/pp-meta-i1-c2a` at `7066ae4`)
+- **Implementation head:** `444f7d9037ad2cf5d033a0c669f92846ee06b677` (docs/handoff commit follows; the branch head is authoritative)
 - **Active task:** `tasks/PP-META-I1-C2A.md`
-- **Active handoff:** None — implementation assignment active; append a new handoff only at completion/review
-- **Owner authority:** C2 start authorized 2026-10-27. **No authorization for billable inference, external video transmission, merge, deploy or AI-generated patch execution.**
+- **Active handoff:** PP-META-I1-C2A-C1
+- **Owner authority:** C2A implementation authorized 2026-10-27. **No authorization for billable inference, real video upload to Meta, merge, deploy, publishing video assets, C3, or AI-generated patch execution.**
 
-## C1 — complete
+## Evidence labels (kept distinct on purpose)
 
-- F01 synthetic broken sample store; 390×844 genuine coordinate click lands on `promo-overlay`, cart-count remains 0; desktop 1280×800 PASS.
-- Trusted Playwright oracle, expected-failure baseline classifier, exact-SHA fail-closed evidence certification, fixture patch-scope deny policy, credential-scrubbing, observed-only metrics.
-- Meta/Baseten typed provider adapters, model listing; actual model inference not yet tested.
-- Independent GPT-6 re-audit: **PASS** at PR #1 head `5bd12de1d2240a958bfd85538003d77e8b1c6be5`.
-- GitHub CI run `40463546814`: Project baseline and Stack validation PASS (unit 32/32, security 13/13, F01 reproduced). Local integration 3/3 reported by implementation agent; not separately run in CI.
-- `main` has active Protect Main ruleset with both required checks; PR #1 owner-authorized and squash-merged.
-
-## C2A — active contract, not yet implemented
-
-Source: `tasks/PP-META-I1-C2A.md`.
-
-1. Record a **real playable F01 mobile defect video** at 390×844, optionally desktop control, keep evidence/hashes gitignored.
-2. Product intake validates true media format, at most **25 MB / 30 seconds**, requires explicit per-run consent to Meta processing; reject before any network call if invalid.
-3. Meta Muse Spark 1.3 **native video**: supported path is Files API (`purpose=user_data`, MP4 upload, expiring file), then Responses API (`input_file.file_id`), local schema-validated `Symptom`, best-effort file deletion. **Mock tests only in C2A.**
-4. Prepare design-first screen-flow/mockup proposal; **no product UI shell before owner visual approval**.
-5. Preserve all C1 oracle, security, CI and evidence boundaries. Record truthful progress and independent review at the next C2A Draft PR.
-
-## External capability facts
-
-- Official Meta docs (verified 2026-10-27): https://dev.meta.ai/docs/video-understanding ; https://dev.meta.ai/docs/file-handling ; https://dev.meta.ai/docs/structured-output
-- Meta supports MP4 video via `POST /v1/files` → `POST /v1/responses`. Playwright WebM requires verified conversion to MP4 before Meta upload.
-- Meta uploaded files **do not expire automatically**; prefer explicit `expires_after` and deletion after analysis.
-- Muse Spark 1.3's audio understanding can be degraded; F01 demo is visually interpretable, with no voice requirement.
-- Meta model discovery (authenticated `GET /models`): prior PASS for `muse-spark-1.3`, `muse-wonder-1.0`. Genuine generation NOT TESTED.
-- Baseten key not configured and no inference tested.
-
-## Gates / blockers
-
-| Gate | State |
+| Label | State |
 |---|---|
-| C1 exact-head audit | PASS |
-| C1 required CI, ruleset, merge | PASS |
-| C2A real recording | NOT RUN |
-| C2A intake/media/consent and mocks | NOT IMPLEMENTED |
-| C2A product UI design | NOT APPROVED; design brief pending |
-| Real Muse Spark inference/video transmission | NOT AUTHORIZED; separate owner approval required |
-| Docker/ARM64 isolation | NOT VERIFIED on host; blocks all AI-generated patch execution |
-| Main branch changes / release | Not authorized |
+| **REAL VIDEO RECORDED** | YES — genuine Chromium recordings of the unmodified F01 fixture, certified exact-SHA at `e68cf31`; local and gitignored |
+| **META API MOCK TESTED** | YES — Files upload / Responses native-video / delete contract verified against mocks only |
+| **REAL META MODEL NOT TESTED** | Correct. No real generation, no real upload, no billable call was made |
 
-## Next action
+## C2A deliverable state
 
-Implementation agent: read `AGENTS.md`, this STATUS, project profile, `tasks/PP-META-I1-C2A.md`, then only relevant C1 code/tests; work on this branch, produce real evidence plus mocked C2A contract tests; stop for independent audit, do not claim actual Meta model use.
+| Item | State |
+|---|---|
+| A. Real F01 recording: mobile defect clip + desktop control, MP4, SHA-256, metadata, trace, frames | DONE (`pnpm record:f01`) |
+| B. Intake: real signature/size/duration/codec/decode validation, WebM→MP4, safe paths, temp lifecycle | DONE |
+| B. Per-run consent bound to run + provider + video SHA-256 | DONE |
+| B. Strict `Symptom` schema + uncertainty handling (hypothesis only) | DONE |
+| C. Meta Files + Responses (`input_file`, `text.format`) + delete, mock-tested; separate video-upload opt-in | DONE (mock only) |
+| Product UI screen-map and mockup proposal | DONE as a proposal (`design/screens/PP-PRODUCT-SCREEN-MAP.md`); **NOT APPROVED; no UI built** |
+| T04 real model use | **NOT TESTED** (needs owner authorization) |
+
+## Verification state (local, at `444f7d9`)
+
+| Check | Result |
+|---|---|
+| Frozen install, lint, typecheck, profile validator, `git diff --check`, tracked-`.env` guard | PASS |
+| Unit 88/88, security 27/27 | PASS |
+| Integration 9/9 (real ffmpeg media + C1 dirty-evidence runner + Chromium) | PASS (local only; needs Chromium and ffmpeg; not in CI) |
+| `pnpm f01:baseline` (C1 regression) | PASS: REPRODUCED, desktop PASS, certified exact-SHA |
+| `pnpm test:e2e:f01` | exit 1 by design (the deliberate mobile failure) |
+| Guard mutations | 17/17 killed |
+| Hosted CI | NOT RUN (branch not pushed) |
+| Independent audit | PENDING |
+| Docker/ARM64 container isolation | NOT VERIFIED — agent environment lacks Docker access; blocks any AI-generated patch execution |
+| Baseten | NOT TESTED |
+
+## Unverified assumptions (must be confirmed by the first authorized live smoke)
+
+- Responses `text.format` wrapper (`type/name/schema/strict`) and the response `output[].content[].output_text` shape are OpenAI-compatible assumptions; Meta's docs do not show them.
+- Only H.264 MP4 is accepted (fail-safe). Whether Meta also accepts other codecs is unknown.
+- Files API behaviour under real upload (latency, `expires_after` acceptance, delete semantics) is documented but unexercised.
+
+## Next actions
+
+1. GPT-6 independent exact-head audit using handoff `PP-META-I1-C2A-C1`.
+2. Owner decisions: (a) authorize push + Draft PR for C2A; (b) approve, change or reject the product screen-map proposal; (c) separately authorize ONE capped live smoke (uploads the synthetic mobile clip to Meta, one `muse-spark-1.3` call, file deleted after) to settle T04 and the assumptions above; (d) confirm host Docker.
+3. Do not start C3 (patch proposal) until the sandbox is independently verified.
+
+## Known limitations
+
+- ffmpeg/ffprobe must be on PATH for real media validation and recording (`TOOL_UNAVAILABLE` otherwise). CI does not run the real-media suite.
+- The tap ring in the recording is a recorder-injected visual aid (documented in `recording.json`), not part of the application.
+- No container sandbox yet. Real model/video behaviour is unverified.

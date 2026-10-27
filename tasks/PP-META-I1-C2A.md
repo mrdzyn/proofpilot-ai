@@ -1,6 +1,6 @@
 # PP-META-I1-C2A — Day 2: real F01 video, bounded intake and Muse Spark video contract
 
-- **Status:** ACTIVE — implementation authorized by owner on 2026-10-27; no merge/release authorized
+- **Status:** IMPLEMENTED LOCALLY — awaiting independent audit; implementation authorized by owner on 2026-10-27; no merge/release authorized (see `docs/STATUS.md` and handoff `PP-META-I1-C2A-C1`)
 - **Base:** `main` at `c55795eab20466d917847c964ace377b57d4edc6` (C1 squash-merge, independently audited)
 - **Working branch:** `phase/pp-meta-i1-c2a`
 - **Owner/orchestrator:** Project owner; implementation agent Claude Code; independent reviewer GPT-6
