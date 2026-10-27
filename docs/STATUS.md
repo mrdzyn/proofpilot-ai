@@ -9,10 +9,10 @@
 - **Status:** Review. Implementation complete; awaiting independent exact-head audit.
 - **Primary branch:** `main`
 - **Working branch:** `phase/pp-meta-i0-c1`
-- **Implementation head:** `f78dad56ce092c04d69f38ea02cdca54a1046089`
+- **Implementation head (public):** `88243d110d09f0ff853896841fdf80fe4d5bfce4`. Code-equivalent to original local `f78dad5`; see `HACKATHON_CONTRIBUTIONS.md` for the sanitized-root mapping.
 - **PR:** Draft PR to `main` (owner-authorized publication for review only; no merge/deploy authorized)
 - **Active task:** `tasks/PP-META-I0-C1.md`
-- **Active handoff:** PP-META-I0-C1
+- **Active handoff:** PP-META-I0-C1-PUB1
 
 ## Implemented (C1)
 
@@ -36,7 +36,7 @@
 
 ## Next actions
 
-1. Independent read-only exact-head audit of `f78dad5` using handoff `PP-META-I0-C1`.
+1. Independent read-only exact-head audit of the published Draft PR head using handoff `PP-META-I0-C1-PUB1`.
 2. Owner decisions: authorize a small capped billable smoke for `muse-spark-1.3`/`muse-wonder-1.0`; configure `BASETEN_API_KEY` if Baseten is wanted; independently confirm host Docker availability for container isolation.
 3. After approval: C2 (Oct 28): video intake/consent, real Muse Spark video analysis, schema-validated `Symptom`. ProofPilot product UI requires the design-first gate first.
 

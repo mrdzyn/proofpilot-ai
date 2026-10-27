@@ -190,4 +190,31 @@ If an existing repository already has a handoff/continuation mechanism:
 ### Next action
 Auditor: in a clean clone at `f78dad5`, run the Validation commands, inspect `verifier/` vs `config/patch-policy.json`, the classifier abstention cases, adapter redaction/allowlist, and `HACKATHON_CONTRIBUTIONS.md` provenance; report PASS / FIX REQUIRED / PARTIAL.
 
+## Handoff: PP-META-I0-C1-PUB1
+
+- **Task / phase:** `tasks/PP-META-I0-C1.md`
+- **From:** Implementation agent (Claude Code, Claude Opus 5.5)
+- **To:** Independent audit agent (read-only), then project owner
+- **Branch:** `phase/pp-meta-i0-c1` (public, sanitized root)
+- **Implementation head:** `88243d110d09f0ff853896841fdf80fe4d5bfce4`
+- **PR:** Draft PR to `main` (link in STATUS once created)
+- **State:** READY FOR REVIEW
+
+### Completed
+- Republished C1 on a new sanitized Git root (owner-authorized). The original local SHAs in handoff `PP-META-I0-C1` are private evidence, not reachable here. Mapping: `HACKATHON_CONTRIBUTIONS.md`.
+- Publication-only tree differences from original `be6c39f`: master-only CI governance notes removed from `docs/REPOSITORY-SETUP.md`; template phase label removed from `docs/RELEASE.md`; provenance and this handoff/STATUS. No code or test changes.
+
+### Validation (at `88243d1`, macOS arm64, Node v24.21.0, pnpm 12.6.0, Playwright 1.64.1)
+- frozen install, lint, typecheck, profile validator, `git diff --check`: PASS (exit 0). Unit 27/27, security 12/12.
+- `pnpm f01:baseline`: exit 0; REPRODUCED (mobile cart-count "0" ≠ "1", tap received by `promo-overlay`), desktop PASS; run `f01-baseline-20261027T054701Z-c399a4`; observed reproduction 2636 ms, oracle 4354 ms, total 4398 ms.
+- `pnpm test:e2e:f01`: exit 1 (expected on the defective baseline).
+- Meta discovery PASS (recorded at original head; adapter unchanged); Meta inference NOT TESTED; Baseten NOT TESTED; container validation NOT VERIFIED (agent environment lacks Docker access).
+
+### Continuation notes
+- Evidence is gitignored; regenerate with `pnpm exec playwright install chromium && pnpm f01:baseline`.
+- Audit the exact PR head; the final commit after `88243d1` is docs/provenance only.
+
+### Next action
+Auditor: clean clone of the Draft PR head; run the validation commands; review trust boundary, classifier abstentions, adapter safeguards, and provenance; report PASS / FIX REQUIRED / PARTIAL.
+
 <!-- HANDOFF_ENTRIES_END -->

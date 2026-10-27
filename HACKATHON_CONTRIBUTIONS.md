@@ -63,6 +63,14 @@ Original local commits (private development evidence, retained by the owner):
 
 Publication-only differences from original tree `be6c39f`: master-only CI governance notes removed from `docs/REPOSITORY-SETUP.md`; a template phase label removed from `docs/RELEASE.md`; this provenance section; and the publication STATUS/handoff update. Application, fixture, verifier and test code are byte-identical. The public commit identifiers are recorded in the next section, added by the commit that follows this one, because a commit cannot contain its own SHA.
 
+### Public commit identifiers
+
+| Public SHA | Commit timestamp | Branch | Content |
+|---|---|---|---|
+| `1e3f59037a86a76301fd805ba6a7e62a8c927882` | 2026-10-27T13:46:22+08:00 | `main` (public root) | Sanitized public baseline: README, LICENSE, .gitignore |
+| `88243d110d09f0ff853896841fdf80fe4d5bfce4` | 2026-10-27T13:46:48+08:00 | `phase/pp-meta-i0-c1` | C1 project tree (public implementation head; equivalent to original `f78dad5` / `be6c39f` code) |
+| *(the commit adding this table)* | see `git log` | `phase/pp-meta-i0-c1` | Public SHA mapping, STATUS, publication handoff |
+
 ## Contributors
 
 - Johnmikel Xavier Rosales (owner)
