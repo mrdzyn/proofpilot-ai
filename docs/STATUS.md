@@ -6,11 +6,11 @@
 
 - **Name:** ProofPilot AI — Meta Global AI Developer Hackathon (Push the Frontier)
 - **Current phase:** PP-META-I1-C2B — real Muse Spark video-analysis readiness
-- **Status:** ACTIVE — zero-network C2B task prepared; implementation not started yet; genuine provider test requires separate explicit owner authorization
+- **Status:** Workstream A implemented locally (not pushed); **awaiting independent GPT-6 review.** Genuine provider test (Workstream B) requires separate explicit owner authorization
 - **Primary branch:** protected `main` at `8551b0c03600d7be888a3b349b7da963eab97b3a` (C2A squash merge; PR #2)
 - **Working branch:** `phase/pp-meta-i1-c2b` (created from that merged `main`)
 - **Active task:** `tasks/PP-META-I1-C2B.md`
-- **Active handoff:** None for C2B yet; previous completed C2A handoff `PP-META-I1-C2A-R1`
+- **Active handoff:** PP-META-I1-C2B-A1
 - **Authorization:** Owner approved start of C2B preparation 2026-10-27. **Not authorized:** real Meta video upload, billable inference, merge, deployment, product UI shell, or AI-generated patch execution.
 
 ## Completed milestones
@@ -50,13 +50,21 @@ Official Meta documentation verified 2026-10-27:
 
 | Gate | Status |
 |---|---|
-| C2B zero-network preflight and extra status guards | NOT STARTED |
+| C2B zero-network preflight and Responses lifecycle guards | DONE locally (Workstream A); review PENDING |
 | C2B real live model test (T04) | NOT AUTHORIZED / NOT TESTED |
 | Product five-screen design `design/screens/PP-PRODUCT-SCREEN-MAP.md` | PROPOSED; awaiting owner's higher-fidelity visual approval |
 | Isolated Docker/ARM64 patch runner | NOT VERIFIED; no generated patch execution allowed |
 | C3 patch proposal, C4 trusted candidate verification, evidence export, demo/submission | NOT STARTED |
 | Baseten | NOT TESTED |
 
+## C2B Workstream A result (local branch head; see handoff `PP-META-I1-C2B-A1`)
+
+- Reference clip verified, SHA-256 match, certified provenance, real intake validation; dry run made 0 network calls (also proven with a fetch trap). Evidence was **not** regenerated or substituted.
+- `GET /models` (non-billable): `muse-spark-1.3` AVAILABLE by exact id (key never shown).
+- Responses lifecycle now fails closed (`RESPONSE_NOT_COMPLETED`): explicit non-`completed` status, unknown status, non-null `error`/`incomplete_details`, or a refusal part never yields `VIDEO_ANALYZED`; the file is still deleted; no retry.
+- Local: lint/typecheck clean; unit 112/112; security 27/27; integration 11/11; `f01:baseline` exit 0 certified; `test:e2e:f01` exit 1 (expected); 7/7 lifecycle mutants killed. Hosted CI: NOT RUN (not pushed).
+- Live smoke: procedure and exact command in `docs/LIVE-SMOKE.md`; **not executed, not authorized**. T04 remains NOT TESTED.
+
 ## Next action
 
-Implementation agent: read repository operating instructions and `tasks/PP-META-I1-C2B.md`; execute only Workstream A in the trusted local checkout, preserving exact evidence provenance and zero real upload/model calls. Commit locally, deliver readiness/test report and request independent audit. Obtain separate owner authorization before Workstream B, PR publication, merge, or release.
+GPT-6 review of the C2B Workstream A head. Owner: decide publication of the C2B branch, and separately whether to authorize Workstream B (transmission of the synthetic clip and a possible billable `muse-spark-1.3` request).

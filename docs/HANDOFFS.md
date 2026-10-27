@@ -310,4 +310,32 @@ lint/typecheck/`git diff --check` clean; unit 97/97; security 27/27; integration
 ### Next action
 GPT-6: re-audit the exact head against both findings; then owner decisions as in STATUS.
 
+## Handoff: PP-META-I1-C2B-A1
+
+- **Task / phase:** `tasks/PP-META-I1-C2B.md`, Workstream A only
+- **From:** Implementation agent (Claude Code, Claude Sonnet 5.5)
+- **To:** GPT-6 independent review, then project owner
+- **Branch:** `phase/pp-meta-i1-c2b` from `85f7a498aa336e0082344c36cbebfacb8b880ebe`; local commits only, **not pushed**, no PR
+- **Implementation commit:** `5c06615197f42a0af582f0b19cdfca480e236d44` (the branch head adds only this docs commit)
+- **State:** READY FOR REVIEW
+
+### Completed
+- **C2B-01 authenticity:** `.proofpilot/recordings/f01-20261027T122211Z-df375a/mobile-defect/f01-mobile-defect.mp4` exists; `shasum -a 256` = `e9df68b14c48300818f9ec9407b884413037f29305f17a5da3cc4fac05eeafdf` (match); `recording.json`: `certifiedExactSha:true`, worktree clean before/after, source HEAD `01da814` (pre-squash, not relabelled), fixture tree `c76561ac` equals `main`'s, 390×844, synthetic, outcome as expected; real intake validation: MP4/H.264, 10.04 s, 57,596 bytes. Evidence not regenerated.
+- **C2B-02 dry run:** `analyze-video --run-id c2b-dryrun-1` printed `NETWORK CALLS MADE: 0`, consent NOT GIVEN, opt-ins off; repeated with `globalThis.fetch` replaced by an exiting trap (no trigger). Planned payload: Files (`user_data`, 3600 s) → Responses (`muse-spark-1.3`, input_file + text.format) → DELETE.
+- **Model discovery:** `GET /models` only (non-billable), key from the owner's private `.env.local`, never printed: `muse-spark-1.3` AVAILABLE by exact id (9 models listed; related ids not substituted); `muse-wonder-1.0` AVAILABLE. Baseten NOT TESTED.
+- **C2B-03 lifecycle** (`client.ts`, `video-analysis.ts`): schema fetched from dev.meta.ai (`status` optional; `error`, `incomplete_details` objects or null; refusal content part). Fail closed: explicit status other than `completed`, unknown/non-string status, non-null error/incomplete_details, or refusal → `ANALYSIS_FAILED` `RESPONSE_NOT_COMPLETED` even with output text; text discarded; usage/request id/model still recorded; file still deleted; no retry. Absent/null status is accepted when nothing else is wrong. Only short machine codes from provider objects are surfaced (free text never). Usage now also records total/reasoning tokens and video frames. CLI prints lifecycle, ids and usage (no cost computed).
+- **C2B-04 duplicate protection:** unchanged C2A reservation; regression suite passes.
+- **Live-smoke gate:** `docs/LIVE-SMOKE.md` (checklist, exact command, post-run steps, API uncertainties). Request envelope asserted by test: one generation, 1500 output tokens, 3600 s expiry, no tools/web/search/previous_response_id/stream, DELETE last.
+- Unchanged: `verifier/`, `fixtures/`, `config/`, `.github/`. No secrets or media in Git.
+
+### Validation (local, macOS arm64, at `5c06615`)
+lint/typecheck/`git diff --check` clean; unit 112/112; security 27/27; integration 11/11 (real ffmpeg and browser); `pnpm f01:baseline` exit 0 REPRODUCED certified; `pnpm test:e2e:f01` exit 1 (expected). Mutants killed 7/7 (ignore status, error, incomplete_details, refusal; accept unknown status; keep text when not completed; analyzer ignores lifecycle). Hosted CI: NOT RUN.
+
+### Open items / uncertainties
+- Real Meta behaviour still unverified (T04 NOT TESTED): `text.format` acceptance, whether an uploaded file is immediately usable (no polling implemented), output shape in practice, cost. No hard currency cap exists.
+- Docker NOT VERIFIED; no patch execution; screen map not approved; no C3.
+
+### Next action
+GPT-6: review the exact head. Owner: authorize publication; separately decide on Workstream B using `docs/LIVE-SMOKE.md`.
+
 <!-- HANDOFF_ENTRIES_END -->
