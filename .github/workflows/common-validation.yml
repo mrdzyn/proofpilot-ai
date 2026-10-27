@@ -1,0 +1,55 @@
+name: Common Validation
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  common-validation:
+    name: Common validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Validate core operating model and selected capability packs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/validate_project_profile.py --repository "$GITHUB_REPOSITORY"
+
+      - name: Reject obvious committed local environment files
+        shell: bash
+        run: |
+          set -euo pipefail
+          tracked_secret_files="$(git ls-files | grep -E '(^|/)(\.env|\.env\.(local|development|staging|production))$' || true)"
+          if [[ -n "$tracked_secret_files" ]]; then
+            echo "::error::Potential local secret files are tracked:"
+            echo "$tracked_secret_files"
+            exit 1
+          fi
+          echo "No tracked local environment files found."
+          echo "Note: this lightweight guard is not a comprehensive secret scanner."
+
+      - name: Stack-specific validation reminder
+        run: |
+          echo "Project baseline passed."
+          echo "Projects must add real stack-specific lint, typecheck, test, build, security, and artifact validation."
+
+      - name: Validate master-template capability inventory
+        if: github.repository == 'mrdzyn/ai-native-project-template'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/validate_master_template.py
+
+      - name: Self-test master-template capability profiles
+        if: github.repository == 'mrdzyn/ai-native-project-template'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/test_validate_project_profile.py

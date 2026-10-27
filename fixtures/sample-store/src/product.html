@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Trail Mug — Sample Store</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="/product/demo">Sample Store</a>
+    <a class="cart" href="#cart" aria-label="Cart">
+      Cart <span class="cart-count" data-testid="cart-count" aria-live="polite">0</span>
+    </a>
+  </header>
+
+  <main class="product">
+    <div class="product-media" role="img" aria-label="Enamel trail mug, forest green"></div>
+    <section class="product-info">
+      <h1 class="product-title">Enamel Trail Mug</h1>
+      <p class="product-price" data-testid="product-price">$29.50</p>
+      <p class="product-copy">A lightweight 350 ml enamel mug for camp coffee. Synthetic demo product.</p>
+      <button class="add-to-cart" type="button" data-testid="add-to-cart">Add to cart</button>
+    </section>
+  </main>
+
+  <aside class="promo" data-testid="promo">
+    <p class="promo-text">Free shipping on orders over $50</p>
+  </aside>
+  <div class="promo-overlay" data-testid="promo-overlay" aria-hidden="true"></div>
+
+  <script src="/app.js" defer></script>
+</body>
+</html>

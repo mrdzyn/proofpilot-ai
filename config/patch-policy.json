@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "fixtures": {
+    "F01": {
+      "writable": ["fixtures/sample-store/src/"],
+      "allowedExtensions": [".html", ".css", ".js"]
+    }
+  },
+  "trustRoots": [
+    "verifier/",
+    "tests/",
+    "packages/",
+    "scripts/",
+    "config/",
+    ".github/",
+    "docs/",
+    "fixtures/sample-store/server.mjs",
+    "package.json",
+    "pnpm-lock.yaml",
+    "pnpm-workspace.yaml",
+    "tsconfig.json"
+  ],
+  "deniedNamePatterns": ["^\\.env", "\\.(pem|key|p12)$", "^\\.npmrc$"]
+}
