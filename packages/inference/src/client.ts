@@ -1,6 +1,7 @@
 // OpenAI-compatible HTTP client shared by all providers. Uses the platform
 // fetch (injectable for tests); no SDK dependency.
 import type { ModelRole, ProviderConfig } from './config.ts';
+import { detectContainer, MEDIA_LIMITS } from '../../intake/src/media.ts';
 import { InferenceError, redact } from './errors.ts';
 
 export type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
@@ -21,12 +22,48 @@ export type ModelAvailability = {
   relatedIds: string[];
 };
 
+export type UploadVideoRequest = {
+  bytes: Uint8Array;
+  /** Sent as the multipart filename; must be a plain `*.mp4` name. */
+  filename: string;
+  /** `expires_after.seconds` (Meta range 3600..2592000). Defaults to 1 hour. */
+  expiresAfterSeconds?: number;
+};
+export type UploadedFile = { fileId: string; bytes: number | null; expiresAt: number | null; requestId: string | null };
+export type VideoResponseRequest = {
+  model: string;
+  prompt: string;
+  fileId: string;
+  /** Sent as Responses `text.format` (json_schema, strict). Still validate the output locally. */
+  schemaName: string;
+  schema: object;
+  maxOutputTokens: number;
+};
+export type VideoResponse = {
+  providerId: string;
+  model: string;
+  text: string;
+  requestId: string | null;
+  usage: { inputTokens: number | null; outputTokens: number | null } | null;
+};
+
+export const FILE_EXPIRY_SECONDS = { min: 3_600, max: 2_592_000, default: 3_600 } as const;
+const FILE_ID = /^file-[A-Za-z0-9_-]{1,64}$/;
+const UPLOAD_FILENAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,95}\.mp4$/;
+const SCHEMA_NAME = /^[A-Za-z0-9_-]{1,64}$/;
+
 export interface InferenceProvider {
   readonly id: string;
   readonly models: Partial<Record<ModelRole, string>>;
   listModels(): Promise<string[]>;
   checkModelAvailability(modelId: string): Promise<ModelAvailability>;
   generateText(req: TextRequest): Promise<TextResult>;
+  /** Files API upload of a validated MP4 (`purpose=user_data`, expiring). Billable/external: double opt-in. */
+  uploadVideoFile(req: UploadVideoRequest): Promise<UploadedFile>;
+  /** Responses call referencing an uploaded video via `input_file`. */
+  respondWithVideo(req: VideoResponseRequest): Promise<VideoResponse>;
+  /** Best-effort cleanup of an uploaded file. */
+  deleteFile(fileId: string): Promise<void>;
 }
 
 export const LIMITS = { maxPromptChars: 32_000, maxOutputTokens: 4_096, maxErrorDetailChars: 300 } as const;
@@ -38,10 +75,18 @@ export function createProvider(config: ProviderConfig, deps: ClientDeps = {}): I
   const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const scrub = (text: string) => redact(text, [config.apiKey]);
 
-  async function request(operation: string, method: 'GET' | 'POST', path: string, body?: unknown): Promise<{ json: any; requestId: string | null }> {
+  async function request(
+    operation: string,
+    method: 'GET' | 'POST' | 'DELETE',
+    path: string,
+    body?: unknown,
+    opts: { retries?: number } = {},
+  ): Promise<{ json: any; requestId: string | null }> {
     if (!config.apiKey) {
       throw new InferenceError('CONFIG', config.id, `${config.label}: API key is not configured`);
     }
+    const maxRetries = opts.retries ?? config.maxRetries;
+    const isForm = typeof FormData !== 'undefined' && body instanceof FormData;
     for (let attempt = 0; ; attempt++) {
       let res: Response;
       try {
@@ -50,9 +95,10 @@ export function createProvider(config: ProviderConfig, deps: ClientDeps = {}): I
           headers: {
             authorization: `Bearer ${config.apiKey}`,
             accept: 'application/json',
-            ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+            // FormData: fetch sets the multipart boundary itself.
+            ...(body === undefined || isForm ? {} : { 'content-type': 'application/json' }),
           },
-          body: body === undefined ? undefined : JSON.stringify(body),
+          body: body === undefined ? undefined : isForm ? (body as FormData) : JSON.stringify(body),
           // Never follow redirects: that could forward the bearer token elsewhere.
           redirect: 'error',
           signal: AbortSignal.timeout(config.timeoutMs),
@@ -68,6 +114,7 @@ export function createProvider(config: ProviderConfig, deps: ClientDeps = {}): I
       const requestId = res.headers.get('x-request-id') ?? res.headers.get('request-id');
       if (res.ok) {
         const text = await res.text();
+        if (text.length === 0) return { json: null, requestId };
         try {
           return { json: JSON.parse(text), requestId };
         } catch {
@@ -79,7 +126,7 @@ export function createProvider(config: ProviderConfig, deps: ClientDeps = {}): I
       // in half and leave a fragment that no longer matches the exact secret.
       const detail = scrub(await res.text().catch(() => '')).slice(0, LIMITS.maxErrorDetailChars);
       const retryable = res.status === 429 || res.status >= 500;
-      if (retryable && attempt < config.maxRetries) {
+      if (retryable && attempt < maxRetries) {
         await sleep(Math.min(250 * 2 ** attempt, 2_000));
         continue;
       }
@@ -90,6 +137,26 @@ export function createProvider(config: ProviderConfig, deps: ClientDeps = {}): I
         : res.status >= 500 ? 'PROVIDER_ERROR'
         : 'HTTP';
       throw new InferenceError(code, config.id, `${config.label} ${operation} failed: HTTP ${res.status}${detail ? ` — ${detail}` : ''}`, { status: res.status, requestId, retryable });
+    }
+  }
+
+  /** Text from a Responses payload; tolerant of malformed shapes (never throws). */
+  function extractResponsesText(json: any): string {
+    if (typeof json?.output_text === 'string' && json.output_text.length > 0) return json.output_text;
+    const parts: string[] = [];
+    for (const item of Array.isArray(json?.output) ? json.output : []) {
+      for (const c of Array.isArray(item?.content) ? item.content : []) {
+        if (c?.type === 'output_text' && typeof c.text === 'string') parts.push(c.text);
+      }
+    }
+    return parts.join('');
+  }
+  const usageOf = (u: any) => (u && typeof u === 'object' ? { inputTokens: num(u.input_tokens), outputTokens: num(u.output_tokens) } : null);
+  const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+
+  function requireNativeVideo(): void {
+    if (!config.nativeVideo) {
+      throw new InferenceError('INVALID_INPUT', config.id, `${config.label} does not support native video analysis`);
     }
   }
 
@@ -143,15 +210,8 @@ export function createProvider(config: ProviderConfig, deps: ClientDeps = {}): I
           input: req.prompt,
           max_output_tokens: req.maxOutputTokens,
         });
-        const text =
-          typeof json?.output_text === 'string'
-            ? json.output_text
-            : (json?.output ?? [])
-                .flatMap((item: any) => item?.content ?? [])
-                .filter((c: any) => c?.type === 'output_text' && typeof c.text === 'string')
-                .map((c: any) => c.text)
-                .join('');
-        if (typeof text !== 'string' || text.length === 0) {
+        const text = extractResponsesText(json);
+        if (text.length === 0) {
           throw new InferenceError('INVALID_RESPONSE', config.id, 'response contained no output text', { requestId });
         }
         return {
@@ -178,6 +238,95 @@ export function createProvider(config: ProviderConfig, deps: ClientDeps = {}): I
         requestId: requestId ?? (typeof json.id === 'string' ? json.id : null),
         usage: json.usage ? { inputTokens: json.usage.prompt_tokens ?? null, outputTokens: json.usage.completion_tokens ?? null } : null,
       };
+    },
+
+    async uploadVideoFile(req) {
+      requireNativeVideo();
+      if (!(req.bytes instanceof Uint8Array) || req.bytes.length === 0 || req.bytes.length > MEDIA_LIMITS.maxBytes) {
+        throw new InferenceError('INVALID_INPUT', config.id, `video must be 1..${MEDIA_LIMITS.maxBytes} bytes`);
+      }
+      if (detectContainer(req.bytes.subarray(0, 64)).kind !== 'mp4') {
+        throw new InferenceError('INVALID_INPUT', config.id, 'only MP4 video can be uploaded');
+      }
+      if (typeof req.filename !== 'string' || !UPLOAD_FILENAME.test(req.filename)) {
+        throw new InferenceError('INVALID_INPUT', config.id, 'filename must be a plain *.mp4 name');
+      }
+      const seconds = req.expiresAfterSeconds ?? FILE_EXPIRY_SECONDS.default;
+      if (!Number.isInteger(seconds) || seconds < FILE_EXPIRY_SECONDS.min || seconds > FILE_EXPIRY_SECONDS.max) {
+        throw new InferenceError('INVALID_INPUT', config.id, `expiresAfterSeconds must be an integer in ${FILE_EXPIRY_SECONDS.min}..${FILE_EXPIRY_SECONDS.max}`);
+      }
+      if (!config.billableCallsAllowed || !config.videoUploadAllowed) {
+        throw new InferenceError('BILLABLE_NOT_AUTHORIZED', config.id, 'video upload is disabled; it needs PROOFPILOT_ALLOW_BILLABLE_CALLS=1 and PROOFPILOT_ALLOW_VIDEO_UPLOAD=1, set only with owner authorization');
+      }
+      const form = new FormData();
+      form.append('purpose', 'user_data');
+      form.append('expires_after[anchor]', 'created_at');
+      form.append('expires_after[seconds]', String(seconds));
+      form.append('file', new Blob([req.bytes as BlobPart], { type: 'video/mp4' }), req.filename); // file last: lower upload latency
+      // No retry: a replayed upload could leave an orphaned remote copy of the video.
+      const { json, requestId } = await request('file upload', 'POST', '/files', form, { retries: 0 });
+      if (typeof json?.id !== 'string' || !FILE_ID.test(json.id)) {
+        throw new InferenceError('INVALID_RESPONSE', config.id, `${config.label} file upload returned no valid file id`, { requestId });
+      }
+      return { fileId: json.id, bytes: num(json.bytes), expiresAt: num(json.expires_at), requestId };
+    },
+
+    async respondWithVideo(req) {
+      requireNativeVideo();
+      if (!Object.values(config.models).includes(req.model)) {
+        throw new InferenceError('INVALID_INPUT', config.id, `model ${JSON.stringify(req.model)} is not a configured ${config.id} model`);
+      }
+      if (typeof req.fileId !== 'string' || !FILE_ID.test(req.fileId)) {
+        throw new InferenceError('INVALID_INPUT', config.id, 'fileId is not a valid Files API id');
+      }
+      if (typeof req.schemaName !== 'string' || !SCHEMA_NAME.test(req.schemaName)) {
+        throw new InferenceError('INVALID_INPUT', config.id, 'schemaName is invalid');
+      }
+      validateTextRequest({ model: req.model, prompt: req.prompt, maxOutputTokens: req.maxOutputTokens });
+      if (!config.billableCallsAllowed) {
+        throw new InferenceError('BILLABLE_NOT_AUTHORIZED', config.id, 'billable inference is disabled; set PROOFPILOT_ALLOW_BILLABLE_CALLS=1 only with owner authorization');
+      }
+      // No retry: a replayed generation would be billed twice.
+      const { json, requestId } = await request(
+        'video response',
+        'POST',
+        '/responses',
+        {
+          model: req.model,
+          input: [
+            {
+              type: 'message',
+              role: 'user',
+              content: [
+                { type: 'input_text', text: req.prompt },
+                { type: 'input_file', file_id: req.fileId },
+              ],
+            },
+          ],
+          // Responses structured output is `text.format` (not Chat Completions' `response_format`).
+          text: { format: { type: 'json_schema', name: req.schemaName, schema: req.schema, strict: true } },
+          max_output_tokens: req.maxOutputTokens,
+        },
+        { retries: 0 },
+      );
+      const text = extractResponsesText(json);
+      if (text.length === 0) {
+        throw new InferenceError('INVALID_RESPONSE', config.id, 'video response contained no output text', { requestId });
+      }
+      return {
+        providerId: config.id,
+        model: typeof json?.model === 'string' ? json.model : req.model,
+        text,
+        requestId: requestId ?? (typeof json?.id === 'string' ? json.id : null),
+        usage: usageOf(json?.usage),
+      };
+    },
+
+    async deleteFile(fileId) {
+      if (typeof fileId !== 'string' || !FILE_ID.test(fileId)) {
+        throw new InferenceError('INVALID_INPUT', config.id, 'fileId is not a valid Files API id');
+      }
+      await request('file delete', 'DELETE', `/files/${fileId}`, undefined, { retries: 0 });
     },
   };
 }
