@@ -34,6 +34,8 @@ const USAGE = `usage: analyze-video --video <file.mp4> --run-id <id> [--descript
 
 export async function runAnalyzeCommand(argv: string[], deps: AnalyzeCommandDeps): Promise<number> {
   const { log } = deps;
+  // `pnpm run script -- --flag` forwards the literal `--`; accept it rather than reject every flag after it.
+  if (argv[0] === '--') argv = argv.slice(1);
   let values: ReturnType<typeof parseArgs>['values'];
   try {
     ({ values } = parseArgs({
@@ -83,7 +85,7 @@ export async function runAnalyzeCommand(argv: string[], deps: AnalyzeCommandDeps
     if (!consentGiven) throw new ConsentError('CONSENT_MISSING', 'pass --consent-meta-video-analysis to confirm this video may be sent to Meta');
     const consent = createVideoConsent({ runId, videoSha256: video.sha256 });
     const provider = createProvider(loadProviderConfig('meta', deps.env), { fetch: deps.fetch });
-    log(`mode:          ${deps.transport.toUpperCase()} analysis`);
+    log(`mode:          ${deps.transport.toUpperCase()} analysis requested (pre-flight checks run first; no call is made if any fails)`);
     const result = await analyzeRecording({ provider, video, consent, runId, description, clock: deps.clock });
 
     const outDir = path.join(deps.outRoot, runId);

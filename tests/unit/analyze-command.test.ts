@@ -119,3 +119,11 @@ test('mocked live run with a bad model answer exits 1 and still records the fail
   const saved = JSON.parse(readFileSync(path.join(s.root, 'analysis', 'r2', 'analysis.json'), 'utf8'));
   assert.equal(saved.result.status, 'ANALYSIS_FAILED');
 });
+
+test('a leading `--` (as forwarded by `pnpm run script -- ...`) is accepted', async () => {
+  const s = setup();
+  assert.equal(await runAnalyzeCommand(['--', '--video', s.file, '--run-id', 'r1'], s.deps), 0);
+  assert.match(s.out(), /DRY RUN/);
+  // Only a single leading `--` is dropped: a stray positional after it is still refused.
+  assert.equal(await runAnalyzeCommand(['--', '--video', s.file, '--run-id', 'r1', 'extra'], s.deps), 2);
+});
