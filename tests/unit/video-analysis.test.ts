@@ -61,7 +61,7 @@ test('happy path: upload → responses → delete, in that order, against the do
   assert.deepEqual(p.video, { sha256: video.sha256, bytes: video.bytes, durationSec: 10 });
   assert.equal(p.fileId, FILE_ID);
   assert.deepEqual(p.requestIds, { upload: 'req-up', response: 'req-resp' });
-  assert.deepEqual(p.usage, { inputTokens: 1200, outputTokens: 300 });
+  assert.deepEqual(p.usage, { inputTokens: 1200, outputTokens: 300, totalTokens: null, reasoningTokens: null, videoFramesProcessed: null });
   assert.equal(p.cleanup.deleted, true);
   assert.ok(p.rawResponse && p.rawResponse.sha256.length === 64);
   assert.ok(p.latencyMs.total > 0 && p.latencyMs.upload !== null && p.latencyMs.response !== null);

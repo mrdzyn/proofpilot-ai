@@ -39,12 +39,32 @@ export type VideoResponseRequest = {
   schema: object;
   maxOutputTokens: number;
 };
+export type VideoUsage = {
+  inputTokens: number | null;
+  outputTokens: number | null;
+  totalTokens: number | null;
+  reasoningTokens: number | null;
+  videoFramesProcessed: number | null;
+};
+/** Provider-reported lifecycle of a Responses object (docs: status completed|failed|in_progress|cancelled|queued|incomplete). */
+export type ResponseLifecycle = {
+  /** `status` as reported; null when the (schema-optional) field is absent or null. */
+  status: string | null;
+  /** Only a short machine code from `error.code` / `incomplete_details.reason`; never provider free text. */
+  errorCode: string | null;
+  incompleteReason: string | null;
+  refusal: boolean;
+  /** True only for a completed response with no error, no incomplete_details and no refusal. */
+  completed: boolean;
+};
 export type VideoResponse = {
   providerId: string;
   model: string;
+  /** Empty when the response did not complete; callers must check `lifecycle.completed` first. */
   text: string;
   requestId: string | null;
-  usage: { inputTokens: number | null; outputTokens: number | null } | null;
+  usage: VideoUsage | null;
+  lifecycle: ResponseLifecycle;
 };
 
 export const FILE_EXPIRY_SECONDS = { min: 3_600, max: 2_592_000, default: 3_600 } as const;
@@ -151,8 +171,38 @@ export function createProvider(config: ProviderConfig, deps: ClientDeps = {}): I
     }
     return parts.join('');
   }
-  const usageOf = (u: any) => (u && typeof u === 'object' ? { inputTokens: num(u.input_tokens), outputTokens: num(u.output_tokens) } : null);
   const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+  const videoUsageOf = (u: any): VideoUsage | null =>
+    u && typeof u === 'object'
+      ? {
+          inputTokens: num(u.input_tokens),
+          outputTokens: num(u.output_tokens),
+          totalTokens: num(u.total_tokens),
+          reasoningTokens: num(u.output_tokens_details?.reasoning_tokens),
+          videoFramesProcessed: num(u.video_frames_processed),
+        }
+      : null;
+  const KNOWN_STATUSES = new Set(['completed', 'failed', 'in_progress', 'cancelled', 'queued', 'incomplete']);
+  const CODE = /^[a-z][a-z0-9_]{0,39}$/;
+  const codeOf = (v: unknown, key: string): string | null =>
+    v == null ? null : typeof v === 'object' && typeof (v as any)[key] === 'string' && CODE.test((v as any)[key]) ? (v as any)[key] : 'unspecified';
+  /**
+   * Fail closed: only an explicit `completed` (or an absent/null status, which the schema allows) with
+   * no error, no incomplete_details and no refusal counts as complete. Anything else, including an
+   * unknown or non-string status, is not.
+   */
+  function lifecycleOf(json: any): ResponseLifecycle {
+    const raw = json?.status;
+    const status = raw == null ? null : typeof raw === 'string' && KNOWN_STATUSES.has(raw) ? raw : 'unrecognized';
+    const errorCode = codeOf(json?.error, 'code');
+    const incompleteReason = codeOf(json?.incomplete_details, 'reason');
+    const refusal = (Array.isArray(json?.output) ? json.output : []).some(
+      (item: any) => Array.isArray(item?.content) && item.content.some((c: any) => c?.type === 'refusal'),
+    );
+    const completed = (status === null || status === 'completed') && errorCode === null && incompleteReason === null && !refusal;
+    return { status, errorCode, incompleteReason, refusal, completed };
+  }
+  const usageOf = (u: any) => (u && typeof u === 'object' ? { inputTokens: num(u.input_tokens), outputTokens: num(u.output_tokens) } : null);
 
   function requireNativeVideo(): void {
     if (!config.nativeVideo) {
@@ -309,8 +359,10 @@ export function createProvider(config: ProviderConfig, deps: ClientDeps = {}): I
         },
         { retries: 0 },
       );
-      const text = extractResponsesText(json);
-      if (text.length === 0) {
+      const lifecycle = lifecycleOf(json);
+      // Text from a non-completed response is never handed on, even if some exists.
+      const text = lifecycle.completed ? extractResponsesText(json) : '';
+      if (lifecycle.completed && text.length === 0) {
         throw new InferenceError('INVALID_RESPONSE', config.id, 'video response contained no output text', { requestId });
       }
       return {
@@ -318,7 +370,8 @@ export function createProvider(config: ProviderConfig, deps: ClientDeps = {}): I
         model: typeof json?.model === 'string' ? json.model : req.model,
         text,
         requestId: requestId ?? (typeof json?.id === 'string' ? json.id : null),
-        usage: usageOf(json?.usage),
+        usage: videoUsageOf(json?.usage),
+        lifecycle,
       };
     },
 
