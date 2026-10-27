@@ -11,14 +11,18 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import {
+  certifyF01Baseline,
   classifyF01Baseline,
   extractOracleResults,
+  F01_EVIDENCE_PATHS,
   F01_OBSERVATION_ATTACHMENT,
+  parsePorcelainPaths,
   scrubEnv,
   startClock,
   validateImpactMetrics,
   type ImpactMetrics,
   type F01Observation,
+  type WorktreeState,
 } from '../packages/core/src/index.ts';
 
 const repoRoot = path.resolve(import.meta.dirname, '..');
@@ -30,8 +34,22 @@ const runId = `f01-baseline-${stamp}-${randomBytes(3).toString('hex')}`;
 const runDir = path.join(repoRoot, '.proofpilot/runs', runId);
 await mkdir(runDir, { recursive: true });
 
+// Untrimmed on purpose: the first porcelain line starts with a significant status column.
+function worktreeState(): WorktreeState {
+  try {
+    const porcelain = execFileSync('git', ['status', '--porcelain', '--untracked-files=all', '--', ...F01_EVIDENCE_PATHS], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+    });
+    const paths = parsePorcelainPaths(porcelain);
+    return paths.length === 0 ? { kind: 'clean' } : { kind: 'dirty', paths };
+  } catch (err) {
+    return { kind: 'unknown', reason: String((err as Error).message).split('\n')[0]! };
+  }
+}
+
 const gitHead = git('rev-parse', 'HEAD');
-const worktreeDirty = git('status', '--porcelain', '--', 'fixtures/sample-store', 'verifier', 'packages/core').length > 0;
+const worktreeBefore = worktreeState();
 let fixtureTree: string | null = null;
 try {
   fixtureTree = git('rev-parse', 'HEAD:fixtures/sample-store');
@@ -52,6 +70,11 @@ const exitCode: number = await new Promise((resolve, reject) => {
   child.on('close', (code) => resolve(code ?? -1));
 });
 const verificationExecutionMs = verification.elapsedMs();
+// Re-check after the oracle ran: the tested bytes must also be unchanged during the run.
+const worktreeAfter = worktreeState();
+const worktree: WorktreeState =
+  worktreeBefore.kind !== 'clean' ? worktreeBefore : worktreeAfter;
+const worktreeDirty = worktree.kind !== 'clean';
 
 let results: ReturnType<typeof extractOracleResults> = [];
 try {
@@ -64,6 +87,7 @@ for (const r of results) {
   r.observation = obs ? (JSON.parse(await readFile(obs.path!, 'utf8')) as F01Observation) : null;
 }
 const classification = classifyF01Baseline(results);
+const certification = certifyF01Baseline({ classification, oracleExitCode: exitCode, worktree });
 const mobile = results.find((r) => r.title.startsWith('F01-MOBILE'));
 
 async function listFiles(dir: string): Promise<string[]> {
@@ -91,7 +115,7 @@ const metrics: ImpactMetrics = validateImpactMetrics({
   fixtureId: 'F01',
   recordedAt: new Date().toISOString(),
   workflowScope: 'baseline-reproduction-only',
-  source: { gitHead, fixtureTree, worktreeDirty },
+  source: { gitHead, fixtureTree, worktreeDirty, certified: certification.certified },
   environment: { os: `${os.type()} ${os.release()}`, arch: os.arch(), node: process.version, playwright: playwrightVersion },
   measurements: {
     bugReproductionMs: mobile && Number.isFinite(mobile.durationMs) ? mobile.durationMs : null,
@@ -101,6 +125,7 @@ const metrics: ImpactMetrics = validateImpactMetrics({
   results: { baselineFailure: classification.verdict, regression: classification.regression },
   notes: [
     'Single local run on the machine described in environment; not a benchmark.',
+    ...(certification.certified ? [] : ['NOT CERTIFIED exact-SHA evidence: ' + (certification.reasons.join('; ') || 'baseline not reproduced')]),
     'No patch or candidate stage exists in C1, so this is not a verified-fix workflow and no time-saved claim is made.',
   ],
 });
@@ -112,6 +137,9 @@ const summary = {
   gitHead,
   fixtureTree,
   worktreeDirty,
+  worktree,
+  certified: certification.certified,
+  certificationReasons: certification.reasons,
   artifacts,
 };
 await writeFile(path.join(runDir, 'baseline-summary.json'), JSON.stringify(summary, null, 2) + '\n');
@@ -120,7 +148,7 @@ await appendFile(path.join(repoRoot, '.proofpilot/metrics.jsonl'), JSON.stringif
 
 console.log('\n=== F01 baseline reproduction ===');
 console.log(`run:                 ${runId}`);
-console.log(`git HEAD:            ${gitHead}${worktreeDirty ? ' (fixture/verifier/core DIRTY: evidence not bound to this SHA)' : ''}`);
+console.log(`git HEAD:            ${gitHead}${worktreeDirty ? ` (evidence paths ${worktree.kind.toUpperCase()}: evidence not bound to this SHA)` : ''}`);
 console.log(`oracle exit code:    ${exitCode} (non-zero expected: the mobile oracle fails on baseline)`);
 for (const r of results) console.log(`oracle test:         ${r.status.toUpperCase().padEnd(7)} ${r.title} (${r.durationMs} ms)`);
 console.log(`baseline verdict:    ${classification.verdict}`);
@@ -130,5 +158,9 @@ for (const reason of classification.reasons) console.log(`reason:              $
 console.log(`metrics (observed):  reproduction=${metrics.measurements.bugReproductionMs} ms, verification=${verificationExecutionMs} ms, total=${metrics.measurements.totalWorkflowMs} ms`);
 console.log(`evidence dir:        ${path.relative(repoRoot, runDir)} (${artifacts.length} files hashed in baseline-summary.json)`);
 
-const confirmed = classification.verdict === 'REPRODUCED' && classification.regression === 'PASS' && exitCode !== 0;
-process.exitCode = confirmed ? 0 : 1;
+console.log(`certified exact-SHA: ${certification.certified ? 'YES' : 'NO'}`);
+for (const reason of certification.reasons) console.log(`certification:      ${reason}`);
+if (!certification.certified && certification.exitCode === 2) {
+  console.log('NOT CERTIFIED: diagnostic artifacts were kept, but this run is not exact-SHA evidence. Commit or revert the listed paths and re-run.');
+}
+process.exitCode = certification.exitCode;

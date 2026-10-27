@@ -140,3 +140,68 @@ export function classifyF01Baseline(results: OracleTestResult[]): F01BaselineCla
   );
   return { verdict: 'REPRODUCED', regression, interceptedBy: obs.hitTestTarget, reasons };
 }
+
+/** Paths whose uncommitted state means a result cannot be tied to a Git SHA. */
+export const F01_EVIDENCE_PATHS = [
+  'fixtures/sample-store',
+  'verifier',
+  'packages/core',
+  'scripts/f01-baseline.ts',
+] as const;
+
+export type WorktreeState =
+  | { kind: 'clean' }
+  | { kind: 'dirty'; paths: string[] }
+  /** git status could not be evaluated; treated as not certifiable. */
+  | { kind: 'unknown'; reason: string };
+
+export type BaselineCertification = {
+  /** True only for a reproduced baseline whose tested bytes are exactly the committed HEAD. */
+  certified: boolean;
+  /** 0 certified success; 1 baseline not reproduced/inconclusive; 2 reproduced but not certifiable. */
+  exitCode: 0 | 1 | 2;
+  reasons: string[];
+};
+
+/** Parse `git status --porcelain` output into the changed paths. */
+export function parsePorcelainPaths(porcelain: string): string[] {
+  return porcelain
+    .split('\n')
+    .filter((line) => line.length > 3)
+    .map((line) => line.slice(3).replace(/^.* -> /, ''));
+}
+
+/**
+ * Deterministic exit/certification decision for a baseline run. A successful
+ * classification is only certified exact-SHA evidence when the oracle failed as
+ * expected AND the evidence-relevant worktree is verifiably clean.
+ */
+export function certifyF01Baseline(input: {
+  classification: F01BaselineClassification;
+  oracleExitCode: number;
+  worktree: WorktreeState;
+}): BaselineCertification {
+  const { classification, oracleExitCode, worktree } = input;
+  const reproduced =
+    classification.verdict === 'REPRODUCED' && classification.regression === 'PASS' && oracleExitCode !== 0;
+  if (!reproduced) {
+    return { certified: false, exitCode: 1, reasons: ['baseline was not reproduced as expected'] };
+  }
+  if (worktree.kind === 'dirty') {
+    return {
+      certified: false,
+      exitCode: 2,
+      reasons: [
+        `reproduced, but uncommitted changes in evidence-relevant paths mean HEAD does not identify the tested bytes: ${worktree.paths.join(', ')}`,
+      ],
+    };
+  }
+  if (worktree.kind === 'unknown') {
+    return {
+      certified: false,
+      exitCode: 2,
+      reasons: [`reproduced, but worktree state could not be verified: ${worktree.reason}`],
+    };
+  }
+  return { certified: true, exitCode: 0, reasons: [] };
+}

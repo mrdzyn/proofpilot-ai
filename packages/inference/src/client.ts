@@ -75,7 +75,9 @@ export function createProvider(config: ProviderConfig, deps: ClientDeps = {}): I
         }
       }
 
-      const detail = scrub((await res.text().catch(() => '')).slice(0, LIMITS.maxErrorDetailChars));
+      // Redact the whole body before truncating: slicing first could cut an echoed key
+      // in half and leave a fragment that no longer matches the exact secret.
+      const detail = scrub(await res.text().catch(() => '')).slice(0, LIMITS.maxErrorDetailChars);
       const retryable = res.status === 429 || res.status >= 500;
       if (retryable && attempt < config.maxRetries) {
         await sleep(Math.min(250 * 2 ** attempt, 2_000));

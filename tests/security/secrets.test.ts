@@ -55,3 +55,23 @@ test('no local environment file is tracked by git', () => {
   const envFiles = tracked.filter((f) => /(^|\/)\.env(\.[^/]+)?$/.test(f) && !f.endsWith('.env.example'));
   assert.deepEqual(envFiles, []);
 });
+
+// A key that matches no generic token pattern, so only exact-value redaction can catch it.
+const PLAIN_KEY = 'Zq8vN3mWxT7LrB2cHd5YjKe9';
+
+test('a key echoed across the error-detail cutoff never leaks even a partial fragment', async () => {
+  const cutoff = 300;
+  const fourGrams = Array.from({ length: PLAIN_KEY.length - 3 }, (_, i) => PLAIN_KEY.slice(i, i + 4));
+  // Place the key so the 300-char cutoff falls at every position inside it.
+  for (let inside = 1; inside < PLAIN_KEY.length; inside++) {
+    const body = `${'x'.repeat(cutoff - inside)}${PLAIN_KEY}${'y'.repeat(50)}`;
+    const m = mockFetch([new Response(body, { status: 401 })]);
+    const p = createProvider(loadProviderConfig('meta', { MODEL_API_KEY: PLAIN_KEY }), { fetch: m.fetch });
+    await assert.rejects(p.listModels(), (e: InferenceError) => {
+      assert.equal(e.code, 'AUTH');
+      for (const gram of fourGrams) assert.ok(!e.message.includes(gram), `cutoff inside key at ${inside}: leaked fragment ${JSON.stringify(gram)}`);
+      assert.ok(e.message.length < 500, 'error detail stays bounded');
+      return true;
+    });
+  }
+});

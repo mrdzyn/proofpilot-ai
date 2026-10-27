@@ -73,3 +73,52 @@ test('extractOracleResults flattens nested Playwright JSON and strips ANSI', () 
   assert.equal(r!.errorMessage, 'Expected');
   assert.deepEqual(r!.attachments, [{ name: 'trace', path: '/x/trace.zip', contentType: 'application/zip' }]);
 });
+
+import { certifyF01Baseline, parsePorcelainPaths, type WorktreeState } from '../../packages/core/src/index.ts';
+
+const reproduced = () => classifyF01Baseline([mobile(), desktop()]);
+
+test('clean worktree + reproduced baseline is certified, exit 0', () => {
+  const c = certifyF01Baseline({ classification: reproduced(), oracleExitCode: 1, worktree: { kind: 'clean' } });
+  assert.deepEqual(c, { certified: true, exitCode: 0, reasons: [] });
+});
+
+test('dirty yet otherwise reproducing fixture is NOT certified and exits non-zero', () => {
+  const classification = reproduced();
+  assert.equal(classification.verdict, 'REPRODUCED'); // otherwise-successful run
+  const c = certifyF01Baseline({
+    classification,
+    oracleExitCode: 1,
+    worktree: { kind: 'dirty', paths: ['fixtures/sample-store/src/styles.css'] },
+  });
+  assert.equal(c.certified, false);
+  assert.equal(c.exitCode, 2);
+  assert.match(c.reasons.join(' '), /styles\.css/);
+});
+
+test('unverifiable worktree state fails closed', () => {
+  const c = certifyF01Baseline({ classification: reproduced(), oracleExitCode: 1, worktree: { kind: 'unknown', reason: 'git missing' } });
+  assert.equal(c.certified, false);
+  assert.equal(c.exitCode, 2);
+});
+
+test('non-reproduced baselines exit 1 regardless of worktree state', () => {
+  const notReproduced = classifyF01Baseline([mobile({ status: 'passed', errorMessage: null }), desktop()]);
+  const worktrees: WorktreeState[] = [{ kind: 'clean' }, { kind: 'dirty', paths: ['x'] }];
+  for (const worktree of worktrees) {
+    const c = certifyF01Baseline({ classification: notReproduced, oracleExitCode: 0, worktree });
+    assert.deepEqual([c.certified, c.exitCode], [false, 1]);
+  }
+  // A reproduced classification still requires the oracle to have actually exited non-zero.
+  assert.equal(certifyF01Baseline({ classification: reproduced(), oracleExitCode: 0, worktree: { kind: 'clean' } }).exitCode, 1);
+});
+
+test('parsePorcelainPaths keeps the first line intact and handles untracked and renamed paths', () => {
+  const porcelain = ' M fixtures/sample-store/src/styles.css\n?? verifier/extra.ts\nR  old.ts -> packages/core/src/new.ts\n';
+  assert.deepEqual(parsePorcelainPaths(porcelain), [
+    'fixtures/sample-store/src/styles.css',
+    'verifier/extra.ts',
+    'packages/core/src/new.ts',
+  ]);
+  assert.deepEqual(parsePorcelainPaths(''), []);
+});

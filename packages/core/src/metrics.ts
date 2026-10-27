@@ -11,7 +11,14 @@ export type ImpactMetrics = {
   fixtureId: string;
   recordedAt: string;
   workflowScope: WorkflowScope;
-  source: { gitHead: string; fixtureTree: string | null; worktreeDirty: boolean };
+  source: {
+    gitHead: string;
+    fixtureTree: string | null;
+    /** True when evidence-relevant paths were uncommitted (or could not be checked). */
+    worktreeDirty: boolean;
+    /** True only for a reproduced baseline whose tested bytes equal the committed HEAD. */
+    certified: boolean;
+  };
   environment: { os: string; arch: string; node: string; playwright: string };
   measurements: {
     /** Mobile oracle test duration: navigation → tap → failing assertion observed. */

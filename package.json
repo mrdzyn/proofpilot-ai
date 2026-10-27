@@ -15,6 +15,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:unit": "node --test \"tests/unit/**/*.test.ts\"",
     "test:security": "node --test \"tests/security/**/*.test.ts\"",
+    "test:integration": "node --test \"tests/integration/**/*.test.ts\"",
     "test": "pnpm test:unit && pnpm test:security",
     "test:e2e:f01": "playwright test -c verifier/playwright.config.ts",
     "f01:baseline": "node scripts/f01-baseline.ts",

@@ -140,13 +140,14 @@ Validate isolated business logic and edge cases. Model providers are always mock
 Validate boundaries such as database, filesystem, network API, authentication, or platform adapters.
 
 **Project commands:**  
-`pnpm inference:status -- --discover` (non-billable provider discovery; requires a configured key; manual only). Real billable inference tests require separate owner authorization.
+`pnpm test:integration` runs the real baseline runner in a throwaway git copy to prove dirty evidence fails closed (needs Chromium; not part of the default CI steps). `pnpm inference:status -- --discover` (non-billable provider discovery; requires a configured key; manual only). Real billable inference tests require separate owner authorization.
 
 ### End-to-end / acceptance tests
 Validate critical user journeys or release flows.
 
 **Project commands:**  
-`pnpm f01:baseline`: runs the trusted F01 oracle and exits 0 only when the expected baseline failure is REPRODUCED and the desktop control passes.  
+`pnpm f01:baseline`: runs the trusted F01 oracle. Exit 0 only when the expected baseline failure is REPRODUCED, the desktop control passes, **and** the evidence-relevant paths (fixture, verifier, classifier, runner) are committed/clean. Exit 2 means reproduced but not certifiable as exact-SHA evidence (dirty or unverifiable worktree; diagnostic artifacts are kept). Exit 1 means not reproduced/inconclusive.
+
 `pnpm test:e2e:f01`: the raw oracle. On the unpatched baseline it **exits non-zero by design** (1 failed, 1 passed). Never mark the mobile oracle `test.fail()` or otherwise disguise that failure.
 
 ### Security / dependency checks

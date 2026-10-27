@@ -9,7 +9,7 @@ const base = (): ImpactMetrics => ({
   fixtureId: 'F01',
   recordedAt: '2026-10-27T00:00:00.000Z',
   workflowScope: 'baseline-reproduction-only',
-  source: { gitHead: 'abc', fixtureTree: 'def', worktreeDirty: false },
+  source: { gitHead: 'abc', fixtureTree: 'def', worktreeDirty: false, certified: true },
   environment: { os: 'Darwin', arch: 'arm64', node: 'v24', playwright: '1.64.1' },
   measurements: { bugReproductionMs: 100, verificationExecutionMs: 200, totalWorkflowMs: 300 },
   results: { baselineFailure: 'REPRODUCED', regression: 'PASS' },
