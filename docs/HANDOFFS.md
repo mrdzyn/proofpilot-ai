@@ -287,4 +287,27 @@ GPT-6: re-audit the exact PR head; confirm MINOR-1 and MINOR-2 are closed; repor
 ### Next action
 GPT-6: audit the branch head against the C2A contract, regenerate evidence with `pnpm record:f01` and the commands above (needs Chromium and ffmpeg), report PASS / FIX REQUIRED / PARTIAL. Owner: decide push/Draft PR, the screen-map direction, and whether to authorize one capped live smoke.
 
+## Handoff: PP-META-I1-C2A-R1
+
+- **Task / phase:** `tasks/PP-META-I1-C2A.md` (remediation of GPT-6 audit comment 6438633690 on PR #2)
+- **From:** Implementation agent (Claude Code, Claude Sonnet 5.5)
+- **To:** GPT-6 independent re-audit (read-only), then project owner
+- **Branch / PR:** `phase/pp-meta-i1-c2a`, Draft PR #2. Audited head `ff5157240c34caa95d8bb306c1898039479e6aae`; code fix `01da814da136f9ea982624414ec5baf9569f24eb` (audit the branch head, which adds only this docs commit)
+- **State:** READY FOR RE-AUDIT
+
+### Completed
+- **MAJOR-1:** `packages/inference/src/analyze-command.ts` reserves the run directory atomically (non-recursive `mkdir`) before any provider call; transport is wrapped to count calls. Duplicates and simultaneous same-id launches (2 and 8 concurrent tested) make zero network calls and exactly one run proceeds. Unused reservations (pre-flight refusals) are released; a reservation that reached the network is kept even if an unexpected error follows. Other run ids are never blocked. `analysis.json` is still `wx` (never overwritten).
+- **MINOR-2:** `certifyRecording` (`packages/core/src/worktree.ts`) decides certification once after recording; `scripts/f01-record.ts` writes `recording.json` only afterwards. Real-browser regression (`tests/integration/f01-record-certification.test.ts`) edits a fixture file mid-recording: exit 2, every clip `certifiedExactSha:false`, before=clean/after=dirty; control run is certified/exit 0.
+- Trusted oracle and protected paths (`verifier/`, `fixtures/`, `config/`, `.github/`) unchanged. No live Meta call, upload or patch execution.
+
+### Validation (local, at `01da814`)
+lint/typecheck/`git diff --check` clean; unit 97/97; security 27/27; integration 11/11; `pnpm f01:baseline` exit 0 REPRODUCED certified; `pnpm test:e2e:f01` exit 1 (expected); new certified recording set (see STATUS). Mutations: no-reservation killed (5 tests), always-release killed (new test), certify-ignores-after killed (unit + integration), certify-ignores-failure killed.
+
+### Continuation notes
+- A crashed live run leaves its run directory, so the id is burned by design (fail-closed against double billing); use a new `--run-id`.
+- Unchanged open items: real Meta model NOT TESTED (T04), `text.format`/response-shape assumptions, Docker NOT VERIFIED, screen map not approved, no C3.
+
+### Next action
+GPT-6: re-audit the exact head against both findings; then owner decisions as in STATUS.
+
 <!-- HANDOFF_ENTRIES_END -->
