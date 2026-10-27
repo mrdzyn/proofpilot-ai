@@ -2,7 +2,7 @@
 
 - **Status:** Review — implementation complete; awaiting independent audit
 - **Owner/orchestrator:** Project owner (mrdzyn)
-- **Implementation agent:** Claude Code (Claude Opus 5.5)
+- **Implementation agent:** Claude Code. C1 implementation: Claude Opus 5.5; audit remediation (PR #1): Claude Sonnet 5.5 (see `HACKATHON_CONTRIBUTIONS.md` § AI assistance)
 - **Target branch:** `main`
 - **Working branch:** `phase/pp-meta-i0-c1`
 - **Source of truth:** ProofPilot AI Hackathon Blueprint v1.1 (pre-event planning package, held locally by the owner; not committed). Relevant sections: `01_PRODUCT_SPEC` (F01), `02_ARCHITECTURE` (trust model), `03_IMPLEMENTATION_MILESTONES` (D1), `04_ACCEPTANCE_AND_INDEPENDENT_AUDIT` (T07, T08, T25, T26), `06_AGENT_IMPLEMENTATION_HANDOFF` (I0).

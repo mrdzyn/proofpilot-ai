@@ -44,7 +44,14 @@ All fixture content (product name, copy, colours, the CSS gradient "image") is s
 
 ## AI assistance
 
-Implementation was performed by an AI coding agent (Claude Code, Claude Opus 5.5) under the owner's direction and task contracts. Independent review is performed by a separate agent/session. Meta models (Muse Spark / Muse Wonder) are the product's runtime models, not development tools.
+Implementation was performed by AI coding agents (Claude Code) under the owner's direction and task contracts. Independent review is performed by a separate agent/session.
+
+| Work | Model recorded | Basis |
+|---|---|---|
+| C1 implementation and publication (original local commits and public commits `1e3f590`, `88243d1`, `8826204`) | Claude Opus 5.5 | The Claude Code session reported `claude-opus-5-5` as its model and supplied the `Co-Authored-By: Claude Opus 5.5` trailer carried by those commits. |
+| Audit remediation of PR #1 (MINOR-1/MINOR-2) | Claude Sonnet 5.5 | The remediation session reported `claude-sonnet-5-5`; its commits carry the `Claude Sonnet 5.5` trailer. |
+
+The owner indicated Claude Sonnet was intended for this project. No execution evidence supports Sonnet for the earlier C1 commits, so their attribution was not changed. If the owner has evidence that those sessions used a different model, the owner should say so and this table will be corrected in a new commit; history is not rewritten. Meta models (Muse Spark / Muse Wonder) are the product's runtime models, not development tools.
 
 ## Publication and sanitized Git root
 

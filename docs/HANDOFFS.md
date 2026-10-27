@@ -217,4 +217,36 @@ Auditor: in a clean clone at `f78dad5`, run the Validation commands, inspect `ve
 ### Next action
 Auditor: clean clone of the Draft PR head; run the validation commands; review trust boundary, classifier abstentions, adapter safeguards, and provenance; report PASS / FIX REQUIRED / PARTIAL.
 
+## Handoff: PP-META-I0-C1-R1
+
+- **Task / phase:** `tasks/PP-META-I0-C1.md` (remediation of GPT-6 audit, PR #1 comment `6435519902`)
+- **From:** Implementation agent (Claude Code, Claude Sonnet 5.5)
+- **To:** GPT-6 independent re-audit (read-only), then project owner
+- **Branch:** `phase/pp-meta-i0-c1`
+- **Implementation head:** `7828583872f2ea921ffe5a78e7e70e1ac17ef000` (the PR head is this plus a docs-only commit; audit the PR head)
+- **PR:** #1 (Draft)
+- **State:** READY FOR RE-AUDIT
+
+### Completed
+- **MINOR-1:** `packages/inference/src/client.ts` redacts the provider error body before truncating to 300 chars. New test places the cutoff at every position inside a non-pattern key and asserts no 4-char fragment leaks. It failed on the old code (leaked `Zq8v`) and passes now.
+- **MINOR-2:** `pnpm f01:baseline` exits 0 only when REPRODUCED + desktop PASS + evidence paths (`fixtures/sample-store`, `verifier`, `packages/core`, `scripts/f01-baseline.ts`, untracked files included) are clean. Dirty or unverifiable → exit 2, artifacts and diagnostics kept, `certified: false` in `baseline-summary.json` and `metrics.json` (`source.certified`). Decision is the pure `certifyF01Baseline()` in `packages/core`. The worktree is checked before and after the oracle run.
+- Added `pnpm test:integration` (not wired into CI): runs the real runner in a throwaway git copy. Clean → exit 0 certified; modified tracked fixture file → exit 2, still REPRODUCED/PASS, not certified; untracked file under `verifier/` → exit 2.
+- Attribution: recorded per execution evidence in `HACKATHON_CONTRIBUTIONS.md` (C1 = Opus 5.5 as reported by that session; remediation = Sonnet 5.5). Earlier attribution was not rewritten.
+- Unchanged: oracle spec and its deliberate mobile failure, `.github/workflows/*` (no diff vs `8826204`), allowlist, no-redirect, billable-off default, typed errors.
+
+### Validation (local, macOS arm64, Node v24.21.0, pnpm 12.6.0, Playwright 1.64.1, at `7828583`, clean tree)
+- frozen install, lint, typecheck, profile validator, `git diff --check`: exit 0. Unit 32/32, security 13/13, integration 3/3.
+- `pnpm f01:baseline`: exit 0, REPRODUCED, desktop PASS, `certified exact-SHA: YES` (run `f01-baseline-20261027T065007Z-f0bb5b`).
+- `pnpm test:e2e:f01`: exit 1 (expected; defective baseline).
+- Mutation: dirty guard disabled → unit test and 2 integration tests fail; restored.
+- In-session observation: running the new runner on the uncommitted remediation tree returned exit 2 (NOT CERTIFIED) with the three changed paths listed.
+- Hosted CI: see PR checks for the pushed head. No live Meta/Baseten call made; no generated patch executed; container isolation still NOT VERIFIED.
+
+### Continuation notes
+- Follow-ups from the audit were deliberately not done (see STATUS § Audit follow-ups).
+- `pnpm test:integration` needs Chromium and is intentionally outside the default CI steps to preserve CI semantics.
+
+### Next action
+GPT-6: re-audit the exact PR head; confirm MINOR-1 and MINOR-2 are closed; report PASS / FIX REQUIRED / PARTIAL.
+
 <!-- HANDOFF_ENTRIES_END -->
