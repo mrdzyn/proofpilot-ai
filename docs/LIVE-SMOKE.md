@@ -1,10 +1,8 @@
 # Live smoke procedure (C2B Workstream B): single use, owner-executed
 
-> **Status: NOT AUTHORIZED.** The single authorization for `c2b-live-smoke-001` is **spent** (result: T04 PARTIAL, see below). This is a prepared procedure for a *new* attempt, which needs a **fresh, explicit owner authorization** naming the new run id, the new settings and the higher worst-case cost. A failed or spent attempt is never permission for another.
+> **Status: NO LIVE RUN AUTHORIZED. Both smoke runs are spent.** `c2b-live-smoke-001` (T04 PARTIAL) and `c2b-live-smoke-002` (completed, `VIDEO_ANALYZED`) each used their single owner authorization. A spent id, a failed attempt, or a successful one is **never** permission for another call. Their local evidence under `.proofpilot/analysis/` stays unchanged and neither id may be reused. Any future live call needs a new task, a new run id and a fresh explicit owner authorization naming transmission and possible charges.
 
-> **Spent id:** `c2b-live-smoke-001` and its local evidence under `.proofpilot/analysis/c2b-live-smoke-001/` stay unchanged and must never be reused. **Proposed next id: `c2b-live-smoke-002`.**
-
-This is a prepared procedure. Reading or committing it is not consent to transmit video or spend credits. Workstream B needs a fresh, explicit owner authorization naming both (1) transmission of the synthetic recording to Meta and (2) a possible billable `muse-spark-1.3` request.
+The rest of this document is the procedure that was followed, kept as the template for any future authorized run. Reading or committing it is not consent to transmit video or spend credits. Workstream B needs a fresh, explicit owner authorization naming both (1) transmission of the synthetic recording to Meta and (2) a possible billable `muse-spark-1.3` request.
 
 ## What one run does (and nothing else)
 
@@ -26,7 +24,7 @@ No automatic retry of any step. If anything fails, stop and ask for a new approv
 ## Pre-flight checklist (all must be true)
 
 - [ ] Owner authorization recorded for BOTH transmission and possible charges
-- [ ] Credit balance and current rates checked at https://dev.meta.ai/docs/pricing-rate-limits (last read 2026-10-27, undated page: $1.25 / 1M input, $4.25 / 1M output, $0.15 / 1M cached). A token cap is not a currency cap; there is no enforceable spend limit unless the owner's account has one. Balance was NOT VERIFIED for the first run. Worst-case arithmetic (not a measured cost): the first run used 2,773 input tokens; the new cap allows up to 3,072 output tokens (about $0.013 at the output rate) plus input of the same order (about $0.004), i.e. roughly $0.02 per call, about double the first run's cap. Actual cost must come from the account
+- [ ] Credit balance and current rates checked at https://dev.meta.ai/docs/pricing-rate-limits (last read 2026-10-27, undated page: $1.25 / 1M input, $4.25 / 1M output, $0.15 / 1M cached). A token cap is not a currency cap; there is no enforceable spend limit unless the owner's account has one. Balance was NOT VERIFIED for the first run. Illustrative arithmetic only (not a measured cost, not a ceiling, not a currency cap): run 2 used 2,773 input and 1,129 output tokens, about $0.008 at the published rates above; a full 3,072-token output would add about $0.013. Input size depends on the provider's video tokenization. Actual cost must come from the account, whose balance has never been verified
 - [ ] Reviewed `main`/branch head is the audited one; `git status` clean
 - [ ] Clip SHA-256 re-checked: `shasum -a 256 <clip>` equals the value above
 - [ ] `MODEL_API_KEY` is in the owner's shell or an untracked `.env.local` (never committed, never pasted into chat or prompts)
@@ -34,7 +32,7 @@ No automatic retry of any step. If anything fails, stop and ask for a new approv
 - [ ] Run id has never been used: `.proofpilot/analysis/<run-id>` does not exist. A spent or crashed id is refused by design; pick a new one, but only with new approval
 - [ ] Opt-ins are set on the command line for this one invocation only. Do not export them or put them in a file
 
-## Exact command (do not run until authorized)
+## Command used for run 002 (historical template: do NOT run; run id `c2b-live-smoke-002` is spent, pick a new one only with fresh authorization)
 
 ```sh
 cd /Users/macjohn/Documents/Hackathons/proofpilot-ai-public
@@ -56,17 +54,22 @@ No `--description` is passed, so the model sees only the video and the fixed saf
 - The `Symptom` is a `model-hypothesis`. It never becomes a verdict.
 - Then stop. No second generation, no patch, no C3.
 
-## First live result (`c2b-live-smoke-001`, 2026-10-27): T04 PARTIAL
+## Live results
 
-Accepted by Meta: Files upload with `expires_after`, the Responses request (`input_file`, `text.format`), the H.264 clip, the delete. Not obtained: a completed answer. `status=incomplete`, `incomplete_details.reason=max_output_tokens`; usage 2773 input / 1500 output (1113 reasoning) / 4273 total; `video_frames_processed` not reported; latency about 20.5 s; file reported deleted; no `Symptom` accepted; actual charge unknown. Request ids and details are in the local gitignored result and the handoff.
+**Run 001 (2026-10-27), T04 PARTIAL.** Meta accepted the Files upload with `expires_after`, the Responses request (`input_file`, `text.format`), the H.264 clip and the delete. `status=incomplete`, `incomplete_details.reason=max_output_tokens`; usage 2773 input / 1500 output (1113 reasoning) / 4273 total; about 20.5 s; file reported deleted; no `Symptom` accepted.
 
-## Meta API uncertainties this run is meant to settle
+**Run 002 (2026-10-27), completed.** Same clip and SHA-256; `reasoning: {effort: 'low'}`, `max_output_tokens` 3072. Provider `status=completed` (no `error`, `incomplete_details` or refusal); model `muse-spark-1.3`; usage 2773 input / 1129 output (665 reasoning) / 3902 total; frames not reported; about 19.7 s total; file reported deleted; local `VIDEO_ANALYZED` with a schema-valid `Symptom` (`model-hypothesis`, `sufficientContext: true`). The model observed the cart staying at 0 after two taps. That is consistent with F01 but is not a root cause and not a verification; the trusted oracle remains the only source of verdicts.
 
-1. Does a *completed* answer arrive in the `text.format` json_schema shape and pass local `Symptom` validation? (The request format itself was accepted in the first run.)
+Both results are **agent-reported**: the independent reviewer could not access the gitignored artifacts or the Meta account. The actual account charge is unverified. Request ids are in `docs/STATUS.md`.
+
+## Meta API uncertainties (status after run 002)
+
+1. Does a *completed* answer arrive in the `text.format` json_schema shape and pass local `Symptom` validation? **Settled in run 2: yes (once).**
 2. Is the answer in `output[].content[].output_text` (documented) and does `status` come back `completed`?
 3. Are usage fields `input_tokens`, `output_tokens`, `total_tokens`, `video_frames_processed` populated as documented?
 4. Does the Files API accept `expires_after` as sent, and does DELETE return success?
 5. (Settled in run 1: the file was usable immediately and the clip was processed.)
-6. Does `reasoning: {effort: 'low'}` plus 3072 tokens leave room for the full structured answer?
+6. Does `reasoning: {effort: 'low'}` plus 3072 tokens leave room for the full structured answer? **Yes in run 2 (1129 of 3072 used). One run does not show reliability or which change mattered.**
+7. Still open: provider-confirmed billing, `video_frames_processed` (not reported), and behaviour across other clips.
 
 Any code fix this run reveals needs its own exact-head review before another attempt.
