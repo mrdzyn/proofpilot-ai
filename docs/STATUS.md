@@ -4,52 +4,56 @@
 
 ## Project
 
-- **Name:** ProofPilot AI (Meta Global AI Developer Hackathon, Push the Frontier)
-- **Current phase:** PP-META-I0-C1: Day 1 foundation (Oct 27 ET)
-- **Status:** Review. GPT-6 audit of `8826204` returned FIX REQUIRED (2 MINOR); both remediated; awaiting independent re-audit of the PR head.
-- **Primary branch:** `main`
-- **Working branch:** `phase/pp-meta-i0-c1`
-- **Implementation head (public):** `7828583872f2ea921ffe5a78e7e70e1ac17ef000` (audit remediation of GPT-6 findings MINOR-1/MINOR-2 on top of the audited `8826204`). Original code commit `88243d1` is code-equivalent to private local `f78dad5`; see `HACKATHON_CONTRIBUTIONS.md` for the sanitized-root mapping.
-- **PR:** Draft PR to `main` (owner-authorized publication for review only; no merge/deploy authorized)
-- **Active task:** `tasks/PP-META-I0-C1.md`
-- **Active handoff:** PP-META-I0-C1-R1
+- **Name:** ProofPilot AI — Meta Global AI Developer Hackathon (Push the Frontier)
+- **Current phase:** PP-META-I1-C2A — genuine F01 video + video intake/consent + mocked Muse Spark video integration
+- **Status:** ACTIVE — C2A task contract created; implementation/evidence NOT YET DONE
+- **Primary branch:** `main`, C1 squash-merge `c55795eab20466d917847c964ace377b57d4edc6` (PR #1 merged)
+- **Working branch:** `phase/pp-meta-i1-c2a` (based directly on merged C1)
+- **Active task:** `tasks/PP-META-I1-C2A.md`
+- **Active handoff:** None — implementation assignment active; append a new handoff only at completion/review
+- **Owner authority:** C2 start authorized 2026-10-27. **No authorization for billable inference, external video transmission, merge, deploy or AI-generated patch execution.**
 
-## Implemented (C1)
+## C1 — complete
 
-- Greenfield conversion from template `1d94a35`: profile `project` / design / web; master-only and unselected packs pruned.
-- F01 defective sample store, trusted Playwright oracle in `verifier/`, deterministic baseline classifier, deny-by-default patch policy, observed-only impact metrics.
-- Meta Model API adapter + Baseten configuration contract (`packages/inference`).
+- F01 synthetic broken sample store; 390×844 genuine coordinate click lands on `promo-overlay`, cart-count remains 0; desktop 1280×800 PASS.
+- Trusted Playwright oracle, expected-failure baseline classifier, exact-SHA fail-closed evidence certification, fixture patch-scope deny policy, credential-scrubbing, observed-only metrics.
+- Meta/Baseten typed provider adapters, model listing; actual model inference not yet tested.
+- Independent GPT-6 re-audit: **PASS** at PR #1 head `5bd12de1d2240a958bfd85538003d77e8b1c6be5`.
+- GitHub CI run `40463546814`: Project baseline and Stack validation PASS (unit 32/32, security 13/13, F01 reproduced). Local integration 3/3 reported by implementation agent; not separately run in CI.
+- `main` has active Protect Main ruleset with both required checks; PR #1 owner-authorized and squash-merged.
 
-## Verification state
+## C2A — active contract, not yet implemented
 
-| Item | State |
+Source: `tasks/PP-META-I1-C2A.md`.
+
+1. Record a **real playable F01 mobile defect video** at 390×844, optionally desktop control, keep evidence/hashes gitignored.
+2. Product intake validates true media format, at most **25 MB / 30 seconds**, requires explicit per-run consent to Meta processing; reject before any network call if invalid.
+3. Meta Muse Spark 1.3 **native video**: supported path is Files API (`purpose=user_data`, MP4 upload, expiring file), then Responses API (`input_file.file_id`), local schema-validated `Symptom`, best-effort file deletion. **Mock tests only in C2A.**
+4. Prepare design-first screen-flow/mockup proposal; **no product UI shell before owner visual approval**.
+5. Preserve all C1 oracle, security, CI and evidence boundaries. Record truthful progress and independent review at the next C2A Draft PR.
+
+## External capability facts
+
+- Official Meta docs (verified 2026-10-27): https://dev.meta.ai/docs/video-understanding ; https://dev.meta.ai/docs/file-handling ; https://dev.meta.ai/docs/structured-output
+- Meta supports MP4 video via `POST /v1/files` → `POST /v1/responses`. Playwright WebM requires verified conversion to MP4 before Meta upload.
+- Meta uploaded files **do not expire automatically**; prefer explicit `expires_after` and deletion after analysis.
+- Muse Spark 1.3's audio understanding can be degraded; F01 demo is visually interpretable, with no voice requirement.
+- Meta model discovery (authenticated `GET /models`): prior PASS for `muse-spark-1.3`, `muse-wonder-1.0`. Genuine generation NOT TESTED.
+- Baseten key not configured and no inference tested.
+
+## Gates / blockers
+
+| Gate | State |
 |---|---|
-| F01 baseline at 390×844 (tap intercepted by `promo-overlay`, cart-count 0≠1) | PASS (expected failure observed) |
-| F01 desktop control at 1280×800 | PASS |
-| Unit (32) / security (13) / integration (3) / lint / typecheck / profile validator / frozen install | PASS (local, at `7828583`) |
-| `pnpm f01:baseline` exit codes | 0 certified; 1 not reproduced; 2 reproduced but uncommitted/unverifiable evidence paths (not certified) |
-| Meta authenticated model discovery via adapter (non-billable `GET /models`) | PASS: `muse-spark-1.3`, `muse-wonder-1.0` listed |
-| Meta real inference | NOT TESTED (billable; not authorized) |
-| Baseten discovery / inference | NOT TESTED (no `BASETEN_API_KEY`) |
-| Docker / ARM64 container smoke | NOT VERIFIED — agent environment lacks Docker access. The owner reports Docker Desktop installed and running on the host. Mandatory security gate before executing AI-generated code or candidate patches. |
-| Hosted GitHub Actions | See the Draft PR checks; local equivalent recorded in handoff |
-| Independent audit | PENDING |
+| C1 exact-head audit | PASS |
+| C1 required CI, ruleset, merge | PASS |
+| C2A real recording | NOT RUN |
+| C2A intake/media/consent and mocks | NOT IMPLEMENTED |
+| C2A product UI design | NOT APPROVED; design brief pending |
+| Real Muse Spark inference/video transmission | NOT AUTHORIZED; separate owner approval required |
+| Docker/ARM64 isolation | NOT VERIFIED on host; blocks all AI-generated patch execution |
+| Main branch changes / release | Not authorized |
 
-## Next actions
+## Next action
 
-1. GPT-6 re-audit of the Draft PR #1 head using handoff `PP-META-I0-C1-R1`.
-2. Owner decisions: authorize a small capped billable smoke for `muse-spark-1.3`/`muse-wonder-1.0`; configure `BASETEN_API_KEY` if Baseten is wanted; independently confirm host Docker availability for container isolation.
-3. After approval: C2 (Oct 28): video intake/consent, real Muse Spark video analysis, schema-validated `Symptom`. ProofPilot product UI requires the design-first gate first.
-
-## Audit follow-ups (not C1 blockers; deliberately not done in remediation)
-
-- Malformed successful `/responses` payload with non-array `output` can throw a raw TypeError instead of typed `INVALID_RESPONSE`.
-- Playwright traces/screenshots are not a playable bug video; a real recorded clip is needed before the C2 Muse Spark video test.
-- Repository rulesets are not configured (`main` unprotected); configure before any merge.
-- Container isolation must be verified before executing any model-generated patch.
-
-## Known limitations
-
-- No container sandbox yet. The oracle runs on the host with a credential-scrubbed environment.
-- `pnpm lint` is a project policy lint, not ESLint. The secret check is pattern-based plus the CI `.env` guard.
-- Impact metrics cover the baseline-reproduction workflow only. No patch/verify stage exists, and no time-saving claim is made.
+Implementation agent: read `AGENTS.md`, this STATUS, project profile, `tasks/PP-META-I1-C2A.md`, then only relevant C1 code/tests; work on this branch, produce real evidence plus mocked C2A contract tests; stop for independent audit, do not claim actual Meta model use.
