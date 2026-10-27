@@ -67,6 +67,13 @@ export type VideoResponse = {
   lifecycle: ResponseLifecycle;
 };
 
+/**
+ * Native video analysis asks Muse Spark for low reasoning effort: reasoning tokens count against
+ * `max_output_tokens`, and the first live run (c2b-live-smoke-001) spent 1113 of 1500 on reasoning
+ * and stopped `incomplete`. Fixed on purpose; `none` is rejected by Meta (HTTP 400).
+ */
+export const VIDEO_REASONING_EFFORT = 'low' as const;
+
 export const FILE_EXPIRY_SECONDS = { min: 3_600, max: 2_592_000, default: 3_600 } as const;
 const FILE_ID = /^file-[A-Za-z0-9_-]{1,64}$/;
 const UPLOAD_FILENAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,95}\.mp4$/;
@@ -355,6 +362,7 @@ export function createProvider(config: ProviderConfig, deps: ClientDeps = {}): I
           ],
           // Responses structured output is `text.format` (not Chat Completions' `response_format`).
           text: { format: { type: 'json_schema', name: req.schemaName, schema: req.schema, strict: true } },
+          reasoning: { effort: VIDEO_REASONING_EFFORT },
           max_output_tokens: req.maxOutputTokens,
         },
         { retries: 0 },

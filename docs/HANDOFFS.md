@@ -338,4 +338,29 @@ lint/typecheck/`git diff --check` clean; unit 112/112; security 27/27; integrati
 ### Next action
 GPT-6: review the exact head. Owner: authorize publication; separately decide on Workstream B using `docs/LIVE-SMOKE.md`.
 
+## Handoff: PP-META-I1-C2B-R1-A1
+
+- **Task / phase:** `tasks/PP-META-I1-C2B-R1.md`
+- **From:** Implementation agent (Claude Code, Claude Sonnet 5.5)
+- **To:** GPT-6 independent audit, then project owner
+- **Branch:** `phase/pp-meta-i1-c2b-r1` from `main` `0b49d94914576d3c8c605d0a1f50d08d77c4bb8b`; Draft PR (see PR). Audit the branch head.
+- **State:** READY FOR REVIEW
+
+### Completed
+- First real smoke `c2b-live-smoke-001` recorded as **T04 PARTIAL** in STATUS and `docs/LIVE-SMOKE.md` (accepted transport; `incomplete` / `max_output_tokens`; 2773/1500/4273 tokens, 1113 reasoning; file reported deleted; cost unknown; no Symptom). Local evidence preserved unchanged. Request ids: upload `df486a8b-18e5-47cf-bc70-e028b238b5f8`, response `536fb081-2d11-4010-aa3a-fb510c3626bc` (agent-reported).
+- `client.ts`: native video request adds `reasoning: {effort: 'low'}` (constant `VIDEO_REASONING_EFFORT`); the text path is untouched. `video-analysis.ts`: default cap 3072; cap validated in pre-flight so an invalid value can never be found after the upload.
+- Tests: envelope asserts 3072 + low and no tools/web/stream/previous_response_id; text path has no `reasoning`; 4096/4097/0 cap boundaries (4097 and 0 refused with zero calls); still-incomplete at the larger cap fails with delete and no second generation; existing completed/failed/refusal/duplicate-run/default-deny suites pass.
+- `docs/LIVE-SMOKE.md`: spent-id warning, proposed `c2b-live-smoke-002`, new settings, revised cost arithmetic, mandatory fresh owner authorization.
+- Unchanged: `verifier/`, `fixtures/`, `config/`, `.github/`, consent, opt-ins, run-id reservation, retry policy, Symptom schema.
+
+### Validation (local, mocked only, no network)
+lint/typecheck/`git diff --check` clean; unit 115/115; security 27/27; integration 11/11; `pnpm f01:baseline` exit 0 REPRODUCED certified; `pnpm test:e2e:f01` exit 1 (expected). Mutants killed 5/5 (no reasoning, effort `none`, cap 1500, no cap pre-check, reasoning on the text path).
+
+### Open items
+- Whether low reasoning plus 3072 tokens yields a completed, schema-valid answer is unknown until a new, separately authorized live call.
+- Docker NOT VERIFIED; no patch execution; screen map not approved; no C3.
+
+### Next action
+GPT-6: audit the exact head. Owner: after merge, decide on a second live attempt.
+
 <!-- HANDOFF_ENTRIES_END -->

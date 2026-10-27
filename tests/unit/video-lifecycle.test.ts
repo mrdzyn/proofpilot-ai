@@ -105,7 +105,7 @@ test('usage is captured in full when the provider reports it', async () => {
   assert.equal(r.result.provenance.respondedModel, 'muse-spark-1.3');
 });
 
-test('live-smoke request envelope: one generation, 1500 output tokens, 3600 s expiry, no tools/search, no retry', async () => {
+test('live-smoke request envelope: one generation, 3072 output tokens, low reasoning, 3600 s expiry, no tools/search, no retry', async () => {
   const r = await run([uploadOk(), responsesOk(goodText()), deleteOk()]);
   const [up, gen, del] = r.calls;
   assert.deepEqual(r.calls.map((c) => `${c.init.method} ${new URL(c.url).pathname}`), ['POST /v1/files', 'POST /v1/responses', 'DELETE /v1/files/file-842549258569145']);
@@ -113,8 +113,37 @@ test('live-smoke request envelope: one generation, 1500 output tokens, 3600 s ex
   assert.equal(form.get('expires_after[seconds]'), '3600');
   assert.equal(form.get('expires_after[anchor]'), 'created_at');
   const body = JSON.parse(String(gen!.init.body));
-  assert.equal(body.max_output_tokens, 1500);
+  assert.equal(body.max_output_tokens, 3072);
+  assert.deepEqual(body.reasoning, { effort: 'low' });
+  assert.ok(body.max_output_tokens <= 4096, 'stays within the shared validation ceiling');
   assert.equal(body.model, 'muse-spark-1.3');
   for (const k of ['tools', 'tool_choice', 'web_search', 'previous_response_id', 'background', 'stream', 'store']) assert.ok(!(k in body), `request must not set ${k}`);
   assert.ok(del);
+});
+
+test('R1: the reasoning setting is sent only on native video Responses, never on the text path', async () => {
+  const { provider, calls } = metaProvider([json({ id: 'r', model: 'muse-wonder-1.0', output: [{ type: 'message', content: [{ type: 'output_text', text: 'hi' }] }] })]);
+  await provider.generateText({ model: 'muse-wonder-1.0', prompt: 'hello', maxOutputTokens: 16 });
+  const body = JSON.parse(String(calls[0]!.init.body));
+  assert.ok(!('reasoning' in body), 'text generation is unchanged');
+  assert.equal(body.max_output_tokens, 16);
+});
+
+test('R1: the shared 4096-token ceiling is unchanged and applies to video requests', async () => {
+  const { video } = await makeValidatedVideo();
+  for (const [tokens, ok] of [[4096, true], [4097, false], [0, false]] as const) {
+    const { provider, calls } = metaProvider([uploadOk(), responsesOk(goodText()), deleteOk()]);
+    const p = analyzeRecording({ provider, video, consent: createVideoConsent({ runId: 'run-1', videoSha256: video.sha256 }), runId: 'run-1', maxOutputTokens: tokens, clock: fakeClock() });
+    if (ok) {
+      assert.equal((await p).status, 'VIDEO_ANALYZED');
+    } else {
+      await assert.rejects(p, (e: any) => e.code === 'INVALID_INPUT');
+      assert.equal(calls.length, 0, 'an invalid cap is refused before any upload');
+    }
+  }
+});
+
+test('R1: still incomplete at the larger cap is a failure, with the file deleted and no second generation', async () => {
+  const r = await run([uploadOk(), withStatus({ status: 'incomplete', incomplete_details: { reason: 'max_output_tokens' }, usage: { input_tokens: 2773, output_tokens: 3072, total_tokens: 5845, output_tokens_details: { reasoning_tokens: 900 } } }), deleteOk()]);
+  assertFailedButCleaned(r, 'max_output_tokens');
 });

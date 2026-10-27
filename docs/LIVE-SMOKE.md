@@ -1,13 +1,17 @@
 # Live smoke procedure (C2B Workstream B): single use, owner-executed
 
-> **Status: NOT AUTHORIZED.** This is a prepared procedure. Reading or committing it is not consent to transmit video or spend credits. Workstream B needs a fresh, explicit owner authorization naming both (1) transmission of the synthetic recording to Meta and (2) a possible billable `muse-spark-1.3` request.
+> **Status: NOT AUTHORIZED.** The single authorization for `c2b-live-smoke-001` is **spent** (result: T04 PARTIAL, see below). This is a prepared procedure for a *new* attempt, which needs a **fresh, explicit owner authorization** naming the new run id, the new settings and the higher worst-case cost. A failed or spent attempt is never permission for another.
+
+> **Spent id:** `c2b-live-smoke-001` and its local evidence under `.proofpilot/analysis/c2b-live-smoke-001/` stay unchanged and must never be reused. **Proposed next id: `c2b-live-smoke-002`.**
+
+This is a prepared procedure. Reading or committing it is not consent to transmit video or spend credits. Workstream B needs a fresh, explicit owner authorization naming both (1) transmission of the synthetic recording to Meta and (2) a possible billable `muse-spark-1.3` request.
 
 ## What one run does (and nothing else)
 
 | Step | Request | Notes |
 |---|---|---|
 | 1 | `POST /v1/files` | the owned, synthetic mobile MP4; `purpose=user_data`, `expires_after[anchor]=created_at`, `expires_after[seconds]=3600` |
-| 2 | `POST /v1/responses` | model `muse-spark-1.3` exactly; `input_file.file_id`; `text.format` json_schema strict; `max_output_tokens` 1500; no tools, no web/search, no `previous_response_id`, no streaming |
+| 2 | `POST /v1/responses` | model `muse-spark-1.3` exactly; `input_file.file_id`; `text.format` json_schema strict; `max_output_tokens` 3072 (reasoning plus visible output); `reasoning: {effort: 'low'}`; no tools, no web/search, no `previous_response_id`, no streaming |
 | 3 | `DELETE /v1/files/{id}` | in `finally`, whatever happened in step 2 |
 
 No automatic retry of any step. If anything fails, stop and ask for a new approval; do not rerun.
@@ -22,7 +26,7 @@ No automatic retry of any step. If anything fails, stop and ask for a new approv
 ## Pre-flight checklist (all must be true)
 
 - [ ] Owner authorization recorded for BOTH transmission and possible charges
-- [ ] Credit balance and current rates checked at https://dev.meta.ai/docs/pricing-rate-limits. A token cap is not a currency cap; there is no enforceable spend limit unless the owner's account has one
+- [ ] Credit balance and current rates checked at https://dev.meta.ai/docs/pricing-rate-limits (last read 2026-10-27, undated page: $1.25 / 1M input, $4.25 / 1M output, $0.15 / 1M cached). A token cap is not a currency cap; there is no enforceable spend limit unless the owner's account has one. Balance was NOT VERIFIED for the first run. Worst-case arithmetic (not a measured cost): the first run used 2,773 input tokens; the new cap allows up to 3,072 output tokens (about $0.013 at the output rate) plus input of the same order (about $0.004), i.e. roughly $0.02 per call, about double the first run's cap. Actual cost must come from the account
 - [ ] Reviewed `main`/branch head is the audited one; `git status` clean
 - [ ] Clip SHA-256 re-checked: `shasum -a 256 <clip>` equals the value above
 - [ ] `MODEL_API_KEY` is in the owner's shell or an untracked `.env.local` (never committed, never pasted into chat or prompts)
@@ -37,7 +41,7 @@ cd /Users/macjohn/Documents/Hackathons/proofpilot-ai-public
 PROOFPILOT_ALLOW_BILLABLE_CALLS=1 PROOFPILOT_ALLOW_VIDEO_UPLOAD=1 \
 pnpm analyze:video -- \
   --video .proofpilot/recordings/f01-20261027T122211Z-df375a/mobile-defect/f01-mobile-defect.mp4 \
-  --run-id c2b-live-smoke-001 \
+  --run-id c2b-live-smoke-002 \
   --live --consent-meta-video-analysis
 ```
 
@@ -45,20 +49,24 @@ No `--description` is passed, so the model sees only the video and the fixed saf
 
 ## After the run
 
-- Result file: `.proofpilot/analysis/c2b-live-smoke-001/analysis.json` (gitignored; `evidenceKind: "live"`). Do not commit it; commit only a sanitized summary.
+- Result file: `.proofpilot/analysis/c2b-live-smoke-002/analysis.json` (gitignored; `evidenceKind: "live"`). Do not commit it; commit only a sanitized summary.
 - Record: provider request ids, `respondedModel`, usage (`inputTokens`, `outputTokens`, `totalTokens`), latencies, `responseLifecycle`, `VIDEO_ANALYZED` or `ANALYSIS_FAILED`, and `cleanup`.
 - If `cleanup.deleted` is false, delete the remote file by id from the result (`DELETE https://api.meta.ai/v1/files/<fileId>`); otherwise it expires after 3600 s.
 - Cost: take it from the account's authoritative usage page. Do not estimate.
 - The `Symptom` is a `model-hypothesis`. It never becomes a verdict.
 - Then stop. No second generation, no patch, no C3.
 
+## First live result (`c2b-live-smoke-001`, 2026-10-27): T04 PARTIAL
+
+Accepted by Meta: Files upload with `expires_after`, the Responses request (`input_file`, `text.format`), the H.264 clip, the delete. Not obtained: a completed answer. `status=incomplete`, `incomplete_details.reason=max_output_tokens`; usage 2773 input / 1500 output (1113 reasoning) / 4273 total; `video_frames_processed` not reported; latency about 20.5 s; file reported deleted; no `Symptom` accepted; actual charge unknown. Request ids and details are in the local gitignored result and the handoff.
+
 ## Meta API uncertainties this run is meant to settle
 
-1. Does the Responses endpoint accept `text.format` `{type:'json_schema', name, schema, strict:true}` with our schema? (Documented page: structured-output.)
+1. Does a *completed* answer arrive in the `text.format` json_schema shape and pass local `Symptom` validation? (The request format itself was accepted in the first run.)
 2. Is the answer in `output[].content[].output_text` (documented) and does `status` come back `completed`?
 3. Are usage fields `input_tokens`, `output_tokens`, `total_tokens`, `video_frames_processed` populated as documented?
 4. Does the Files API accept `expires_after` as sent, and does DELETE return success?
-5. Is the file ready to use at once after upload, or does it need `status` polling? The adapter does not poll; a not-ready file would surface as a provider error and a failed run.
-6. H.264 MP4 acceptance and processing of a ~10 s portrait clip.
+5. (Settled in run 1: the file was usable immediately and the clip was processed.)
+6. Does `reasoning: {effort: 'low'}` plus 3072 tokens leave room for the full structured answer?
 
 Any code fix this run reveals needs its own exact-head review before another attempt.
