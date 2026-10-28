@@ -1,6 +1,6 @@
 # PP-META-I2-C3 — Verified candidate scoreboard for F01 (hackathon pivot)
 
-- **State:** DRAFT, revision 2. **Not started. Not approved.** Remediates GPT-6 audit [issuecomment-6450106731](https://github.com/mrdzyn/proofpilot-ai/pull/6#issuecomment-6450106731) and Codex inline findings 4392457764 (design gate) and 4392457775 (NC-4) on PR #6.
+- **State:** DRAFT, revision 3. **Not started. Not approved.** Remediates GPT-6 audit [issuecomment-6450106731](https://github.com/mrdzyn/proofpilot-ai/pull/6#issuecomment-6450106731), Codex inline findings 4392457764 (design gate) and 4392457775 (NC-4), and GPT-6 re-audit [issuecomment-6460634258](https://github.com/mrdzyn/proofpilot-ai/pull/6#issuecomment-6460634258) BLOCKER-1 (raw-text scanner rejected every valid JSON proposal; replaced by the parse-then-scan pipeline below).
 - **Base:** protected `main` at `5658529319032236fcddb472a617fbdc5cf9aadd` (C2B docs closure, PR #5, merged). This contract is reviewed in PR #6 (branch `docs/pp-meta-i2-c3-pivot`).
 - **Implementation branch (future):** `phase/pp-meta-i2-c3`, cut from `main` only after the start gates below are met.
 - **Implementation agent:** Claude Code; **independent reviewer:** GPT-6; **owner:** repository owner.
@@ -48,7 +48,7 @@ C3-A may start only when all of these hold: (1) GPT-6 re-audit of this contract 
 
 Scope: fixture F01 only. A model proposal is **data**, not code. Trusted host code renders it into CSS.
 
-1. **Output contract.** The model returns one JSON object: `{"adjustments":[{"selector":"…","property":"…","value":"…"}]}`, 0 to 4 items, no other keys at any level, no duplicate (selector, property) pair. The model supplies no HTML, no JavaScript, no free CSS text, no file path and no filename.
+1. **Output contract.** The model returns exactly one JSON object of the form `{"adjustments":[{"selector":"…","property":"…","value":"…"}]}`: one key, `adjustments`, an array of 0 to 4 items, each item with exactly the three string keys `selector`, `property`, `value`, no other keys at any level, no duplicate (selector, property) pair. JSON syntax (braces, brackets, quotes, colons, commas) is only framing; it is never editable CSS. The model supplies no HTML, no JavaScript, no free CSS text, no file path and no filename. Validation is defined by the "Proposal validation pipeline" section below.
 2. **Closed grammar.** Selector, property and value must each match this allowlist exactly (case-sensitive, no whitespace variants):
 
    | Selector | Properties allowed |
@@ -67,11 +67,66 @@ Scope: fixture F01 only. A model proposal is **data**, not code. Trusted host co
    | `height` | `0`, or an integer 1 to 100 followed by `vh`, or an integer 1 to 600 followed by `px` |
 
    The allowlist is deliberately permissive enough for wrong answers (for example `.promo` changes, or `.add-to-cart { pointer-events: none }`), because the scoreboard must show failures honestly.
-3. **Trusted rendering.** Code does not paste model strings into CSS. It looks up each value from constant tables, formats integers itself, sorts adjustments canonically, and emits `selector{property:value}` rules (no `!important`). The block is appended after the baseline `styles.css` bytes, so same-specificity appended rules win over baseline rules, including the baseline `@media (min-width: 768px)` rule for `.promo-overlay`.
-4. **Double validation.** (a) Before parsing, scan the raw proposal text for forbidden classes: `url(`, `@import`, `expression(`, `javascript:`, `<`, `>`, `{`, `}`, `;`, backslash, `/*`, quotes, `//`, `http`, `data:`. A hit is `SECURITY_BLOCKED`. (b) Parse against the grammar. A miss is `PATCH_REJECTED`. (c) After rendering, re-read the staged `styles.css` and require it to equal baseline bytes plus the canonical rendering exactly. A mismatch is `INCONCLUSIVE`.
+3. **Trusted rendering (host-owned constants only).** No model string is ever concatenated, interpolated or escaped into CSS. The renderer receives only validated, host-typed tuples and emits each rule from constant templates: selectors and enumerated values are looked up in constant tables (the model string selects a table entry; the entry's constant text is emitted); `z-index` and numeric `height` values are parsed by the host from a strict grammar and re-formatted by the host from the parsed number. Adjustments are sorted canonically and emitted as `selector{property:value}` (no `!important`). The block is appended after the baseline `styles.css` bytes, so same-specificity appended rules win, including over the baseline `@media (min-width: 768px)` rule for `.promo-overlay`.
+4. **Validation order and exact staged bytes.** Raw proposal text is validated by the pipeline below (size, strict JSON, forbidden content in parsed strings, exact shape and grammar). After rendering, the staged `styles.css` is re-read and must equal baseline bytes plus the marker plus the canonical rendering exactly; a mismatch is `INCONCLUSIVE`.
 5. **Unchanged app code.** `product.html` and `app.js` are always the approved-SHA bytes, hash-checked. No Node process executes anything derived from a proposal. The only model-influenced bytes are CSS rules built from constants and served by the trusted fixture server to headless Chromium.
 6. **Broader patches stay gated.** HTML, JavaScript, arbitrary CSS or multi-file patches are neither requested from the model nor executed in this task. Any such capability requires a separate task, an independently verified OS/container sandbox, and its own approval. The requirement in `docs/SECURITY.md` is unchanged for that case.
 7. **Honest limits.** This is not a sandbox. It removes model-authored executable content instead of containing it. The demo and README must say so.
+
+## Proposal validation pipeline (SEC-C3-01, PROPOSED; replaces the raw-text token scan)
+
+Raw model text is **not** scanned for JSON syntax characters: a valid proposal must contain braces and quotes. Forbidden content is detected in **parsed string values and keys**, after JSON decoding. The pipeline is deterministic and ordered; the first failing step decides the classification. Nothing is rendered, staged or run unless every step passes.
+
+| Step | Check | On failure |
+|---|---|---|
+| V0 | Raw response is at most `MAX_PROPOSAL_BYTES` UTF-8 bytes (proposed 2,048; owner may change) | `PATCH_REJECTED` `PROPOSAL_TOO_LARGE`; checked **before** parsing (test spies that the parser is not called) |
+| V1 | Exactly one strict JSON value, nothing before or after except JSON whitespace; no Markdown fence; no BOM; **no duplicate object keys at any level** (a plain `JSON.parse` keeps the last duplicate silently, so the parser must detect them) | `PATCH_REJECTED` `MALFORMED_JSON` or `DUPLICATE_KEY` |
+| V2 | Forbidden-content scan over **every object key and every string value in the whole parsed tree**, including unknown fields. Each string is decoded (JSON escapes resolved, so `\u0075rl(` is `url(`), Unicode NFKC-normalised, lower-cased, and ASCII whitespace and control characters removed before matching. Forbidden classes: `url(`, `@import`, `expression(`, `javascript:`, `data:`, `http`, `//`, `/*`, `*/`, `<`, `>`, `{`, `}`, `;`, `\`, `"`, `'`, `` ` ``, `..`, `/`, NUL or other control characters, and the path words `verifier`, `fixtures`, `tests`, `node_modules`, `.proofpilot`, `.git`, `.env`. | `SECURITY_BLOCKED` with the class name (never the raw text) |
+| V3 | Root is a plain object with exactly one key, `adjustments`, an array. No other key at any depth (this rejects `path`, `file`, `html`, `js`, `note`). Prototype-dangerous keys (`__proto__`, `constructor`, `prototype`) are rejected as unknown keys; objects are read only by fixed key names from null-prototype copies, and a test asserts `Object.prototype` is unpolluted afterwards | `PATCH_REJECTED` `UNKNOWN_KEY` / `BAD_SHAPE` |
+| V4 | `adjustments.length` is 0 to 4; every item is an object with exactly `selector`, `property`, `value`, all JSON **strings** (numbers, booleans, null, arrays and objects in these positions are rejected) | `PATCH_REJECTED` `TOO_MANY_ADJUSTMENTS` / `BAD_TYPE` |
+| V5 | `selector` is exactly one of the three table selectors; `property` is allowed for that selector; `value` is allowed for that property under the strict grammar (case-sensitive, no surrounding whitespace, no `!important`, integers `-?[1-9][0-9]*|0` in range with no leading zeros, plus sign, decimal point or exponent; `height` per the table) | `PATCH_REJECTED` `UNKNOWN_SELECTOR` / `PROPERTY_NOT_ALLOWED` / `VALUE_NOT_ALLOWED` |
+| V6 | No two items share the same (selector, property), even with identical values | `PATCH_REJECTED` `DUPLICATE_PAIR` |
+| V7 | Render from host constants (execution boundary step 3) | n/a |
+
+**Deterministic classification and precedence.** (1) Size, then (2) JSON syntax and duplicate keys decide `PATCH_REJECTED` first: text that is not a single valid JSON value is never parsed into strings, so nothing is rendered or run and no content class applies. (3) For any successfully parsed value, a forbidden content class anywhere (V2) wins over every structural error and yields `SECURITY_BLOCKED`, so an extra `path` key whose value names `verifier/…`, or an extra `html` key holding markup, is `SECURITY_BLOCKED` and not merely "unknown key". (4) Otherwise structural and grammar errors (V3 to V6) yield `PATCH_REJECTED`. (5) Both statuses stop before any stage, browser, oracle process or renderer exists, and neither can ever lead to `VERIFIED`. The reason code is stored; raw rejected text is stored only as a SHA-256 and a length, and any display of it in the report is escaped and truncated.
+
+**Positive and negative test vectors (mock/unit, zero network, in C3-A; "no side effects" means: no stage directory created, no browser launched, no oracle spawned, renderer not called, spy-verified).**
+
+| ID | Input (abridged) | Expected |
+|---|---|---|
+| PV-1 | `{"adjustments":[{"selector":".promo-overlay","property":"pointer-events","value":"none"}]}` | **Accepted**; renders exactly `.promo-overlay{pointer-events:none}`; reaches staging (this is the PC-1 content) |
+| PV-2 | `{"adjustments":[]}` | Accepted; renders nothing (NC-1) |
+| PV-3 | four distinct valid pairs, incl. `z-index` `"100"`, `"-1"`, `"0"` and `height` `"100vh"` | Accepted; canonical order and exact bytes asserted |
+| PV-4 | valid JSON with leading/trailing JSON whitespace and newlines | Accepted |
+| MJ-1 | truncated: `{"adjustments":[` | `PATCH_REJECTED` `MALFORMED_JSON`, no side effects |
+| MJ-2 | two JSON values, or valid JSON followed by text | `PATCH_REJECTED` |
+| MJ-3 | valid JSON inside a Markdown code fence, or with a BOM | `PATCH_REJECTED` |
+| MJ-4 | raw non-JSON text such as `url(http://x.invalid/a)` | `PATCH_REJECTED` `MALFORMED_JSON` (nothing parsed) |
+| SZ-1 | valid-shaped JSON larger than `MAX_PROPOSAL_BYTES` | `PATCH_REJECTED` `PROPOSAL_TOO_LARGE`; parser spy shows it was never called |
+| ROOT-1 | root is an array, string, number, boolean or `null` | `PATCH_REJECTED` `BAD_SHAPE` |
+| EK-1 | extra top-level key: `{"adjustments":[],"note":"hi"}` | `PATCH_REJECTED` `UNKNOWN_KEY` |
+| EK-2 | extra key inside an item: `…,"comment":"x"` | `PATCH_REJECTED` `UNKNOWN_KEY` |
+| EK-3 (NC-2) | extra key `path` with value `verifier/f01/f01.oracle.spec.ts` (also `file`, `tests/…`, `../x`) | `SECURITY_BLOCKED` (path class) |
+| EK-4 | extra key `html` with value `<script>…</script>` | `SECURITY_BLOCKED` (markup class) |
+| PD-1 | keys `__proto__`, `constructor`, `prototype` at root and in an item | `PATCH_REJECTED` `UNKNOWN_KEY`; `Object.prototype` unpolluted |
+| FC-1 (NC-4) | `value` = `url(http://x.invalid/a)` | `SECURITY_BLOCKED` |
+| FC-2 (NC-4) | `value` = `@import`, `expression(`, `javascript:`, `data:`, `URL(`, `UrL(` | `SECURITY_BLOCKED` each |
+| FC-3 (NC-4) | escaped Unicode: `"\u0075rl(http://x)"`, fullwidth `ｕｒｌ(`, zero-width/whitespace-split `u r l(` | `SECURITY_BLOCKED` each |
+| FC-4 (NC-4) | comment-split `u/**/rl(` | `SECURITY_BLOCKED` (`/*`) |
+| FC-5 (NC-4) | `value` = `none; background:url(x)` or `none}` or `none"` | `SECURITY_BLOCKED` |
+| FC-6 | forbidden class in a **selector** or **property** string, or in an array element of an unknown field | `SECURITY_BLOCKED` |
+| G-1 | unknown selector (`body`, `.promo-overlay > *`, `#x`) | `PATCH_REJECTED` `UNKNOWN_SELECTOR` |
+| G-2 | disallowed pair (`.add-to-cart` with `display`; `.promo` with `height`) | `PATCH_REJECTED` `PROPERTY_NOT_ALLOWED` |
+| G-3 | `z-index` `"101"`, `"-2"`, `"01"`, `"+5"`, `"1e1"`, `"5.0"`, `""`; `height` `"0px "`, `"101vh"`, `"601px"` | `PATCH_REJECTED` `VALUE_NOT_ALLOWED` |
+| G-4 | `"none !important"`, `" none"`, `"None"`, `"NONE"` | `PATCH_REJECTED` `VALUE_NOT_ALLOWED` |
+| T-1 | non-string fields: numeric `value` `5`, `true`, `null`, array, object; `selector` as number | `PATCH_REJECTED` `BAD_TYPE` |
+| T-2 | `adjustments` is an object, string or `null` | `PATCH_REJECTED` `BAD_SHAPE` |
+| D-1 | same (selector, property) twice, with identical or different values | `PATCH_REJECTED` `DUPLICATE_PAIR` |
+| D-2 | duplicate JSON key: `{"adjustments":[],"adjustments":[]}` | `PATCH_REJECTED` `DUPLICATE_KEY` |
+| N-1 | five valid-looking entries | `PATCH_REJECTED` `TOO_MANY_ADJUSTMENTS` |
+| R-1 | renderer unit test: output depends only on constant tables and host-formatted integers; a property-based test shows no accepted input can make output contain a character outside `[a-z0-9.\-{}:\n]` (rules are newline-separated) | pass |
+
+Every `PATCH_REJECTED` and `SECURITY_BLOCKED` vector asserts "no side effects" and that `VERIFIED` is unreachable. The only accepted vectors (PV-1 to PV-4) proceed to staging in the hand-controls below.
 
 ## Candidate staging mechanism (feasible and testable; the spike below must confirm it)
 
@@ -81,18 +136,18 @@ The oracle is not redirected. Each candidate gets a complete staging workspace i
 2. **Create the stage.** A new 0700 directory outside the repository, populated by `git archive <approvedSha> -- verifier fixtures/sample-store package.json tsconfig.json`.
 3. **Verify trusted bytes.** Every staged file other than `fixtures/sample-store/src/styles.css` must match the approved-SHA blob (SHA-256 compared). Record the manifest.
 4. **Write the candidate.** Trusted code writes `styles.css` as the baseline bytes plus a marker comment containing a per-candidate nonce plus the canonical rules. Record its SHA-256.
-5. **Dependencies.** Provide `node_modules` by a read-only symlink to the trusted install, so the staged `verifier/playwright.config.ts` resolves `@playwright/test` from the stage. If the spike shows Playwright does not resolve one instance, fall back to a frozen-lockfile install inside the stage. The model never writes anywhere near `node_modules`.
+5. **Dependencies (a symlink is not read-only).** A symlink to the trusted `node_modules` does **not** make that directory read-only: the link target stays writable by any process running as the same user, including the staged Playwright run. Therefore the symlink is treated as a convenience whose integrity is *detected*, not enforced. Preferred option: a frozen-lockfile install inside the 0700 stage (contained and deleted with it). Symlink option, allowed only if the spike proves all of: (a) a before/after manifest (file list, sizes, SHA-256 of the `@playwright/test` package files, and the path and size of the browser cache entry used) of the link target is identical after the run, otherwise `INCONCLUSIVE`; (b) a containment walk of the stage with `lstat` finds no symlink other than the dependency link and every other staged path resolves under the stage root; (c) the harness never writes through the link. A verified non-writable mount or a separate OS user would give real enforcement and is out of scope for the hackathon; the report must say the dependency tree is detect-only. The model never writes anywhere near `node_modules`, and the only model-influenced bytes are the host-rendered CSS rules.
 6. **Run.** Spawn the staged `node_modules/@playwright/test/cli.js test -c verifier/playwright.config.ts` with `cwd` = the stage, a `scrubEnv` environment, and `PROOFPILOT_EVIDENCE_DIR` set to a per-candidate run directory. Because the config derives `repoRoot` from its own location, the oracle now serves the stage's `fixtures/sample-store/src/` on 4173.
 7. **Prove it read the candidate tree.** Primary proof: the traced response body for `GET /styles.css` (Playwright trace, pinned version 1.64.1) contains the nonce marker and hashes to the staged file. Required behavioural proof: PC-1 flips the observed hit-test target from `promo-overlay` to `add-to-cart` and NC-1 stays identical to baseline. If trace parsing proves infeasible in the spike, the behavioural pair is the proof and the limitation is stated in the report.
 8. **Recheck and clean.** After the run, re-hash the manifest and `styles.css`; any difference is `INCONCLUSIVE`. Copy evidence, hash it, remove the stage.
-9. **Spike (first C3-B task, zero model calls).** Demonstrate steps 1 to 8 with a hand-written adjustment, including symlinked dependency resolution and trace-based nonce proof. If the spike fails, stop and report; do not change the oracle to make it pass.
+9. **Spike (first C3-B task, zero model calls).** Demonstrate steps 1 to 8 with a hand-written adjustment, including dependency resolution (frozen install or the detect-only symlink with its manifest and containment checks) and the trace-based nonce proof. Until the spike passes, every item in steps 1 to 8 is proposed and **not demonstrated**. If the spike fails, stop and report; do not change the oracle to make it pass.
 
 ## Candidate and run statuses
 
 | Situation | Status |
 |---|---|
-| Raw proposal contains a forbidden class (step 4a) | `SECURITY_BLOCKED`, before any stage or browser exists |
-| Valid JSON but outside the grammar | `PATCH_REJECTED`, nothing executed |
+| A forbidden content class appears in any key or string of a successfully parsed proposal (pipeline V2) | `SECURITY_BLOCKED`, before any stage or browser exists |
+| Too large, not a single valid JSON value, duplicate key, unknown key, bad type or shape, or outside the grammar (pipeline V0, V1, V3 to V6) | `PATCH_REJECTED`, nothing rendered or executed |
 | Baseline not reproduced on the approved SHA | `NOT_REPRODUCED` (run level; no candidate may be verified) |
 | Oracle ran, mobile or desktop test failed | `PATCH_FAILED` |
 | Port busy, lock held, tamper/hash mismatch, timeout, missing or malformed evidence | `INCONCLUSIVE` |
@@ -117,20 +172,20 @@ The model never assigns a status. Untrusted model proposals and trusted verifica
 
 ## Network-containment test (separate, defense in depth; BLOCKER 3)
 
-- **NC-4 (fail closed).** A table of hand-authored proposals containing network or dynamic-code content (`url(http://…)`, `@import`, `expression(`, `javascript:`, markup, escaped and mixed-case variants, comment-split tokens, an extra `html`, `js` or `path` field). Each must be `SECURITY_BLOCKED` when it contains a forbidden class and `PATCH_REJECTED` when it only fails the grammar, with the exact expected status listed per vector. Every vector must additionally assert that no staging directory was created, no browser was launched (spy), and `VERIFIED` is unreachable.
+- **NC-4 (fail closed).** Defined by the content-class vectors FC-1 to FC-6 and EK-4 in the "Proposal validation pipeline" table, each with its exact expected status (`SECURITY_BLOCKED` when a forbidden class is present in a parsed key or string; `PATCH_REJECTED` when the proposal only fails syntax or grammar). Every vector asserts no staging directory, no browser launch (spy), no oracle process, renderer not called, and `VERIFIED` unreachable.
 - **DID-1 (separate harness).** A hand-authored script plus security test, never fed by a model proposal and never producing a candidate verdict. It serves a hand-written page from a throwaway local server on an ephemeral port (not 4173), opens a fresh Playwright context whose interception allows **only** that exact origin and aborts every other URL, including other loopback ports. The page attempts a fetch to an RFC 2606 `.invalid` host and to a second loopback port where the test runs a canary listener. Pass requires: those requests are aborted and observed, and the canary receives 0 connections. Its result type is separate from run statuses; a test asserts no code path maps it to `VERIFIED`. It is excluded from the scoreboard.
 - **Honest limit.** The candidate oracle runs unmodified and uninstrumented, because adding interception would mean changing trust-root verifier files. Network safety of candidates therefore rests on the closed grammar and the unchanged HTML/JS, not on interception. DID-1 shows what Playwright interception does and does not catch; it does not claim candidate runs are intercepted. Playwright routing is not process or OS isolation.
 
 ## Hand-authored controls (no model calls; all must pass before any live spend)
 
-- **NC-1 no-op:** empty `adjustments`, or only an irrelevant allowed rule (for example `.promo` `z-index: 5`). Expect the mobile oracle to fail with the baseline hit-test target, status `PATCH_FAILED`. Proves the run reads the staged tree and is not trivially green.
-- **NC-2 path/tamper attempt:** a proposal naming `verifier/…`, `tests/…` or any `path`/`file` key. Expect `SECURITY_BLOCKED` with no stage created.
+- **NC-1 no-op:** PV-2 (empty `adjustments`), or only an irrelevant allowed rule (for example `.promo` `z-index: 5`). Expect the mobile oracle to fail with the baseline hit-test target, status `PATCH_FAILED`. Proves the run reads the staged tree and is not trivially green.
+- **NC-2 path/tamper attempt:** vector EK-3: a proposal with a `path` or `file` key, or any string naming `verifier/…`, `tests/…` or `../`. Expect `SECURITY_BLOCKED` (path class, by precedence rule 3) with no stage created; the same keys with harmless values are `PATCH_REJECTED` `UNKNOWN_KEY` (EK-1).
 - **NC-3 regression:** `.add-to-cart` `pointer-events: none`. Expect both oracle tests to fail, `PATCH_FAILED`. Note: a mobile-pass, desktop-fail candidate is not constructible with unscoped edits, so the desktop control is a regression guard shown by PC-1 passing and NC-3 failing, not by a split result.
 - **NC-4:** as above.
 - **NC-5 baseline not reproduced:** run the verdict logic against a tree where the baseline passes. Expect `NOT_REPRODUCED`, never `VERIFIED`.
 - **NC-6 stage tamper:** change a staged verifier file after the manifest and before the run (test hook). Expect `INCONCLUSIVE`.
 - **NC-7 busy port:** hold 4173. Expect `INCONCLUSIVE` and no oracle run against the unknown server.
-- **PC-1 positive control:** hand-written `.promo-overlay` `pointer-events: none`. Expect single-run pass, then 3/3 replays, then `VERIFIED` for F01. Labeled hand-written, never counted as model output.
+- **PC-1 positive control:** hand-written proposal PV-1 (a valid JSON object that must pass the whole pipeline and render `.promo-overlay{pointer-events:none}`). Expect single-run pass, then 3/3 replays, then `VERIFIED` for F01. Labeled hand-written, never counted as model output.
 
 ## Report design gate (UI-C3-01; BLOCKER 5)
 

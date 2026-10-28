@@ -62,7 +62,7 @@
 |---|---|
 | C2B (Workstream A, R1, live smokes) | DONE and merged (PR #5) |
 | T04 real Muse Spark video analysis | **COMPLETED (agent-reported)** |
-| PR #6 contract: GPT-6 re-audit of the exact head | PENDING (previous head `1e8a3b5` was FIX REQUIRED) |
+| PR #6 contract: GPT-6 exact-head review | PENDING (heads `1e8a3b5` and `aeb3821` were FIX REQUIRED; `aeb3821` BLOCKER-1: raw-text scanner contradicted valid JSON, now replaced by a parse-then-scan pipeline with test vectors) |
 | SEC-C3-01 execution boundary (closed-grammar CSS adjustments, F01 only) | **NOT APPROVED**; needs a recorded owner approval and independent acceptance |
 | LIVE-C3-01 live-call quantities | **NOT APPROVED**; every live path stays disabled |
 | UI-C3-01 one-page static report (`design/screens/PP-C3-REPORT-CONTRACT.md`) | PENDING owner design approval |
@@ -75,7 +75,7 @@
 
 ## Next action
 
-1. GPT-6 re-audits the new exact head of PR #6.
+1. GPT-6 gives a final review of the new exact head of PR #6 (BLOCKER-1 pipeline, README/ARCHITECTURE corrections, dependency-symlink wording).
 2. Owner decides SEC-C3-01, LIVE-C3-01 (exact numbers) and UI-C3-01, recording each in `tasks/PP-META-I2-C3.md`, and merges the PR if satisfied.
 3. Only then does the implementation agent cut `phase/pp-meta-i2-c3` from the merged `main` and start with the zero-model staging spike.
 

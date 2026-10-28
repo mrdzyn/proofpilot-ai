@@ -6,17 +6,17 @@ ProofPilot AI turns a short recording of a UI defect into an observed browser re
 
 Built for the Meta Global AI Developer Hackathon (Push the Frontier). Runtime model: **Muse Spark 1.3** (visual analysis) via the Meta Model API. The C3 plan (Muse Spark candidate proposals, trusted verification, scoreboard) is a draft contract pending owner approval; Muse Wonder is not a planned dependency. Baseten-hosted **Muse Spark Open** is an optional secondary provider. See [HACKATHON_CONTRIBUTIONS.md](HACKATHON_CONTRIBUTIONS.md) for provenance.
 
-## Current state (Day 2 / C2A)
+## Current state (through C2B)
 
 | Capability | State |
 |---|---|
 | F01 defective sample store + trusted oracle | Implemented. The mobile oracle fails as intended and the desktop control passes. |
 | Deterministic baseline classifier + evidence hashing + observed metrics | Implemented |
-| Meta adapter (typed, validated, bounded, redacted) | Implemented. Authenticated non-billable model discovery has been observed. **Real inference is NOT TESTED.** |
+| Meta adapter (typed, validated, bounded, redacted) | Implemented. Authenticated non-billable model discovery has been observed. Real Muse Spark video inference ran twice in C2B (below); **no patch-proposal inference has been run**. |
 | Baseten provider configuration | Implemented. **NOT TESTED** (no key configured). |
 | Genuine F01 mobile-defect recording (MP4) + desktop control | Implemented (`pnpm record:f01`); files stay local and gitignored |
 | Video intake: real container/size/duration/codec/decode validation, WebM→MP4, per-run consent | Implemented |
-| Muse Spark native-video integration (Files + Responses), local `Symptom` validation, cleanup | Implemented and **MOCK TESTED only. Real Meta model/video upload NOT TESTED.** |
+| Muse Spark native-video integration (Files + Responses), local `Symptom` validation, cleanup | Implemented and mock tested. **Exercised live twice in C2B (agent-reported, not independently confirmed against the Meta account):** `c2b-live-smoke-001` ended `incomplete` at `max_output_tokens`; after the low-reasoning/3072-token fix, `c2b-live-smoke-002` completed (`VIDEO_ANALYZED`, schema-valid `Symptom`, model hypothesis only). Both run IDs are spent; remote files reported deleted; actual charge unverified. |
 | Product UI | Screen-map proposal only (`design/screens/`); **not approved, not built** |
 | Candidate proposals, candidate verifier, scoreboard/evidence export, static report | Not started. Draft contract `tasks/PP-META-I2-C3.md` (PR #6) is under review and not approved |
 
