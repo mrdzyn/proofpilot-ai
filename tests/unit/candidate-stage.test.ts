@@ -17,6 +17,12 @@ import {
   candidateMarker,
   CANDIDATE_CSS_PATH,
   createStage,
+  decideOutcome,
+  finalizeEvidence,
+  RECORD_FILE,
+  verifyPersistedEvidence,
+  type CandidateRecord,
+  type EvidenceIO,
   diffTrees,
   gitBlobSha1,
   hashTree,
@@ -373,4 +379,133 @@ test('source proof: served bytes must equal the staged CSS and carry this candid
   assert.equal(proveServedCss(traceFor(null), staged, 'N1').served, false);
   assert.equal(proveServedCss(traceFor(staged, 'http://127.0.0.1:4174/styles.css'), staged, 'N1').served, false);
   assert.equal(proveServedCss(traceFor(staged, undefined, 404), staged, 'N1').served, false);
+});
+
+// ------------------------------------------------------------ outcome decision (MAJOR-1)
+
+const row = (status: string, hit = 'add-to-cart', cart = '1') => ({ status, hit, cart });
+const failedRow = row('failed', 'promo-overlay', '0');
+
+test('ORACLE_PASS needs exit code 0 AND both trusted tests passing with the expected observations', () => {
+  assert.deepEqual(decideOutcome({ exitCode: 0, mobile: row('passed'), desktop: row('passed') }), { outcome: 'ORACLE_PASS', reason: null });
+});
+
+test('passing rows with ANY nonzero or missing exit code are INCONCLUSIVE, never a pass', () => {
+  for (const exitCode of [1, 2, 7, 130, 137, -1, null]) {
+    const d = decideOutcome({ exitCode, mobile: row('passed'), desktop: row('passed') });
+    assert.equal(d.outcome, 'INCONCLUSIVE', String(exitCode));
+    assert.ok(d.reason);
+  }
+});
+
+test('genuine candidate failures are PATCH_FAILED only for the ordinary "tests failed" exit (1)', () => {
+  assert.equal(decideOutcome({ exitCode: 1, mobile: failedRow, desktop: row('passed') }).outcome, 'PATCH_FAILED');
+  assert.equal(decideOutcome({ exitCode: 1, mobile: failedRow, desktop: failedRow }).outcome, 'PATCH_FAILED');
+  assert.equal(decideOutcome({ exitCode: 1, mobile: row('passed'), desktop: failedRow }).outcome, 'PATCH_FAILED');
+  for (const exitCode of [0, 2, 130, 137, -1, null]) {
+    assert.equal(decideOutcome({ exitCode, mobile: failedRow, desktop: row('passed') }).outcome, 'INCONCLUSIVE', String(exitCode));
+  }
+});
+
+test('unsettled test statuses and passing rows without the expected observations abstain', () => {
+  for (const status of ['timedOut', 'skipped', 'interrupted']) {
+    assert.equal(decideOutcome({ exitCode: 1, mobile: row(status), desktop: row('passed') }).outcome, 'INCONCLUSIVE', status);
+  }
+  assert.equal(decideOutcome({ exitCode: 0, mobile: row('passed', 'promo-overlay', '1'), desktop: row('passed') }).outcome, 'INCONCLUSIVE');
+  assert.equal(decideOutcome({ exitCode: 0, mobile: row('passed', 'add-to-cart', '0'), desktop: row('passed') }).outcome, 'INCONCLUSIVE');
+});
+
+// ------------------------------------------------------------ mandatory evidence (MAJOR-2)
+
+const REQUIRED = ['oracle-report.json', 'oracle-stdout.txt', 'a/obs-m.json', 'a/trace-m.zip', 'b/obs-d.json', 'b/trace-d.zip'];
+function evidenceFixture(): { dir: string; record: CandidateRecord } {
+  const dir = tmp('pp-evidence-');
+  for (const f of REQUIRED) {
+    mkdirSync(path.dirname(path.join(dir, f)), { recursive: true });
+    writeFileSync(path.join(dir, f), `content of ${f}\n`);
+  }
+  const record = {
+    schemaVersion: 1, label: 'PC-1', approvedSha: 'a'.repeat(40), outcome: 'ORACLE_PASS', failure: null, oracleRan: true, oracleExitCode: 0,
+    adjustments: [], renderedCss: '', manifest: null, mobile: null, desktop: null, baselineIdentical: false, sourceProof: [],
+    integrityAfterRun: 'intact', stageRemoved: true, requiredEvidence: [...REQUIRED], evidence: [], evidenceFinalized: false,
+  } as CandidateRecord;
+  return { dir, record };
+}
+const realIO: EvidenceIO = {
+  hashFile: async (f) => {
+    const b = readFileSync(f);
+    return { sha256: sha256(b), bytes: b.length };
+  },
+  writeRecord: async (f, t) => writeFileSync(f, t),
+};
+
+test('finalizeEvidence hashes every artifact, persists the record and verifies it by read-back', async () => {
+  const { dir, record } = evidenceFixture();
+  await finalizeEvidence(record, dir, realIO);
+  assert.equal(record.evidenceFinalized, true);
+  assert.equal(record.evidence.length, REQUIRED.length);
+  assert.deepEqual(await verifyPersistedEvidence(dir), []);
+  const persisted = JSON.parse(readFileSync(path.join(dir, RECORD_FILE), 'utf8'));
+  assert.equal(persisted.outcome, 'ORACLE_PASS');
+  assert.equal(persisted.evidenceFinalized, true);
+});
+
+test('fault: a missing required artifact makes finalization throw and persists no record', async () => {
+  for (const missing of REQUIRED) {
+    const { dir, record } = evidenceFixture();
+    rmSync(path.join(dir, missing));
+    await assert.rejects(finalizeEvidence(record, dir, realIO), /required evidence is missing/, missing);
+    assert.equal(existsSync(path.join(dir, RECORD_FILE)), false, missing);
+  }
+});
+
+test('fault: an incomplete required-evidence list is refused', async () => {
+  const { dir, record } = evidenceFixture();
+  record.requiredEvidence = ['oracle-report.json'];
+  await assert.rejects(finalizeEvidence(record, dir, realIO), /incomplete/);
+});
+
+test('fault: a hashing failure throws', async () => {
+  const { dir, record } = evidenceFixture();
+  await assert.rejects(
+    finalizeEvidence(record, dir, { ...realIO, hashFile: async () => { throw new Error('EIO: simulated read failure'); } }),
+    /simulated read failure/,
+  );
+  assert.equal(existsSync(path.join(dir, RECORD_FILE)), false);
+});
+
+test('fault: a failed record write throws', async () => {
+  const { dir, record } = evidenceFixture();
+  await assert.rejects(
+    finalizeEvidence(record, dir, { ...realIO, writeRecord: async () => { throw new Error('ENOSPC: simulated write failure'); } }),
+    /simulated write failure/,
+  );
+  assert.equal(existsSync(path.join(dir, RECORD_FILE)), false);
+});
+
+test('fault: evidence that changes between hashing and read-back is detected', async () => {
+  const { dir, record } = evidenceFixture();
+  let calls = 0;
+  const flaky: EvidenceIO = {
+    ...realIO,
+    hashFile: async (f) => {
+      const h = await realIO.hashFile(f);
+      return ++calls > REQUIRED.length && f.endsWith('trace-m.zip') ? { ...h, sha256: '0'.repeat(64) } : h; // second pass disagrees
+    },
+  };
+  await assert.rejects(finalizeEvidence(record, dir, flaky), /hash mismatch: a\/trace-m\.zip/);
+});
+
+test('verifyPersistedEvidence reports a missing record, an unfinalized record, tampering and unhashed files', async () => {
+  const { dir, record } = evidenceFixture();
+  assert.match((await verifyPersistedEvidence(dir)).join(), /missing or unreadable/);
+  await finalizeEvidence(record, dir, realIO);
+  appendFileSync(path.join(dir, 'oracle-stdout.txt'), 'tampered');
+  assert.match((await verifyPersistedEvidence(dir)).join(), /hash mismatch: oracle-stdout\.txt/);
+  writeFileSync(path.join(dir, 'extra.txt'), 'x');
+  assert.match((await verifyPersistedEvidence(dir)).join(), /unhashed file on disk: extra\.txt/);
+  const rec = JSON.parse(readFileSync(path.join(dir, RECORD_FILE), 'utf8'));
+  rec.evidenceFinalized = false;
+  writeFileSync(path.join(dir, RECORD_FILE), JSON.stringify(rec));
+  assert.match((await verifyPersistedEvidence(dir)).join(), /not marked finalized/);
 });

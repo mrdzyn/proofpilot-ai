@@ -78,15 +78,22 @@ Known gaps:
 - **No verified sandbox.** Container validation is NOT VERIFIED (the agent environment lacks Docker access). **In force today:** no AI-generated code or candidate patch executes until an independently verified OS/container sandbox exists. This remains the rule for HTML, JavaScript, free-form CSS and multi-file patches.
 - The policy lint is a pattern check, not a full secret scanner.
 
-## Proposed C3 boundary (NOT APPROVED, not in force)
+## C3 boundary (SEC-C3-01 APPROVED, strictly bounded; LIVE-C3-01 and UI-C3-01 NOT approved)
 
-`tasks/PP-META-I2-C3.md` proposes a narrower exception for fixture F01 only (decision SEC-C3-01, **NOT APPROVED**). It becomes part of this policy only after the owner records approval in a reviewable form and the independent reviewer accepts the exact head. As proposed:
+The owner approved decision **SEC-C3-01** on 2026-10-28 (record: `tasks/PP-META-I2-C3.md` approval register, PR #6 comment 6460953906). The approval covers only the narrow design below for fixture F01. It does **not** certify that the unimplemented parts work, and it does **not** widen the "no AI-generated code executes" rule above for anything else:
 
-- The model returns structured selector/property/value adjustments, never markup, scripts, CSS text or file paths. Trusted code validates them against a closed allowlist (forbidden-token scan first, then grammar), renders CSS from constants and applies it to `styles.css` in a disposable per-candidate staging workspace. `product.html`, `app.js`, the server and the whole trusted verifier are the approved-SHA bytes, hash-checked before and after the run.
-- The unmodified oracle runs in that staging workspace at its fixed root and fixed port 4173, strictly serial. Nothing derived from a proposal is executed by Node.
-- This removes model-authored executable content instead of containing it. It is not a sandbox and must not be described as one.
+- **In force today:** only hand-authored control inputs (PV-1/PC-1 and PV-2/NC-1) may be rendered and run, through the C3-0 staging harness (`scripts/c3-stage-spike.ts`). No model-generated candidate may execute until the C3-A validator and its tests exist, the staging proof has passed independent exact-head audit, and any further required approval is recorded.
+- **Still prohibited, pending independently verified OS/container isolation and a separate owner decision:** model-authored HTML, JavaScript, free-form CSS, file paths, multi-file patches and any change to trust roots. Docker/sandbox remains NOT VERIFIED.
+- **Not approved:** LIVE-C3-01 (12 Meta + 4 Baseten calls are proposed maximums only; the effective billable quota is 0, and any live inference needs separate explicit owner authorization) and UI-C3-01 (report layout).
+
+The approved design:
+
+- The model returns structured selector/property/value adjustments, never markup, scripts, CSS text or file paths. Trusted code parses strictly, scans the **parsed** keys and strings for forbidden content, validates against a closed grammar, renders CSS from host constants and applies it to `styles.css` in a disposable per-candidate staging workspace (pipeline: `tasks/PP-META-I2-C3.md`). `product.html`, `app.js`, the server and the whole trusted verifier are the approved-SHA bytes, hash-checked before and after the run.
+- The unmodified oracle runs in that staging workspace at its fixed root and fixed port 4173, strictly serial, under an exclusive lock. Nothing derived from a proposal is executed by Node.
+- A candidate is reported as passing only if the oracle process exits 0, both trusted tests pass with the expected observations, the Playwright trace shows the staged candidate was served, integrity checks pass after the run, and the hashed evidence record was persisted and read back. Any abnormal exit or incomplete evidence is `INCONCLUSIVE`. `ORACLE_PASS` is a single run and is not `VERIFIED`.
+- This removes model-authored executable content instead of containing it. It is not a sandbox and must not be described as one. Dependency integrity in the stage is detected, not enforced; browser binaries are outside the manifests.
 - Playwright request interception is defense in depth only, tested in a separate harness that cannot award a verdict. It is not process or OS isolation, and candidate oracle runs are not instrumented because that would require changing trust-root verifier files.
-- Live proposal calls require a separate fail-closed adapter: completed lifecycle only, `retries: 0` regardless of configuration, exact model id match on request and response, bounded input and output, one-time exclusive reservations that are burned on every outcome, and a pre-authorized per-provider slot count that defaults to 0. No quantity is approved (decision LIVE-C3-01, **NOT APPROVED**).
+- Live proposal calls require a separate fail-closed adapter: completed lifecycle only, `retries: 0` regardless of configuration, exact model id match on request and response, bounded input and output, one-time exclusive reservations that are burned on every outcome, and a pre-authorized per-provider slot count that defaults to 0.
 
 ## AI-agent boundaries
 

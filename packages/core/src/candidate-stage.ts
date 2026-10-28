@@ -8,7 +8,7 @@
 // possible in this environment) and are checked, not enforced; see tasks/PP-META-I2-C3.md.
 import { spawn, execFileSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
-import { cp, lstat, mkdir, mkdtemp, open, readdir, readFile, readlink, realpath, rm, stat, writeFile } from 'node:fs/promises';
+import { cp, lstat, mkdir, mkdtemp, open, readdir, readFile, readlink, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
@@ -39,6 +39,7 @@ export type StageFailureCode =
   | 'ORACLE_START_FAILED'
   | 'ORACLE_TIMEOUT'
   | 'EVIDENCE_INCOMPLETE'
+  | 'ORACLE_EXIT_ABNORMAL'
   | 'SOURCE_NOT_PROVEN';
 
 export class StageError extends Error {
@@ -366,7 +367,11 @@ export type CandidateRecord = {
   sourceProof: TraceProof[];
   integrityAfterRun: 'intact' | 'violated' | 'not-checked';
   stageRemoved: boolean;
+  /** Evidence files that must exist and be hashed for a pass or fail to count (relative to the evidence dir). */
+  requiredEvidence: string[];
   evidence: Array<{ path: string; sha256: string; bytes: number }>;
+  /** True only when every required artifact was hashed, the record was persisted and read back, and the hashes still match. */
+  evidenceFinalized: boolean;
 };
 
 export type RunCandidateOptions = {
@@ -379,9 +384,63 @@ export type RunCandidateOptions = {
   trustedNodeModules?: string;
   stageRoot?: string;
   timeoutMs?: number;
-  /** Test-only points to simulate tampering. */
-  hooks?: { beforeRun?: (stage: string) => Promise<void> | void; afterRun?: (stage: string) => Promise<void> | void };
+  /** Test-only points to simulate tampering and faults. */
+  hooks?: {
+    beforeRun?: (stage: string) => Promise<void> | void;
+    afterRun?: (stage: string) => Promise<void> | void;
+    /** Replace the oracle process exit code (simulates an abnormal runner exit). */
+    adjustOracleExit?: (code: number) => number;
+    /** Runs after the oracle finished and before evidence is finalised (simulates missing evidence). */
+    beforeFinalize?: (evidenceDir: string) => Promise<void> | void;
+  };
+  /** Evidence I/O; injectable so faults can be simulated deterministically. */
+  io?: Partial<EvidenceIO>;
 };
+
+export type EvidenceIO = {
+  hashFile: (file: string) => Promise<{ sha256: string; bytes: number }>;
+  writeRecord: (file: string, text: string) => Promise<void>;
+};
+
+const defaultIO: EvidenceIO = {
+  hashFile: async (file) => {
+    const b = await readFile(file);
+    return { sha256: sha256(b), bytes: b.length };
+  },
+  writeRecord: async (file, text) => {
+    const tmp = `${file}.tmp`;
+    await writeFile(tmp, text, { mode: 0o600 });
+    await rename(tmp, file); // atomic: a partial record is never visible
+  },
+};
+
+export const RECORD_FILE = 'candidate-record.json';
+
+/**
+ * Pure outcome decision from the oracle's own results and its process exit code. A pass needs exit 0
+ * AND both trusted tests passed with the add-to-cart tap and cart 1. A failure counts as PATCH_FAILED
+ * only for Playwright's ordinary "tests failed" exit (1) with both rows complete; anything else
+ * (nonzero exit with passing rows, exit 0 with failing rows, signals, crashes) abstains.
+ */
+export function decideOutcome(input: { exitCode: number | null; mobile: { status: string; hit: string | null; cart: string | null }; desktop: { status: string; hit: string | null; cart: string | null } }): { outcome: 'ORACLE_PASS' | 'PATCH_FAILED' | 'INCONCLUSIVE'; reason: string | null } {
+  const { exitCode, mobile, desktop } = input;
+  const ok = (t: typeof mobile) => t.status === 'passed' && t.cart === '1' && t.hit === 'add-to-cart';
+  const settled = (t: typeof mobile) => t.status === 'passed' || t.status === 'failed';
+  if (exitCode === null || !Number.isInteger(exitCode)) return { outcome: 'INCONCLUSIVE', reason: 'the oracle process did not report an exit code' };
+  if (!settled(mobile) || !settled(desktop)) return { outcome: 'INCONCLUSIVE', reason: `oracle ended with mobile=${mobile.status}, desktop=${desktop.status}` };
+  if (ok(mobile) && ok(desktop)) {
+    return exitCode === 0
+      ? { outcome: 'ORACLE_PASS', reason: null }
+      : { outcome: 'INCONCLUSIVE', reason: `both trusted tests passed but the oracle process exited ${exitCode}` };
+  }
+  if (mobile.status === 'passed' && desktop.status === 'passed') {
+    return { outcome: 'INCONCLUSIVE', reason: 'tests passed without the expected tap target and cart count' };
+  }
+  // at least one test genuinely failed
+  return exitCode === 1
+    ? { outcome: 'PATCH_FAILED', reason: null }
+    : { outcome: 'INCONCLUSIVE', reason: `a trusted test failed but the oracle process exited ${exitCode} instead of 1` };
+}
 
 async function loadObservations(results: OracleTestResult[]): Promise<void> {
   for (const r of results) {
@@ -412,7 +471,9 @@ export async function runCandidate(opts: RunCandidateOptions): Promise<Candidate
     sourceProof: [],
     integrityAfterRun: 'not-checked',
     stageRemoved: false,
+    requiredEvidence: [],
     evidence: [],
+    evidenceFinalized: false,
   };
   const fail = (code: NonNullable<CandidateRecord['failure']>['code'], message: string, outcome: CandidateOutcome = 'INCONCLUSIVE') => {
     record.failure = { code, message };
@@ -462,7 +523,8 @@ export async function runCandidate(opts: RunCandidateOptions): Promise<Candidate
     await assertPortFree(ORACLE_PORT);
 
     record.oracleRan = true;
-    record.oracleExitCode = await runOracle(stage, opts.evidenceDir, opts.timeoutMs ?? ORACLE_TIMEOUT_MS);
+    const rawExit = await runOracle(stage, opts.evidenceDir, opts.timeoutMs ?? ORACLE_TIMEOUT_MS);
+    record.oracleExitCode = opts.hooks?.adjustOracleExit ? opts.hooks.adjustOracleExit(rawExit) : rawExit;
     await opts.hooks?.afterRun?.(stage);
     try {
       await verifyStageIntegrity(stage, record.manifest, sourceDeps, trustedNodeModules);
@@ -495,10 +557,22 @@ export async function runCandidate(opts: RunCandidateOptions): Promise<Candidate
       }
     }
 
-    const passed = (r: OracleTestResult) => r.status === 'passed' && r.observation?.cartCountAfter === '1' && r.observation?.hitTestTarget === 'add-to-cart';
-    if (passed(mobile[0]!) && passed(desktop[0]!)) record.outcome = 'ORACLE_PASS';
-    else if (['passed', 'failed'].includes(mobile[0]!.status) && ['passed', 'failed'].includes(desktop[0]!.status)) record.outcome = 'PATCH_FAILED';
-    else throw new StageError('EVIDENCE_INCOMPLETE', `oracle ended with mobile=${mobile[0]!.status}, desktop=${desktop[0]!.status}`);
+    // Evidence that must exist (and be hashed) for any verdict: report, stdout, and per viewport the
+    // oracle observation and the Playwright trace.
+    const rel = (p: string) => path.relative(opts.evidenceDir, p).split(path.sep).join('/');
+    record.requiredEvidence = ['oracle-report.json', 'oracle-stdout.txt'];
+    for (const r of [mobile[0]!, desktop[0]!]) {
+      const obs = r.attachments.find((a) => a.name === F01_OBSERVATION_ATTACHMENT && a.path);
+      const trace = r.attachments.find((a) => a.name === 'trace' && a.path);
+      record.requiredEvidence.push(rel(obs!.path!), rel(trace!.path!));
+    }
+    const decision = decideOutcome({
+      exitCode: record.oracleExitCode,
+      mobile: { status: mobile[0]!.status, hit: mobile[0]!.observation?.hitTestTarget ?? null, cart: mobile[0]!.observation?.cartCountAfter ?? null },
+      desktop: { status: desktop[0]!.status, hit: desktop[0]!.observation?.hitTestTarget ?? null, cart: desktop[0]!.observation?.cartCountAfter ?? null },
+    });
+    if (decision.outcome === 'INCONCLUSIVE') throw new StageError('ORACLE_EXIT_ABNORMAL', decision.reason ?? 'inconclusive oracle outcome');
+    record.outcome = decision.outcome;
     record.baselineIdentical = classifyF01Baseline(results).verdict === 'REPRODUCED';
   } catch (e) {
     if (e instanceof StageError) {
@@ -515,25 +589,86 @@ export async function runCandidate(opts: RunCandidateOptions): Promise<Candidate
     if (release) await release();
   }
 
-  // Hash every evidence file, then write the record next to them.
+  // Evidence finalisation is a mandatory gate: a pass or a fail only stands if every required artifact
+  // exists and is hashed, the record was persisted atomically, and a read-back verifies it.
+  const io: EvidenceIO = { ...defaultIO, ...opts.io };
+  const verdictClaimed = record.outcome === 'ORACLE_PASS' || record.outcome === 'PATCH_FAILED';
   try {
-    await mkdir(opts.evidenceDir, { recursive: true });
-    const files: string[] = [];
-    const walk = async (d: string) => {
-      for (const e of await readdir(d, { withFileTypes: true })) {
-        const f = path.join(d, e.name);
-        if (e.isDirectory()) await walk(f);
-        else if (e.isFile()) files.push(f);
-      }
-    };
-    await walk(opts.evidenceDir);
-    for (const f of files.sort()) {
-      const b = await readFile(f);
-      record.evidence.push({ path: path.relative(opts.evidenceDir, f).split(path.sep).join('/'), sha256: sha256(b), bytes: b.length });
+    await opts.hooks?.beforeFinalize?.(opts.evidenceDir);
+    if (verdictClaimed) {
+      await finalizeEvidence(record, opts.evidenceDir, io);
+    } else {
+      // Already not a verdict: keep a diagnostic record (best effort) without touching the failure reason.
+      await mkdir(opts.evidenceDir, { recursive: true });
+      await io.writeRecord(path.join(opts.evidenceDir, RECORD_FILE), JSON.stringify(record, null, 2) + '\n').catch(() => undefined);
     }
-    await writeFile(path.join(opts.evidenceDir, 'candidate-record.json'), JSON.stringify(record, null, 2) + '\n');
-  } catch {
-    /* evidence is best effort; the outcome above already stands */
+  } catch (e) {
+    const message = String((e as Error)?.message ?? e).split('\n')[0];
+    record.evidenceFinalized = false;
+    record.outcome = 'INCONCLUSIVE';
+    record.failure = { code: 'EVIDENCE_INCOMPLETE', message: `evidence could not be finalised: ${message}` };
+    // Never leave a stale passing record behind; best effort to persist the downgraded one.
+    await rm(path.join(opts.evidenceDir, RECORD_FILE), { force: true }).catch(() => undefined);
+    await io.writeRecord(path.join(opts.evidenceDir, RECORD_FILE), JSON.stringify(record, null, 2) + '\n').catch(() => undefined);
   }
   return record;
+}
+
+async function listFiles(dir: string): Promise<string[]> {
+  const out: string[] = [];
+  for (const e of await readdir(dir, { withFileTypes: true, recursive: true })) {
+    if (e.isFile()) out.push(path.join(e.parentPath, e.name));
+  }
+  return out.sort();
+}
+
+/** Hash all evidence, persist the record atomically, then read it back and re-verify every hash. Throws on any failure. */
+export async function finalizeEvidence(record: CandidateRecord, evidenceDir: string, io: EvidenceIO): Promise<void> {
+  await mkdir(evidenceDir, { recursive: true });
+  const recordPath = path.join(evidenceDir, RECORD_FILE);
+  await rm(recordPath, { force: true });
+  const files = (await listFiles(evidenceDir)).filter((f) => path.basename(f) !== `${RECORD_FILE}.tmp`);
+  const entries: CandidateRecord['evidence'] = [];
+  for (const f of files) {
+    const h = await io.hashFile(f);
+    entries.push({ path: path.relative(evidenceDir, f).split(path.sep).join('/'), sha256: h.sha256, bytes: h.bytes });
+  }
+  const have = new Set(entries.map((e) => e.path));
+  const missing = record.requiredEvidence.filter((r) => !have.has(r));
+  if (record.requiredEvidence.length < 6) throw new Error('the required evidence list is incomplete');
+  if (missing.length) throw new Error(`required evidence is missing: ${missing.join(', ')}`);
+  record.evidence = entries;
+  record.evidenceFinalized = true;
+  await io.writeRecord(recordPath, JSON.stringify(record, null, 2) + '\n');
+  const problems = await verifyPersistedEvidence(evidenceDir, io);
+  if (problems.length) throw new Error(`persisted evidence failed verification: ${problems.join('; ')}`);
+}
+
+/**
+ * Re-read the persisted record and check it against the files on disk. Returns the problems found
+ * (empty means the record, its required artifacts and every hash are intact).
+ */
+export async function verifyPersistedEvidence(evidenceDir: string, io: Pick<EvidenceIO, 'hashFile'> = defaultIO): Promise<string[]> {
+  const problems: string[] = [];
+  let rec: CandidateRecord;
+  try {
+    rec = JSON.parse(await readFile(path.join(evidenceDir, RECORD_FILE), 'utf8'));
+  } catch {
+    return [`${RECORD_FILE} is missing or unreadable`];
+  }
+  if (rec.evidenceFinalized !== true) problems.push('record is not marked finalized');
+  if (!Array.isArray(rec.requiredEvidence) || rec.requiredEvidence.length < 6) problems.push('required evidence list is incomplete');
+  const byPath = new Map((rec.evidence ?? []).map((e) => [e.path, e]));
+  for (const r of rec.requiredEvidence ?? []) if (!byPath.has(r)) problems.push(`required artifact not hashed: ${r}`);
+  for (const e of rec.evidence ?? []) {
+    try {
+      const h = await io.hashFile(path.join(evidenceDir, e.path));
+      if (h.sha256 !== e.sha256 || h.bytes !== e.bytes) problems.push(`hash mismatch: ${e.path}`);
+    } catch {
+      problems.push(`evidence file unreadable: ${e.path}`);
+    }
+  }
+  const onDisk = (await listFiles(evidenceDir)).map((f) => path.relative(evidenceDir, f).split(path.sep).join('/')).filter((f) => f !== RECORD_FILE);
+  for (const f of onDisk) if (!byPath.has(f)) problems.push(`unhashed file on disk: ${f}`);
+  return problems;
 }

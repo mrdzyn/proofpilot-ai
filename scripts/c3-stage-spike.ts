@@ -13,7 +13,7 @@ import { randomBytes } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import { readWorktreeState, runCandidate, type CandidateRecord, type CssAdjustment } from '../packages/core/src/index.ts';
+import { readWorktreeState, runCandidate, verifyPersistedEvidence, type CandidateRecord, type CssAdjustment } from '../packages/core/src/index.ts';
 
 const repoRoot = path.resolve(import.meta.dirname, '..');
 const git = (...args: string[]) => execFileSync('git', args, { cwd: repoRoot, encoding: 'utf8' }).trim();
@@ -26,12 +26,13 @@ if (approvedSha !== head) {
   process.exit(1);
 }
 
-type Control = { label: string; description: string; adjustments: CssAdjustment[]; expect: (r: CandidateRecord) => string[] };
+type Control = { label: string; description: string; adjustments: CssAdjustment[]; oracleExit: number; expect: (r: CandidateRecord) => string[] };
 const CONTROLS: Control[] = [
   {
     label: 'NC-1',
     description: 'no-op: empty adjustments',
     adjustments: [],
+    oracleExit: 1,
     expect: (r) => [
       ...(r.outcome === 'PATCH_FAILED' ? [] : [`outcome ${r.outcome}, expected PATCH_FAILED`]),
       ...(r.baselineIdentical ? [] : ['mobile failure signature differs from the original baseline']),
@@ -42,6 +43,7 @@ const CONTROLS: Control[] = [
     label: 'NC-1b',
     description: 'irrelevant allowed rule: .promo z-index 5',
     adjustments: [{ selector: '.promo', property: 'z-index', value: '5' }],
+    oracleExit: 1,
     expect: (r) => [
       ...(r.outcome === 'PATCH_FAILED' ? [] : [`outcome ${r.outcome}, expected PATCH_FAILED`]),
       ...(r.baselineIdentical ? [] : ['mobile failure signature differs from the original baseline']),
@@ -51,6 +53,7 @@ const CONTROLS: Control[] = [
     label: 'PC-1',
     description: 'hand-written correct fix: .promo-overlay pointer-events none',
     adjustments: [{ selector: '.promo-overlay', property: 'pointer-events', value: 'none' }],
+    oracleExit: 0,
     expect: (r) => [
       ...(r.outcome === 'ORACLE_PASS' ? [] : [`outcome ${r.outcome}, expected ORACLE_PASS`]),
       ...(r.mobile?.status === 'passed' && r.mobile.hitTestTarget === 'add-to-cart' && r.mobile.cartCountAfter === '1' ? [] : ['mobile did not pass with the tap received by add-to-cart']),
@@ -71,7 +74,17 @@ const summary: Array<{ label: string; description: string; outcome: string; expe
 for (const c of CONTROLS) {
   const evidenceDir = path.join(spikeDir, c.label);
   const r = await runCandidate({ repoRoot, approvedSha, label: c.label, adjustments: c.adjustments, evidenceDir, lockPath });
-  const failures = r.outcome === 'INCONCLUSIVE' || r.outcome === 'PATCH_REJECTED' ? [`${r.outcome}: ${r.failure?.code} ${r.failure?.message}`] : c.expect(r);
+  // Mandatory evidence gate: the persisted record must exist, be marked finalized, list every required
+  // artifact (report, stdout, both traces, both observations) and every hash must match the files on disk.
+  const evidenceProblems = await verifyPersistedEvidence(evidenceDir);
+  const gate = [
+    ...evidenceProblems.map((p) => `evidence: ${p}`),
+    ...(r.evidenceFinalized ? [] : ['evidence was not finalized']),
+    ...(r.oracleExitCode === c.oracleExit ? [] : [`oracle process exit ${r.oracleExitCode}, expected ${c.oracleExit}`]),
+    ...(r.stageRemoved ? [] : ['stage was not removed']),
+    ...(r.integrityAfterRun === 'intact' ? [] : [`integrity after run: ${r.integrityAfterRun}`]),
+  ];
+  const failures = r.outcome === 'INCONCLUSIVE' || r.outcome === 'PATCH_REJECTED' ? [`${r.outcome}: ${r.failure?.code} ${r.failure?.message}`, ...gate] : [...c.expect(r), ...gate];
   console.log(`\n[${c.label}] ${c.description}`);
   console.log(`  rendered css:      ${JSON.stringify(r.renderedCss)}`);
   console.log(`  outcome:           ${r.outcome}${r.failure ? ` (${r.failure.code})` : ''}`);
@@ -79,6 +92,7 @@ for (const c of CONTROLS) {
   console.log(`  desktop:           ${r.desktop ? `${r.desktop.status}, tap received by ${r.desktop.hitTestTarget}, cart after ${r.desktop.cartCountAfter}` : 'n/a'}`);
   console.log(`  baseline-identical: ${r.baselineIdentical}`);
   console.log(`  served css proof:  ${r.sourceProof.map((p) => `${p.test}: bytes-equal=${p.bytesEqualStaged} nonce=${p.hasNonce} sha256=${p.servedSha256?.slice(0, 16)}`).join(' | ') || 'n/a'}`);
+  console.log(`  evidence:          ${evidenceProblems.length === 0 && r.evidenceFinalized ? `COMPLETE (${r.evidence.length} files hashed, ${r.requiredEvidence.length} required, record persisted and read back)` : 'INCOMPLETE: ' + (evidenceProblems.join('; ') || 'not finalized')}; oracle exit ${r.oracleExitCode}`);
   console.log(`  integrity (post):  ${r.integrityAfterRun}; stage removed: ${r.stageRemoved}; trusted files hashed: ${r.manifest ? Object.keys(r.manifest.trusted).length : 0}`);
   console.log(`  expectation:       ${failures.length === 0 ? 'MET' : 'NOT MET: ' + failures.join('; ')}`);
   for (const f of failures) problems.push(`${c.label}: ${f}`);
