@@ -9,3 +9,4 @@ export * from './css-adjustments.ts';
 export * from './zip-read.ts';
 export * from './candidate-stage.ts';
 export * from './patch-proposal.ts';
+export * from './candidate-coordinator.ts';
