@@ -91,8 +91,6 @@ const SCHEMA_NAME = /^[A-Za-z0-9_-]{1,64}$/;
 
 export interface InferenceProvider {
   readonly id: string;
-  /** 'injected' when the caller supplied the transport (tests, mocks); 'live' means the real network. */
-  readonly transport: 'live' | 'injected';
   /** Whether PROOFPILOT_ALLOW_BILLABLE_CALLS=1 was configured. */
   readonly billableCallsAllowed: boolean;
   readonly models: Partial<Record<ModelRole, string>>;
@@ -254,7 +252,6 @@ export function createProvider(config: ProviderConfig, deps: ClientDeps = {}): I
 
   return {
     id: config.id,
-    transport: deps.fetch ? 'injected' : 'live',
     billableCallsAllowed: config.billableCallsAllowed,
     models: config.models,
 
@@ -427,7 +424,12 @@ export function createProvider(config: ProviderConfig, deps: ClientDeps = {}): I
           },
           { retries: 0 },
         );
-        const lifecycle = lifecycleOf(json);
+        // Proposals require an EXPLICIT `status: "completed"`. The shared lifecycleOf() tolerates an
+        // absent/null status (the schema makes it optional, and the C2B video path keeps that behaviour);
+        // a proposal must never be accepted on a missing, null, wrong-type or unrecognised status.
+        const base = lifecycleOf(json);
+        const explicit = json?.status === 'completed';
+        const lifecycle: ResponseLifecycle = { ...base, completed: base.completed && explicit };
         return {
           providerId: config.id,
           model: typeof json?.model === 'string' ? json.model : '',

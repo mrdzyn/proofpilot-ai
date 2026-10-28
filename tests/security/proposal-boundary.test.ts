@@ -86,33 +86,79 @@ test('LIVE-C3-01 is not approved: the live quota is a frozen code constant of ze
   assert.doesNotMatch(src('packages/inference/src/config.ts'), /QUOTA/i);
 });
 
-test('with credentials, consent and every billable flag, a REAL-transport provider still cannot make a call (quota 0), and nothing is reserved', async () => {
-  const request = buildProposalRequest({
+test('no production code calls a provider for proposals: structuredResponse is only defined in client.ts, and tests/support is never imported by production code', () => {
+  const prod = walk(path.join(root, 'packages')).concat(walk(path.join(root, 'scripts')));
+  const callers = prod.filter((f) => /\.structuredResponse\(/.test(readFileSync(f, 'utf8')));
+  assert.deepEqual(callers, [], 'no production file calls provider.structuredResponse');
+  for (const f of prod) assert.doesNotMatch(readFileSync(f, 'utf8'), /tests\/support|proposal-harness/, f);
+  // the disabled entry point must not even reference its argument
+  const body = src('packages/inference/src/patch-proposal.ts');
+  const fn = body.slice(body.indexOf('export async function proposeCandidate'));
+  const entry = fn.slice(fn.indexOf('{\n'));
+  assert.doesNotMatch(entry, /_input|provider|store|claim|fetch|writeFile|await/, 'the entry point does nothing but throw');
+});
+
+// ---------------------------------------------------------------- MAJOR-2: adversarial entry-point tests
+
+const request = () =>
+  buildProposalRequest({
     symptom: parseSymptom(validSymptom(), { videoDurationSec: 10 }),
     facts: trustedFactsFromBaseline({ viewport: { width: 390, height: 844 }, tapPoint: { x: 1, y: 1 }, hitTestTarget: 'promo-overlay', cartCountBefore: '0', cartCountAfter: '0' } satisfies F01Observation, true),
   });
-  const evidence = tempDir('pp-sec-');
-  for (const id of ['meta', 'baseten'] as const) {
+
+for (const id of ['meta', 'baseten'] as const) {
+  test(`MAJOR-2 (${id}): a purported injected transport that would forward to the real network is never invoked; nothing is reserved or written`, async () => {
+    const req = request();
+    const evidence = tempDir('pp-sec-');
+    let forwarded = 0;
+    // would-be live transport: counts, then would hand the request to the real platform fetch
+    const forwarding = (async (url: string, init: RequestInit) => {
+      forwarded++;
+      return realFetch(url, init);
+    }) as never;
     const env = { ...liveEnv(), MODEL_API_KEY: SENTINEL_KEY, BASETEN_API_KEY: SENTINEL_KEY };
-    const provider = createProvider(loadProviderConfig(id, env)); // NO injected fetch: the real transport
-    assert.equal(provider.transport, 'live');
-    for (const injectedTransportQuota of [undefined, 0, 1, 5, 1000]) {
-      await assert.rejects(
-        proposeCandidate({
-          provider,
-          store: createReservationStore(path.join(evidence, 'reservations')),
-          runId: `run-${id}`,
-          consent: createProposalConsent({ runId: `run-${id}`, providerId: id, inputSha256: request.inputSha256 }),
-          request,
-          evidenceRoot: evidence,
-          injectedTransportQuota, // must be ignored for the real transport
-        }),
-        (e: unknown) => e instanceof ProposalError && e.code === 'LIVE_NOT_APPROVED',
-        `${id} quota ${String(injectedTransportQuota)}`,
-      );
+    const provider = createProvider(loadProviderConfig(id, env), { fetch: forwarding });
+    let providerCallbacks = 0;
+    const forged = new Proxy(provider, {
+      get(target, prop, recv) {
+        const v = Reflect.get(target, prop, recv);
+        if (typeof v === 'function') return (...a: unknown[]) => { providerCallbacks++; return (v as (...x: unknown[]) => unknown).apply(target, a); };
+        return v;
+      },
+    });
+    const hand = { id, models: provider.models, billableCallsAllowed: true, transport: 'injected', structuredResponse: async () => { providerCallbacks++; return realFetch('https://api.meta.ai/v1/responses'); } };
+    for (const candidate of [provider, forged, hand]) {
+      for (const injectedTransportQuota of [undefined, 0, 1, 5, 1000]) {
+        await assert.rejects(
+          proposeCandidate({
+            provider: candidate,
+            store: createReservationStore(path.join(evidence, 'reservations')),
+            runId: `run-${id}`,
+            consent: createProposalConsent({ runId: `run-${id}`, providerId: id, inputSha256: req.inputSha256 }),
+            request: req,
+            evidenceRoot: evidence,
+            injectedTransportQuota,
+            mockQuota: injectedTransportQuota,
+          } as never),
+          (e: unknown) => e instanceof ProposalError && e.code === 'LIVE_NOT_APPROVED',
+          `${id} quota ${String(injectedTransportQuota)}`,
+        );
+      }
     }
+    assert.equal(forwarded, 0, 'the purported injected transport was never invoked');
+    assert.equal(providerCallbacks, 0, 'no provider method was called');
+    assert.equal(fetchCalls, 0, 'global fetch (the real network) was never invoked');
+    assert.equal(existsSync(path.join(evidence, 'reservations')), false, 'nothing was reserved');
+    assert.equal(existsSync(path.join(evidence, 'proposals')), false, 'nothing was written');
+  });
+}
+
+test('MAJOR-2: the entry point rejects whatever it is given (garbage, nothing, hostile getters) without reading it', async () => {
+  let touched = 0;
+  const trap = new Proxy({}, { get() { touched++; throw new Error('input must not be read'); }, has() { touched++; return true; }, ownKeys() { touched++; return []; } });
+  for (const arg of [undefined, null, 0, 'x', [], {}, trap]) {
+    await assert.rejects(proposeCandidate(arg as never), (e: unknown) => e instanceof ProposalError && e.code === 'LIVE_NOT_APPROVED');
   }
-  assert.equal(existsSync(path.join(evidence, 'reservations')), false);
-  assert.equal(existsSync(path.join(evidence, 'proposals')), false);
-  assert.equal(fetchCalls, 0, 'global fetch (the real network) was never invoked');
+  assert.equal(touched, 0);
+  await assert.rejects(proposeCandidate(), (e: unknown) => e instanceof ProposalError && e.code === 'LIVE_NOT_APPROVED');
 });

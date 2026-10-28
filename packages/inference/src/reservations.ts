@@ -4,7 +4,12 @@
 // strictly before any network call. A claimed run id and a claimed quota slot are NEVER released:
 // timeouts, API errors, schema failures and crashes all leave them spent. The files live under
 // .proofpilot/ (gitignored) so the accounting survives restarts.
-import { mkdir, open, readFile, rename, rm, writeFile } from 'node:fs/promises';
+//
+// Partial failures are conservative by design. A slot file is created first and the run record second,
+// so a crash or write failure between the two leaves an ORPHAN SLOT (a spent slot with no run record).
+// That can only cost capacity, never cause an extra billable call. Uncertain slots are never recycled
+// automatically; an operator reconciles them by hand after inspecting `listOrphanSlots()`.
+import { mkdir, open, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { isValidRunId } from '../../intake/src/consent.ts';
 
@@ -72,8 +77,10 @@ export function createReservationStore(root: string): ReservationStore {
         let slot = 0;
         for (let n = 1; n <= quota && slot === 0; n++) {
           try {
-            await (await open(path.join(dir, 'slots', `slot-${String(n).padStart(3, '0')}`), 'wx', 0o600)).close();
-            slot = n;
+            const h = await open(path.join(dir, 'slots', `slot-${String(n).padStart(3, '0')}`), 'wx', 0o600);
+            slot = n; // the slot is spent from the moment it exists, even if the next lines fail
+            await h.writeFile(`${runId}\n`).catch(() => undefined);
+            await h.close();
           } catch (e) {
             if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
           }
@@ -97,4 +104,20 @@ export function createReservationStore(root: string): ReservationStore {
       }
     },
   };
+}
+
+/**
+ * Read-only reconciliation aid: slots that are spent but have no matching run record (crash or write
+ * failure between the two steps) or no recorded run id. Nothing here recycles or deletes anything.
+ */
+export async function listOrphanSlots(root: string, providerId: string): Promise<string[]> {
+  if (!PROVIDER.test(providerId)) return [];
+  const dir = path.join(root, providerId);
+  const out: string[] = [];
+  for (const name of await readdir(path.join(dir, 'slots')).catch(() => [] as string[])) {
+    const runId = (await readFile(path.join(dir, 'slots', name), 'utf8').catch(() => '')).trim();
+    const hasRun = runId.length > 0 && (await readFile(path.join(dir, 'runs', `${runId}.json`)).then(() => true, () => false));
+    if (!hasRun) out.push(name);
+  }
+  return out.sort();
 }

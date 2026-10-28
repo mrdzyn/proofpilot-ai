@@ -1,4 +1,6 @@
-// C3-A adapter, request builder and billing controls. MOCK transport only: no test here can reach the
+// C3-A request builder, response processing and billing controls through the MOCK-ONLY harness
+// (tests/support/proposal-harness.ts); the production entry point is disabled and tested in tests/security.
+// MOCK transport only: no test here can reach the
 // network (every provider gets an injected fetch, and a global fetch trap fails the run if one is used).
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -6,7 +8,6 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSy
 import path from 'node:path';
 import { parseSymptom, type F01Observation } from '../../packages/core/src/index.ts';
 import {
-  APPROVED_LIVE_QUOTA,
   buildProposalRequest,
   createProposalConsent,
   createProvider,
@@ -14,14 +15,13 @@ import {
   loadProviderConfig,
   PROPOSAL_LABEL,
   PROPOSAL_LIMITS,
-  proposeCandidate,
   ProposalError,
   ReservationError,
   trustedFactsFromBaseline,
   type InferenceProvider,
-  type ProposeInput,
 } from '../../packages/inference/src/index.ts';
 import { json, liveEnv, mockFetch, responsesOk, SENTINEL_KEY, tempDir, validSymptom } from '../helpers.ts';
+import { runMockProposalAttempt as proposeCandidate, type HarnessInput } from '../support/proposal-harness.ts';
 
 const realFetch = globalThis.fetch;
 let trapped = 0;
@@ -48,19 +48,20 @@ function setup(queue: Queue, env: Record<string, string> = liveEnv(), quota: num
   const provider = createProvider(loadProviderConfig('meta', env), { fetch: m.fetch });
   const root = tempDir('pp-prop-');
   const request = built();
-  const input: ProposeInput = {
+  const input: HarnessInput = {
     provider,
     store: createReservationStore(path.join(root, 'reservations')),
     runId,
     consent: createProposalConsent({ runId, providerId: 'meta', inputSha256: request.inputSha256 }),
     request,
     evidenceRoot: root,
-    injectedTransportQuota: quota ?? undefined,
+    mockQuota: quota ?? undefined,
     clock: () => new Date('2026-10-28T00:00:00.000Z'),
   };
   return { m, provider, root, request, input };
 }
-const ok = (text = PV1, extra: Record<string, unknown> = {}) => responsesOk(text, extra);
+// proposals require an explicit status: "completed", so the default mock response carries it
+const ok = (text = PV1, extra: Record<string, unknown> = {}) => responsesOk(text, { status: 'completed', ...extra });
 const refusalBody = () => json({ id: 'r', model: 'muse-spark-1.3', status: 'completed', output: [{ type: 'message', content: [{ type: 'refusal', refusal: 'no' }] }] }, 200, { 'x-request-id': 'req-r' });
 
 // ------------------------------------------------------------ request builder
@@ -283,7 +284,6 @@ test('default quota is zero: without an injected mock quota nothing runs', async
   await assert.rejects(proposeCandidate(zero.input), (e: unknown) => e instanceof ProposalError && e.code === 'LIVE_NOT_APPROVED');
   assertNothingSpent(s);
   assertNothingSpent(zero);
-  assert.deepEqual({ ...APPROVED_LIVE_QUOTA }, { meta: 0, baseten: 0 });
 });
 
 // ------------------------------------------------------------ reservations
@@ -369,10 +369,10 @@ function basetenSetup(queue: Queue, env: Record<string, string> = { BASETEN_API_
   const provider: InferenceProvider = createProvider(loadProviderConfig('baseten', env), { fetch: m.fetch });
   const root = tempDir('pp-bt-');
   const request = built();
-  const input: ProposeInput = {
+  const input: HarnessInput = {
     provider, store: createReservationStore(path.join(root, 'reservations')), runId: 'bt-1',
     consent: createProposalConsent({ runId: 'bt-1', providerId: 'baseten', inputSha256: request.inputSha256 }),
-    request, evidenceRoot: root, injectedTransportQuota: 2,
+    request, evidenceRoot: root, mockQuota: 2,
   };
   return { m, input, root };
 }
@@ -403,4 +403,76 @@ test('Baseten (mock): truncated, refused, wrong-model and error responses are re
   const rate = basetenSetup([new Response('x', { status: 429 }), chat(PV1)], { BASETEN_API_KEY: SENTINEL_KEY, PROOFPILOT_ALLOW_BILLABLE_CALLS: '1', PROOFPILOT_INFERENCE_MAX_RETRIES: '2' });
   assert.equal((await proposeCandidate(rate.input)).reason, 'PROVIDER_RATE_LIMITED');
   assert.equal(rate.m.calls.length, 1);
+});
+
+// ------------------------------------------------------------ MAJOR-1: explicit completed status
+
+test('MAJOR-1: a missing, null, wrong-type, empty or unrecognised status is never accepted, even with valid model and output', async () => {
+  const noStatus = () => json({ id: 'r', model: 'muse-spark-1.3', output: [{ type: 'message', content: [{ type: 'output_text', text: PV1 }] }], usage: { input_tokens: 5, output_tokens: 5 } }, 200, { 'x-request-id': 'req-x' });
+  const withStatus = (status: unknown) => json({ id: 'r', model: 'muse-spark-1.3', status, output: [{ type: 'message', content: [{ type: 'output_text', text: PV1 }] }] }, 200, { 'x-request-id': 'req-x' });
+  const bodies: Array<[string, () => Response]> = [
+    ['absent', noStatus],
+    ['null', () => withStatus(null)],
+    ['empty', () => withStatus('')],
+    ['number', () => withStatus(1)],
+    ['boolean', () => withStatus(true)],
+    ['array', () => withStatus(['completed'])],
+    ['object', () => withStatus({ value: 'completed' })],
+    ['cased', () => withStatus('Completed')],
+    ['padded', () => withStatus('completed ')],
+    ['unrecognised', () => withStatus('done')],
+    ['output_text shortcut, no status', () => json({ id: 'r', model: 'muse-spark-1.3', output_text: PV1 }, 200, { 'x-request-id': 'req-x' })],
+  ];
+  for (const [name, make] of bodies) {
+    const s = setup([make(), ok()], liveEnv({ PROOFPILOT_INFERENCE_MAX_RETRIES: '2' }), 1);
+    const out = await proposeCandidate(s.input);
+    assert.deepEqual([out.status, out.reason, out.adjustments], ['PROPOSAL_FAILED', 'RESPONSE_NOT_COMPLETED', null], name);
+    assert.equal(s.m.calls.length, 1, `${name}: exactly one request, no retry`);
+    assert.equal(JSON.parse(readFileSync(path.join(s.root, 'reservations/meta/runs/run-1.json'), 'utf8')).status, 'PROPOSAL_FAILED', `${name}: reservation settled as failed`);
+    assert.equal(readdirSync(path.join(s.root, 'reservations/meta/slots')).length, 1, `${name}: slot burned`);
+    // the run id and the only slot stay spent
+    await assert.rejects(proposeCandidate(s.input), (e: unknown) => e instanceof ReservationError && e.code === 'RUN_ID_SPENT', name);
+    const other = { ...s.input, runId: 'run-2', consent: createProposalConsent({ runId: 'run-2', providerId: 'meta', inputSha256: s.request.inputSha256 }) };
+    await assert.rejects(proposeCandidate(other), (e: unknown) => e instanceof ReservationError && e.code === 'QUOTA_EXHAUSTED', name);
+    assert.equal(s.m.calls.length, 1, `${name}: nothing further was sent`);
+  }
+  // control: the explicit status is accepted
+  const good = setup([ok(PV1, { status: 'completed' })]);
+  assert.equal((await proposeCandidate(good.input)).status, 'PROPOSAL_ACCEPTED');
+});
+
+test('MAJOR-1: the provider layer itself withholds text without an explicit completed status (proposal path only)', async () => {
+  const bare = json({ id: 'r', model: 'muse-spark-1.3', output: [{ type: 'message', content: [{ type: 'output_text', text: PV1 }] }] }, 200, { 'x-request-id': 'q' });
+  const m = mockFetch([bare]);
+  const provider = createProvider(loadProviderConfig('meta', liveEnv()), { fetch: m.fetch });
+  const res = await provider.structuredResponse({ model: 'muse-spark-1.3', prompt: 'p', schemaName: 'proofpilot_css_proposal', schema: {}, maxOutputTokens: 100 });
+  assert.equal(res.lifecycle.completed, false);
+  assert.equal(res.lifecycle.status, null);
+  assert.equal(res.text, '');
+});
+
+test('orphan slots: a failure between claiming a slot and writing the run record is conservative and reported, never recycled', async () => {
+  const { listOrphanSlots } = await import('../../packages/inference/src/index.ts');
+  const root = path.join(tempDir('pp-orphan-'), 'reservations');
+  const store = createReservationStore(root);
+  mkdirSync(path.join(root, 'meta/runs/run-x.json'), { recursive: true }); // makes the run-record write fail after the slot was claimed
+  await assert.rejects(store.claim({ providerId: 'meta', runId: 'run-x', quota: 1 }));
+  assert.deepEqual(await listOrphanSlots(root, 'meta'), ['slot-001'], 'reported for operator reconciliation');
+  await assert.rejects(store.claim({ providerId: 'meta', runId: 'run-y', quota: 1 }), (e: unknown) => e instanceof ReservationError && e.code === 'QUOTA_EXHAUSTED');
+  assert.deepEqual(await listOrphanSlots(root, 'meta'), ['slot-001'], 'still not recycled');
+  // a healthy claim is not an orphan
+  const healthy = path.join(tempDir('pp-orphan-'), 'reservations');
+  await createReservationStore(healthy).claim({ providerId: 'meta', runId: 'run-z', quota: 1 });
+  assert.deepEqual(await listOrphanSlots(healthy, 'meta'), []);
+});
+
+test('MAJOR-1 (defence in depth): response processing itself rejects a forged "completed" lifecycle that lacks an explicit completed status', async () => {
+  const { processProposalResponse } = await import('../../packages/inference/src/index.ts');
+  const lifecycle = (over: Record<string, unknown>) => ({ status: 'completed', errorCode: null, incompleteReason: null, refusal: false, completed: true, ...over });
+  const res = (lc: Record<string, unknown>) => ({ providerId: 'meta', model: 'muse-spark-1.3', text: PV1, requestId: 'q', usage: null, lifecycle: lc as never });
+  assert.equal(processProposalResponse(res(lifecycle({})), 'muse-spark-1.3').status, 'PROPOSAL_ACCEPTED');
+  for (const over of [{ status: null }, { status: 'unrecognized' }, { status: 'incomplete' }, { completed: false }, { errorCode: 'server_error' }, { incompleteReason: 'max_output_tokens' }, { refusal: true }]) {
+    const out = processProposalResponse(res(lifecycle(over)), 'muse-spark-1.3');
+    assert.deepEqual([out.status, out.reason, out.adjustments], ['PROPOSAL_FAILED', 'RESPONSE_NOT_COMPLETED', null], JSON.stringify(over));
+  }
 });

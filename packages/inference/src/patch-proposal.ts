@@ -1,8 +1,13 @@
-// C3-A Muse Spark candidate-proposal adapter (mock-tested only; LIVE-C3-01 is NOT approved).
+// C3-A Muse Spark candidate-proposal building blocks (mock-tested only; LIVE-C3-01 is NOT approved).
 //
 // symptom (untrusted) + trusted F01 facts -> bounded deterministic prompt -> ONE structured
 // generation -> lifecycle/model checks -> strict local validation -> an UNTRUSTED PROPOSAL artifact.
 // Nothing here executes a proposal, imports the staging runner, or can produce VERIFIED.
+//
+// The production entry point `proposeCandidate` is HARD-DISABLED while LIVE-C3-01 is unapproved: it
+// rejects before touching any provider object, reservation or file. The pure pieces below (pre-flight,
+// response processing, artifact persistence) are what a separately approved live commit would wire
+// together, and what the mock-only test harness (kept under tests/, never imported here) exercises today.
 import { createHash } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -10,8 +15,8 @@ import { parseProposal, proposalJsonSchema, describeGrammar, type CssAdjustment,
 import { isValidRunId } from '../../intake/src/consent.ts';
 import { PROVIDERS } from './config.ts';
 import { InferenceError } from './errors.ts';
-import type { InferenceProvider, ResponseLifecycle, VideoUsage } from './client.ts';
-import { APPROVED_LIVE_QUOTA, ReservationError, type ReservationStore } from './reservations.ts';
+import type { InferenceProvider, ResponseLifecycle, StructuredResponse, VideoUsage } from './client.ts';
+import { APPROVED_LIVE_QUOTA } from './reservations.ts';
 
 export const PROPOSAL_LABEL = 'UNTRUSTED PROPOSAL — NOT VERIFIED' as const;
 export const PROPOSAL_SCHEMA_NAME = 'proofpilot_css_proposal';
@@ -135,7 +140,7 @@ export function buildProposalRequest(input: { symptom: Symptom; facts: TrustedRe
   return { fixtureId: 'F01', prompt, inputSha256: createHash('sha256').update(prompt, 'utf8').digest('hex'), chars: prompt.length };
 }
 
-// ---------------------------------------------------------------- adapter
+// ---------------------------------------------------------------- adapter pieces
 
 export type ProposalStatus = 'PROPOSAL_ACCEPTED' | 'PROPOSAL_REJECTED' | 'PROPOSAL_BLOCKED' | 'PROPOSAL_FAILED';
 
@@ -173,25 +178,10 @@ export type ProposalOutcome = {
   artifactPath: string | null;
 };
 
-export type ProposeInput = {
-  provider: InferenceProvider;
-  store: ReservationStore;
-  runId: string;
-  consent: ProposalConsent;
-  request: BuiltProposalRequest;
-  /** Gitignored evidence root, normally <repo>/.proofpilot. Artifacts go to <root>/proposals/<runId>/. */
-  evidenceRoot: string;
-  /**
-   * Quota for an INJECTED (mock) transport only, for tests. Ignored for the real network, where the
-   * effective quota is the code constant APPROVED_LIVE_QUOTA (0 until LIVE-C3-01 is approved).
-   */
-  injectedTransportQuota?: number;
-  clock?: () => Date;
-};
-
 const REQUEST_ID = /^[A-Za-z0-9._:-]{1,100}$/;
 
-function expectedModel(provider: InferenceProvider): string {
+/** The exact model a provider may be asked for; throws for anything else. */
+export function expectedProposalModel(provider: Pick<InferenceProvider, 'id' | 'models'>): string {
   if (provider.id === 'meta') {
     if (provider.models.visual !== META_PROPOSAL_MODEL) throw new ProposalError('MODEL_NOT_ALLOWED', `the Meta proposal model must be exactly ${META_PROPOSAL_MODEL}`);
     return META_PROPOSAL_MODEL;
@@ -205,83 +195,94 @@ function expectedModel(provider: InferenceProvider): string {
 }
 
 /**
- * One proposal attempt. Pre-flight problems throw typed errors BEFORE anything is reserved, so a refused
- * call spends nothing. From the claim onward the attempt is spent whatever happens, and the result is
- * returned as data (never thrown) with an artifact when it can be persisted.
+ * Pure pre-flight checks that need no reservation and no network: input integrity and bounds, pinned
+ * model, per-run consent and the billable gate. Throws ProposalError. Does NOT decide quota.
  */
-export async function proposeCandidate(input: ProposeInput): Promise<ProposalOutcome> {
-  const { provider, store, runId, consent, request } = input;
-  const now = input.clock ?? (() => new Date());
-
-  // ---- pre-flight: no reservation, no network ----
+export function preflightProposal(input: { provider: Pick<InferenceProvider, 'id' | 'models' | 'billableCallsAllowed'>; runId: string; consent: unknown; request: BuiltProposalRequest }): { model: string; providerId: 'meta' | 'baseten' } {
+  const { provider, runId, consent, request } = input;
   if (!isValidRunId(runId)) throw new ProposalError('INVALID_INPUT', 'run id is malformed');
   if (!request || typeof request.prompt !== 'string' || request.prompt.length === 0 || request.fixtureId !== 'F01') throw new ProposalError('INVALID_INPUT', 'the request was not built by buildProposalRequest');
   if (createHash('sha256').update(request.prompt, 'utf8').digest('hex') !== request.inputSha256) throw new ProposalError('INVALID_INPUT', 'request hash does not match its prompt');
   if (request.prompt.length > PROPOSAL_LIMITS.maxInputChars) throw new ProposalError('BOUNDS', `input exceeds ${PROPOSAL_LIMITS.maxInputChars} characters`);
-  const model = expectedModel(provider);
+  const model = expectedProposalModel(provider);
   assertProposalConsent(consent, { runId, providerId: provider.id, inputSha256: request.inputSha256 });
   if (!provider.billableCallsAllowed) throw new ProposalError('BILLABLE_NOT_AUTHORIZED', 'billable inference is not enabled');
-  const providerId = provider.id as 'meta' | 'baseten';
-  const quota = provider.transport === 'live' ? APPROVED_LIVE_QUOTA[providerId] : (input.injectedTransportQuota ?? 0);
-  if (!Number.isInteger(quota) || quota <= 0) throw new ProposalError('LIVE_NOT_APPROVED', `no live quota is approved for ${providerId} (LIVE-C3-01 is not approved)`);
-
-  // ---- claim: from here the attempt is spent regardless of outcome ----
-  const claim = await store.claim({ providerId, runId, quota }); // ReservationError propagates; nothing was spent
-
-  const artifact: ProposalArtifact = {
-    schemaVersion: 1, label: PROPOSAL_LABEL, provenance: 'model-hypothesis', runId, providerId, requestedModel: model, respondedModel: null,
-    inputSha256: request.inputSha256, outputSha256: null, outputBytes: null, status: 'PROPOSAL_FAILED', reason: null, forbiddenClass: null,
-    adjustments: null, renderedCss: null, requestId: null, usage: null, lifecycle: null, limits: PROPOSAL_LIMITS, slot: claim.slot, createdAt: now().toISOString(),
-  };
-  let adjustments: CssAdjustment[] | null = null;
-  try {
-    const res = await provider.structuredResponse({ model, prompt: request.prompt, schemaName: PROPOSAL_SCHEMA_NAME, schema: proposalJsonSchema(), maxOutputTokens: PROPOSAL_LIMITS.maxOutputTokens });
-    artifact.respondedModel = typeof res.model === 'string' && /^[A-Za-z0-9._/-]{1,128}$/.test(res.model) ? res.model : null;
-    artifact.requestId = res.requestId && REQUEST_ID.test(res.requestId) ? res.requestId : null;
-    artifact.usage = res.usage;
-    artifact.lifecycle = res.lifecycle;
-    if (!res.lifecycle.completed) {
-      artifact.reason = 'RESPONSE_NOT_COMPLETED';
-    } else if (res.model !== model) {
-      artifact.reason = 'MODEL_MISMATCH';
-    } else if (typeof res.text !== 'string' || res.text.trim().length === 0) {
-      artifact.reason = 'EMPTY_OUTPUT';
-    } else {
-      const parsed = parseProposal(res.text);
-      artifact.outputSha256 = parsed.rawSha256;
-      artifact.outputBytes = parsed.rawBytes;
-      if (parsed.ok) {
-        artifact.status = 'PROPOSAL_ACCEPTED';
-        artifact.adjustments = parsed.adjustments;
-        artifact.renderedCss = parsed.renderedCss;
-        adjustments = parsed.adjustments;
-      } else {
-        artifact.status = parsed.status === 'SECURITY_BLOCKED' ? 'PROPOSAL_BLOCKED' : 'PROPOSAL_REJECTED';
-        artifact.reason = parsed.reason;
-        artifact.forbiddenClass = parsed.forbiddenClass;
-      }
-    }
-  } catch (e) {
-    artifact.status = 'PROPOSAL_FAILED';
-    artifact.reason = e instanceof InferenceError ? `PROVIDER_${e.code}` : 'UNEXPECTED_ERROR'; // never the message: it may echo provider text
-  }
-
-  // ---- persist the untrusted artifact; failure means the proposal is not usable ----
-  let artifactPath: string | null = null;
-  try {
-    const dir = path.join(input.evidenceRoot, 'proposals', runId);
-    await mkdir(dir, { recursive: true, mode: 0o700 });
-    artifactPath = path.join(dir, 'proposal.json');
-    await writeFile(artifactPath, JSON.stringify(artifact, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
-  } catch {
-    artifactPath = null;
-    artifact.status = 'PROPOSAL_FAILED';
-    artifact.reason = 'ARTIFACT_WRITE_FAILED';
-    artifact.adjustments = null;
-    artifact.renderedCss = null;
-    adjustments = null;
-  }
-  await store.settle(claim, { status: artifact.status, reason: artifact.reason });
-  return { label: PROPOSAL_LABEL, status: artifact.status, reason: artifact.reason, adjustments, artifact, artifactPath };
+  return { model, providerId: provider.id as 'meta' | 'baseten' };
 }
 
+export type ProcessedResponse = Pick<ProposalArtifact, 'respondedModel' | 'requestId' | 'usage' | 'lifecycle' | 'outputSha256' | 'outputBytes' | 'status' | 'reason' | 'forbiddenClass' | 'adjustments' | 'renderedCss'>;
+
+/**
+ * Pure: turn a provider response into artifact fields. Only an EXPLICIT `status: "completed"` (no
+ * error, incomplete_details or refusal), the exact requested model and non-empty output can reach the
+ * strict parser. No I/O, no provider call.
+ */
+export function processProposalResponse(res: StructuredResponse, model: string): ProcessedResponse {
+  const out: ProcessedResponse = {
+    respondedModel: typeof res.model === 'string' && /^[A-Za-z0-9._/-]{1,128}$/.test(res.model) ? res.model : null,
+    requestId: res.requestId && REQUEST_ID.test(res.requestId) ? res.requestId : null,
+    usage: res.usage,
+    lifecycle: res.lifecycle,
+    outputSha256: null,
+    outputBytes: null,
+    status: 'PROPOSAL_FAILED',
+    reason: null,
+    forbiddenClass: null,
+    adjustments: null,
+    renderedCss: null,
+  };
+  if (!res.lifecycle || res.lifecycle.completed !== true || res.lifecycle.status !== 'completed' || res.lifecycle.errorCode !== null || res.lifecycle.incompleteReason !== null || res.lifecycle.refusal) {
+    out.reason = 'RESPONSE_NOT_COMPLETED';
+  } else if (res.model !== model) {
+    out.reason = 'MODEL_MISMATCH';
+  } else if (typeof res.text !== 'string' || res.text.trim().length === 0) {
+    out.reason = 'EMPTY_OUTPUT';
+  } else {
+    const parsed = parseProposal(res.text);
+    out.outputSha256 = parsed.rawSha256;
+    out.outputBytes = parsed.rawBytes;
+    if (parsed.ok) {
+      out.status = 'PROPOSAL_ACCEPTED';
+      out.adjustments = parsed.adjustments;
+      out.renderedCss = parsed.renderedCss;
+    } else {
+      out.status = parsed.status === 'SECURITY_BLOCKED' ? 'PROPOSAL_BLOCKED' : 'PROPOSAL_REJECTED';
+      out.reason = parsed.reason;
+      out.forbiddenClass = parsed.forbiddenClass;
+    }
+  }
+  return out;
+}
+
+/** Reason code for a provider failure: only the typed code, never the message (it may echo provider text). */
+export function failureReason(e: unknown): string {
+  return e instanceof InferenceError ? `PROVIDER_${e.code}` : 'UNEXPECTED_ERROR';
+}
+
+/** Write the untrusted artifact exclusively (0600) under <evidenceRoot>/proposals/<runId>/. Returns its path, or null on failure. */
+export async function persistProposalArtifact(artifact: ProposalArtifact, evidenceRoot: string): Promise<string | null> {
+  try {
+    const dir = path.join(evidenceRoot, 'proposals', artifact.runId);
+    await mkdir(dir, { recursive: true, mode: 0o700 });
+    const file = path.join(dir, 'proposal.json');
+    await writeFile(file, JSON.stringify(artifact, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
+    return file;
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------- production entry point (disabled)
+
+/**
+ * Production proposal entry point. HARD-DISABLED: LIVE-C3-01 is NOT approved, so this rejects before
+ * touching its argument, any provider callback, any reservation or any file, whatever the caller passes
+ * (an injected or forged provider, a positive quota, credentials, billable flags or consent). A provider's
+ * transport cannot be proven to be a mock from the outside, so no caller-supplied label can enable it.
+ * Enabling live proposals requires a separately approved, reviewed commit that changes this function.
+ * Human consent for live operation must then be captured and audited separately: `createProposalConsent`
+ * only builds a consent-shaped record and does not prove that a person approved anything.
+ */
+export async function proposeCandidate(_input?: unknown): Promise<never> {
+  throw new ProposalError('LIVE_NOT_APPROVED', `live proposal calls are disabled (LIVE-C3-01 is not approved; approved live quota: meta ${APPROVED_LIVE_QUOTA.meta}, baseten ${APPROVED_LIVE_QUOTA.baseten})`);
+}
