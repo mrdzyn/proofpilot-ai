@@ -1,5 +1,6 @@
 # PP-META-I2-C3 — Verified candidate scoreboard for F01 (hackathon pivot)
 
+- **Implementation status:** C3-0 merged (PR #7). **C3-A implemented with mocks only (PR #8); production proposal entry point hard-disabled; independent re-audit pending.** C3-B to C3-F not started.
 - **State:** Revision 4. Contract merged (PR #6, independent audit PASS at `6afb386`). **SEC-C3-01 APPROVED (bounded); only the C3-0 zero-model staging spike is authorized and implemented; LIVE-C3-01 and UI-C3-01 are NOT approved.** Revision 4 records the approval, the C3-0 result and the audit's three minor follow-ups (Unicode handling in V2, frozen-install inputs, stale pointers). Remediates GPT-6 audit [issuecomment-6450106731](https://github.com/mrdzyn/proofpilot-ai/pull/6#issuecomment-6450106731), Codex inline findings 4392457764 (design gate) and 4392457775 (NC-4), and GPT-6 re-audit [issuecomment-6460634258](https://github.com/mrdzyn/proofpilot-ai/pull/6#issuecomment-6460634258) BLOCKER-1 (raw-text scanner rejected every valid JSON proposal; replaced by the parse-then-scan pipeline below).
 - **Base:** protected `main` at `5658529319032236fcddb472a617fbdc5cf9aadd` (C2B docs closure, PR #5, merged). This contract is reviewed in PR #6 (branch `docs/pp-meta-i2-c3-pivot`).
 - **Implementation branch (future):** `phase/pp-meta-i2-c3`, cut from `main` only after the start gates below are met.
@@ -117,7 +118,8 @@ Raw model text is **not** scanned for JSON syntax characters: a valid proposal m
 | FC-4 (NC-4) | comment-split `u/**/rl(` | `SECURITY_BLOCKED` (`/*`) |
 | FC-5 (NC-4) | `value` = `none; background:url(x)` or `none}` or `none"` | `SECURITY_BLOCKED` |
 | FC-6 | forbidden class in a **selector** or **property** string, or in an array element of an unknown field | `SECURITY_BLOCKED` |
-| G-1 | unknown selector (`body`, `.promo-overlay > *`, `#x`) | `PATCH_REJECTED` `UNKNOWN_SELECTOR` |
+| G-1 | unknown selector (`body`, `.promo-overlay .child`, `#x`, `.Promo-Overlay`) | `PATCH_REJECTED` `UNKNOWN_SELECTOR` |
+| G-1b | a selector with a combinator character: `.promo-overlay > *` | `SECURITY_BLOCKED` (`>` is in the markup class; precedence rule 3). Corrected in C3-A: the earlier table listed this as `PATCH_REJECTED`, contradicting V2 |
 | G-2 | disallowed pair (`.add-to-cart` with `display`; `.promo` with `height`) | `PATCH_REJECTED` `PROPERTY_NOT_ALLOWED` |
 | G-3 | `z-index` `"101"`, `"-2"`, `"01"`, `"+5"`, `"1e1"`, `"5.0"`, `""`; `height` `"0px "`, `"101vh"`, `"601px"` | `PATCH_REJECTED` `VALUE_NOT_ALLOWED` |
 | G-4 | `"none !important"`, `" none"`, `"None"`, `"NONE"` | `PATCH_REJECTED` `VALUE_NOT_ALLOWED` |

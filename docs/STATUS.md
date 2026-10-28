@@ -5,13 +5,13 @@
 ## Project
 
 - **Name:** ProofPilot AI — Meta Global AI Developer Hackathon (Push the Frontier)
-- **Current phase:** PP-META-I2-C3-0 — zero-model candidate-staging spike (implemented; awaiting independent exact-head review)
-- **Status:** C3 contract (`tasks/PP-META-I2-C3.md`, revision 4) is merged (PR #6, audit PASS at `6afb386`). Owner approved **SEC-C3-01** (bounded) and authorized only the C3-0 spike on 2026-10-28 (comment 6460953906). The spike passed locally; no model-generated candidate exists or may execute.
-- **Primary branch:** protected `main` at `c316df930501187543c1296cee41946162565278` (PR #6 squash merge)
-- **Working branch:** `phase/pp-meta-i2-c3-0-staging-spike` (Draft PR; audited head `9f1ec0d` was FIX REQUIRED (MAJOR-1, MAJOR-2); remediation code head `0d2a139a93c24741232649819ca70f81fbad012b`, then a docs commit; the branch head is authoritative)
-- **Active task:** `tasks/PP-META-I2-C3.md` (C3-0 only)
-- **Active handoff:** PP-META-I2-C3-0-R1
-- **Authorization:** Both single-use live smokes are **spent**. **APPROVED:** SEC-C3-01 (F01-only closed-grammar CSS, hand-authored controls only until further gates). **NOT APPROVED:** LIVE-C3-01 (12 Meta + 4 Baseten are proposed maximums; effective billable quota is 0) and UI-C3-01 (report layout). No Meta/Baseten request, no execution of model-generated code, no deployment or merge by the agent.
+- **Current phase:** PP-META-I2-C3-A — strict Muse Spark proposal pipeline (implemented with mocks only; awaiting independent exact-head review)
+- **Status:** C3-0 (PR #7, staging spike) is merged; independent audit 6462249567. C3-A is implemented on a Draft PR: strict proposal validation, a fail-closed proposal adapter, single-use billing reservations. **The production proposal entry point is hard-disabled** (no live provider call is possible through it) and no model-generated candidate executes.
+- **Primary branch:** protected `main` at `142cd5b36aef4288c48a25caf401bd023e29b441` (PR #7 squash merge)
+- **Working branch:** `phase/pp-meta-i2-c3-a-proposal-pipeline` (Draft PR; audited head `9cce80c` was FIX REQUIRED (MAJOR-1, MAJOR-2); remediation code head `6747b2949b95c0be60be91131c45adba5710a942`, then a docs commit; the branch head is authoritative)
+- **Active task:** `tasks/PP-META-I2-C3.md` (C3-A only)
+- **Active handoff:** PP-META-I2-C3-A-R1
+- **Authorization:** Both single-use live smokes are **spent**. **APPROVED:** SEC-C3-01 (F01-only closed-grammar CSS, hand-authored controls only until further gates). **NOT APPROVED:** LIVE-C3-01 (the effective live quota is a code constant of 0) and UI-C3-01. No Meta/Baseten call, no execution of model-generated code, no deployment or merge by the agent.
 
 ## Completed milestones
 
@@ -68,10 +68,26 @@
 | UI-C3-01 one-page static report (`design/screens/PP-C3-REPORT-CONTRACT.md`) | PENDING owner design approval |
 | Five-screen product UI (`design/screens/PP-PRODUCT-SCREEN-MAP.md`) | CUT for the hackathon; stays PROPOSED and unbuilt |
 | Independently verified Docker/ARM64 or OS sandbox | **NOT VERIFIED**. Still required before any model-authored HTML, JavaScript or free-form patch executes |
-| C3-0 staging spike (unmodified oracle run in a per-candidate stage) | **IMPLEMENTED; local proof PASSED** (NC-1, NC-1b, PC-1 as expected); first audit FIX REQUIRED (exit code, mandatory evidence), remediated; re-audit PENDING |
-| C3-A proposal validator + adapter, C3-B candidate runner, C3-C scoreboard/evidence, C3-D report + replay + audit, C3-E demo, C3-F submission | NOT STARTED |
+| C3-0 staging spike (unmodified oracle run in a per-candidate stage) | **MERGED** (PR #7, independent audit PASS) |
+| C3-A proposal validator + adapter + reservations | **IMPLEMENTED, mock-tested only**; independent review PENDING |
+| C3-B candidate runner for model proposals, C3-C scoreboard/evidence, C3-D report + replay + audit, C3-E demo, C3-F submission | NOT STARTED (C3-B needs a new handoff and authorization) |
 | Muse Wonder as patcher | UNVERIFIED and not a dependency |
 | Baseten | NOT TESTED |
+
+## C3-A result (local; remediation code head `6747b29`, clean tree, macOS arm64, Node 24.21.0)
+
+- **Audit remediation (GPT-6 comment 6463012075):**
+  - **MAJOR-1 (explicit completed):** the Meta structured proposal path now requires `status === "completed"` exactly (plus no error, incomplete_details or refusal). An absent, null, empty, wrong-type, cased, padded or unrecognised status yields `PROPOSAL_FAILED / RESPONSE_NOT_COMPLETED`, with exactly one request (also with `PROOFPILOT_INFERENCE_MAX_RETRIES=2`), a run id and slot burned, and the reservation settled as failed. Enforced in both `structuredResponse` and the pure `processProposalResponse` (defence in depth). The shared `lifecycleOf` and the C2B video path are unchanged (tests confirm).
+  - **MAJOR-2 (no injected-transport bypass):** the public `transport` label and `injectedTransportQuota` are removed as an authorization input. The production entry point `proposeCandidate` is hard-disabled: it throws `LIVE_NOT_APPROVED` before reading its argument, calling any provider method, or touching reservations or files, whatever it is given (injected or forged provider, positive quota, credentials, billable flags, consent). The full flow (pre-flight, reservation, one structured call, processing, artifact, settlement) now lives only in the mock-only harness `tests/support/proposal-harness.ts`, built on the pure production pieces `preflightProposal`, `processProposalResponse`, `persistProposalArtifact`. Nothing in `packages/` or `scripts/` calls `provider.structuredResponse` or imports the harness (tested). Enabling live proposals requires a separately approved commit that changes the entry point.
+  - **Orphan slots (secondary):** a slot is created first and the run record second, so a crash between them leaves a spent slot with no run record. This only loses capacity, never allows an extra call. Uncertain slots are never recycled; `listOrphanSlots()` reports them read-only for operator reconciliation (tested).
+  - **Consent (secondary):** `createProposalConsent` only builds a consent-shaped record. The mock-only tests do not demonstrate human consent. Any eventual live operation needs a real human approval captured and audited separately, in addition to LIVE-C3-01.
+- **Parser (`packages/core/src/patch-proposal.ts`):** pipeline V0 to V7 as before (2,048-byte bound, strict JSON with duplicate-key detection, forbidden-content scan of decoded keys and strings with NFKC and default-ignorable stripping after a pre-strip control-character check, exact shape, closed grammar through `renderCssAdjustments`), with the exact `PATCH_REJECTED` / `SECURITY_BLOCKED` precedence of the contract.
+- **Adapter pieces (`packages/inference/src/patch-proposal.ts`, `client.ts`):** `structuredResponse` (retries always 0, exact model, `reasoning.effort=low`, 3,072 output tokens, 12,000 input characters, strict json_schema derived from the renderer tables), deterministic bounded request builder (trusted oracle facts and the untrusted symptom hypothesis separately labelled), per-run consent record bound to run, provider and prompt hash.
+- **Billing (`reservations.ts`):** run id and quota slot claimed together under a lock, never released; `APPROVED_LIVE_QUOTA = {meta: 0, baseten: 0}` is a frozen code constant. Artifacts: gitignored `.proofpilot/proposals/<runId>/proposal.json`, `UNTRUSTED PROPOSAL — NOT VERIFIED`, hashes only.
+- **Tests:** lint/typecheck clean; unit 211/211; security 36/36; integration 25/25 (real browser, local); `pnpm f01:baseline` exit 0 REPRODUCED/desktop PASS/certified; `pnpm test:e2e:f01` exit 1 (expected); the C3-0 spike still gives NC-1 `PATCH_FAILED`, NC-1b `PATCH_FAILED`, PC-1 `ORACLE_PASS`. Remediation mutants 6 of 6 killed (entry point no longer throws, provider layer accepts absent status, processing accepts absent status, processing ignores refusal, slot content not recorded, C2B video path made strict) on top of the earlier 14.
+- **Zero real provider calls:** adversarial tests for both Meta and Baseten pass a purported injected transport that would forward to the real `fetch`, a Proxy-wrapped provider and a hand-forged provider object, with consent, credentials, billable flags and positive quotas: the entry point rejects, the forwarding transport and every provider method are invoked 0 times, global `fetch` is invoked 0 times, and no reservation or proposal file is created. All harness tests use an injected mock transport under a global `fetch` trap.
+- **Unchanged:** `verifier/`, `fixtures/sample-store/`, `config/`, `.github/`, `candidate-stage.ts`, C2B spent run records.
+- **Limits:** the pieces have never spoken to Meta or Baseten; the proposal schema and the Baseten chat-completions shape are unverified; the reservation lock is not crash-safe (a stale lock fails closed and needs manual removal); the harness is test code and its safety rests on tests supplying mock transports (nothing in production imports it); hosted CI does not run the real-browser tests.
 
 ## C3-0 staging spike result (local; remediation code head `0d2a139`, clean tree, macOS arm64, Node 24.21.0)
 
@@ -95,7 +111,7 @@
 
 ## Next action
 
-1. Independent exact-head re-audit of the C3-0 Draft PR (hosted CI plus the evidence above).
-2. After merge (owner), C3-A: proposal validator (pipeline V0 to V7) and fail-closed provider adapter, mocks only. LIVE-C3-01 must be approved before any billable call; UI-C3-01 before any report UI. Model-generated candidates stay blocked until C3-A tests, audit and the remaining gates.
+1. Independent exact-head review of the C3-A Draft PR (hosted CI plus the evidence above).
+2. Owner decides merge. C3-B (running accepted model proposals through the staging runner) needs a new handoff and authorization; LIVE-C3-01 must be approved before any billable call; UI-C3-01 before any report UI.
 
 Submission deadline: Nov 4, 9:00 PM EST = **Nov 5, 10:00 AM PHT**; internal target is Nov 4 PHT.
