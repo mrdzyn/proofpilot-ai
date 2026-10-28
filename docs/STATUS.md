@@ -5,13 +5,13 @@
 ## Project
 
 - **Name:** ProofPilot AI — Meta Global AI Developer Hackathon (Push the Frontier)
-- **Current phase:** PP-META-I1-C2B complete and merged (PR #5). Hackathon pivot **PP-META-I2-C3 is a DRAFT contract under review in PR #6** (branch `docs/pp-meta-i2-c3-pivot`); C3 implementation not started.
-- **Status:** C2B closed as **T04 completed (agent-reported live result)**. GPT-6's exact-head audit of PR #6 returned **FIX REQUIRED**; this revision remediates it (see `tasks/PP-META-I2-C3.md`, revision 2). The pivot keeps F01 video analysis, Muse Spark candidates, trusted verification, a scoreboard, hashed evidence and a static report, and narrows execution to a proposed closed-grammar CSS boundary. Nothing in the pivot is approved yet.
-- **Primary branch:** protected `main` at `5658529319032236fcddb472a617fbdc5cf9aadd` (C2B docs closure, PR #5)
-- **Working branch:** `docs/pp-meta-i2-c3-pivot` (docs only, PR #6, awaiting GPT-6 re-audit of the exact head). The implementation branch `phase/pp-meta-i2-c3` does not exist yet.
-- **Active task:** None. `PP-META-I2-C3` is a DRAFT contract; it has not started and its start gates are not met.
-- **Active handoff:** PP-META-I2-C3-PIVOT-2
-- **Authorization:** Both single-use live smokes are **spent**. **NOT APPROVED:** the proposed execution boundary (SEC-C3-01) and the proposed live-call quantities of 12 Muse Spark plus 4 Baseten calls (LIVE-C3-01); the report layout (UI-C3-01) is PENDING design approval. An earlier chat "yes" is not a reviewable authorization and is not relied on. No Meta request of any kind, no execution of AI-generated code or patches, no merge or deployment by an agent, no push to `main`, and no C3 implementation is authorized.
+- **Current phase:** PP-META-I2-C3-0 — zero-model candidate-staging spike (implemented; awaiting independent exact-head review)
+- **Status:** C3 contract (`tasks/PP-META-I2-C3.md`, revision 4) is merged (PR #6, audit PASS at `6afb386`). Owner approved **SEC-C3-01** (bounded) and authorized only the C3-0 spike on 2026-10-28 (comment 6460953906). The spike passed locally; no model-generated candidate exists or may execute.
+- **Primary branch:** protected `main` at `c316df930501187543c1296cee41946162565278` (PR #6 squash merge)
+- **Working branch:** `phase/pp-meta-i2-c3-0-staging-spike` (Draft PR; code head `e27c6a5a7947aebd5509692dba36830c641ceae4`, then a docs commit; the branch head is authoritative)
+- **Active task:** `tasks/PP-META-I2-C3.md` (C3-0 only)
+- **Active handoff:** PP-META-I2-C3-0-A1
+- **Authorization:** Both single-use live smokes are **spent**. **APPROVED:** SEC-C3-01 (F01-only closed-grammar CSS, hand-authored controls only until further gates). **NOT APPROVED:** LIVE-C3-01 (12 Meta + 4 Baseten are proposed maximums; effective billable quota is 0) and UI-C3-01 (report layout). No Meta/Baseten request, no execution of model-generated code, no deployment or merge by the agent.
 
 ## Completed milestones
 
@@ -62,21 +62,38 @@
 |---|---|
 | C2B (Workstream A, R1, live smokes) | DONE and merged (PR #5) |
 | T04 real Muse Spark video analysis | **COMPLETED (agent-reported)** |
-| PR #6 contract: GPT-6 exact-head review | PENDING (heads `1e8a3b5` and `aeb3821` were FIX REQUIRED; `aeb3821` BLOCKER-1: raw-text scanner contradicted valid JSON, now replaced by a parse-then-scan pipeline with test vectors) |
-| SEC-C3-01 execution boundary (closed-grammar CSS adjustments, F01 only) | **NOT APPROVED**; needs a recorded owner approval and independent acceptance |
+| PR #6 contract | MERGED (audit PASS at `6afb386`) |
+| SEC-C3-01 execution boundary (closed-grammar CSS adjustments, F01 only) | **APPROVED, bounded** (owner record in the task file). Does not certify the unimplemented C3-A validator; model candidates still blocked |
 | LIVE-C3-01 live-call quantities | **NOT APPROVED**; every live path stays disabled |
 | UI-C3-01 one-page static report (`design/screens/PP-C3-REPORT-CONTRACT.md`) | PENDING owner design approval |
 | Five-screen product UI (`design/screens/PP-PRODUCT-SCREEN-MAP.md`) | CUT for the hackathon; stays PROPOSED and unbuilt |
 | Independently verified Docker/ARM64 or OS sandbox | **NOT VERIFIED**. Still required before any model-authored HTML, JavaScript or free-form patch executes |
-| Staging spike (unmodified oracle run in a per-candidate stage) | NOT STARTED |
-| C3-A proposal adapter, C3-B candidate runner, C3-C scoreboard/evidence, C3-D report + replay + audit, C3-E demo, C3-F submission | NOT STARTED |
+| C3-0 staging spike (unmodified oracle run in a per-candidate stage) | **IMPLEMENTED; local proof PASSED** (NC-1, NC-1b, PC-1 as expected); independent review PENDING |
+| C3-A proposal validator + adapter, C3-B candidate runner, C3-C scoreboard/evidence, C3-D report + replay + audit, C3-E demo, C3-F submission | NOT STARTED |
 | Muse Wonder as patcher | UNVERIFIED and not a dependency |
 | Baseten | NOT TESTED |
 
+## C3-0 staging spike result (local, code head `e27c6a5`, clean tree, macOS arm64, Node 24.21.0)
+
+- **Mechanism:** `scripts/c3-stage-spike.ts` → `packages/core/src/candidate-stage.ts` (stage, lock, port preflight, verification, oracle run, trace proof), `css-adjustments.ts` (trusted rendering), `zip-read.ts` (trace reader). The oracle, `verifier/`, `fixtures/sample-store/`, `config/` and CI are unchanged.
+- **Run `c3-0-20261028T050720Z-d5443c` (approved SHA = `e27c6a5`; evidence `.proofpilot/c3-spike/…`, gitignored):**
+
+| Control | Rendered CSS | Mobile | Desktop | Outcome |
+|---|---|---|---|---|
+| NC-1 no-op | none | failed, tap received by `promo-overlay`, cart 0 | passed, cart 1 | `PATCH_FAILED`, baseline-identical |
+| NC-1b irrelevant | `.promo{z-index:5}` | failed, tap received by `promo-overlay`, cart 0 | passed, cart 1 | `PATCH_FAILED`, baseline-identical |
+| PC-1 correct | `.promo-overlay{pointer-events:none}` | passed, tap received by `add-to-cart`, cart 1 | passed, cart 1 | `ORACLE_PASS` (1 of 3; not `VERIFIED`) |
+
+- **Source proof, inspected:** for every control and both viewports the Playwright trace's recorded `GET /styles.css` response body equals the staged file byte for byte (baseline + per-candidate nonce marker + rendered rules), re-checked independently outside the harness. Hit-test behaviour flips exactly for PC-1.
+- **Integrity:** 11 trusted files match the approved blobs; hashes re-verified before and after each run (878 dependency files compared with the trusted install); each stage removed; lock released; no stray processes or stage directories.
+- **Dependencies:** offline frozen install is impossible here (`ERR_PNPM_NO_OFFLINE_META`); a contained, hash-compared copy of the trusted install is used (detect-only, see the task file).
+- **Environment note:** the Playwright Chromium cache had been cleared since the previous day, which broke even `pnpm f01:baseline`; `pnpm exec playwright install chromium` (documented in README) was re-run. No other network access, no registry, no model or provider call (0 by construction: the harness imports no inference code and the oracle runs with a scrubbed environment).
+- **Tests:** lint/typecheck clean; unit 141/141; security 27/27; integration 19/19 (real browser, local only; now run serially because files share port 4173); `pnpm f01:baseline` exit 0 REPRODUCED, desktop PASS, certified; `pnpm test:e2e:f01` exit 1 (expected). Mutation checks: 8 of 8 effective mutants killed (wrong oracle cwd, skipped pre-run and post-run integrity, skipped port check, skipped lock, proof ignoring bytes, skipped blob compare, skipped containment); one apparent survivor was an equivalent mutant because the port is checked twice, and removing both checks was killed.
+- **Limits:** a spike, not a sandbox. Dependency integrity is detected, not enforced; browser binaries are outside the manifests; nonce proof relies on the pinned Playwright trace format (1.64.1); only hand-written inputs ran; hosted CI does not run the real-browser staging tests.
+
 ## Next action
 
-1. GPT-6 gives a final review of the new exact head of PR #6 (BLOCKER-1 pipeline, README/ARCHITECTURE corrections, dependency-symlink wording).
-2. Owner decides SEC-C3-01, LIVE-C3-01 (exact numbers) and UI-C3-01, recording each in `tasks/PP-META-I2-C3.md`, and merges the PR if satisfied.
-3. Only then does the implementation agent cut `phase/pp-meta-i2-c3` from the merged `main` and start with the zero-model staging spike.
+1. Independent exact-head review of the C3-0 Draft PR (hosted CI plus the evidence above).
+2. After merge (owner), C3-A: proposal validator (pipeline V0 to V7) and fail-closed provider adapter, mocks only. LIVE-C3-01 must be approved before any billable call; UI-C3-01 before any report UI. Model-generated candidates stay blocked until C3-A tests, audit and the remaining gates.
 
 Submission deadline: Nov 4, 9:00 PM EST = **Nov 5, 10:00 AM PHT**; internal target is Nov 4 PHT.

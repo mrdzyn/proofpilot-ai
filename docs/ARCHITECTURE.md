@@ -75,6 +75,7 @@ No network. `validateVideoFile` verifies, in order: path safety (no `..`/NUL/sym
 - `f01-record.ts`: records genuine Chromium videos of the unmodified fixture (390×844 mobile defect clip with two taps; 1280×800 desktop control), converts to MP4 through the intake code, extracts reference frames, and writes `recording.json` with SHA-256s. Same exact-SHA rule as the baseline runner (exit 2 if evidence paths are dirty).
 - `analyze-video.ts`: thin wrapper over `packages/inference/src/analyze-command.ts`.
 - `f01-baseline.ts`: runs the oracle with a scrubbed env into a fresh run directory, classifies it, hashes every artifact, and writes `baseline-summary.json`, `metrics.json`, and `.proofpilot/metrics.jsonl`.
+- `c3-stage-spike.ts` (C3-0): runs the unmodified oracle in a disposable, hash-verified stage built from the approved SHA, for hand-written controls only (NC-1, NC-1b, PC-1), via `packages/core/src/candidate-stage.ts` (stage, lock, port preflight, integrity manifests, trace-based proof that the staged CSS was served), `css-adjustments.ts` (trusted rendering from host constants) and `zip-read.ts` (Playwright trace reader). No model or network call; not a sandbox.
 - `inference-status.ts`: config status, plus `--discover` (non-billable `GET /models`).
 - `lint.mjs`: policy lint. `validate_project_profile.py`: template baseline validator.
 
