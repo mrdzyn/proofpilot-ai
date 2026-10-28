@@ -446,4 +446,57 @@ GPT-6: re-audit the exact head. Owner: record decisions, merge if satisfied. Imp
 ### Next action
 GPT-6: final exact-head review. Owner: decide SEC-C3-01, LIVE-C3-01, UI-C3-01 and merge.
 
+## Handoff: PP-META-I2-C3-0-A1
+
+- **Task / phase:** `tasks/PP-META-I2-C3.md` (C3-0 zero-model staging spike only)
+- **From:** Implementation agent (Claude Code, Claude Sonnet 5.5)
+- **To:** GPT-6 independent exact-head review, then project owner
+- **Branch:** `phase/pp-meta-i2-c3-0-staging-spike` from `main` `c316df930501187543c1296cee41946162565278`; code head `e27c6a5a7947aebd5509692dba36830c641ceae4`; Draft PR (audit the branch head)
+- **State:** READY FOR REVIEW
+
+### Completed
+- SEC-C3-01 approval recorded in the task register with the owner link (6460953906); LIVE-C3-01 and UI-C3-01 left unapproved.
+- Audit follow-ups reconciled in the task file: V2 now strips Cf/default-ignorable/whitespace after a pre-strip control-character check (new vectors FC-3b, FC-3c); `pnpm-lock.yaml` (and any pnpm workspace metadata) is a trusted staged input; STATUS/handoff pointers refreshed (revision 4).
+- Implemented the C3-0 spike: stage from `git archive <sha>` outside the repo (0700), blob-by-blob verification, contained dependency copy with before/after manifests, exclusive lock and fixed-port preflight, host-rendered CSS only, unmodified oracle run with a scrubbed env, trace-based nonce/response-hash proof, post-run integrity recheck, cleanup, hashed evidence.
+- Result: NC-1 and NC-1b `PATCH_FAILED` with the baseline signature, PC-1 `ORACLE_PASS` (mobile and desktop), served CSS equals the staged candidate in every trace (independently re-checked), 0 model/provider calls, trusted sources unchanged.
+- One existing-file change outside the new code: `package.json` `test:integration` now runs files serially (`--test-concurrency=1`) because integration files share port 4173; CI is unaffected (it does not run integration tests).
+
+### Validation
+See `docs/STATUS.md` (lint, typecheck, unit 141/141, security 27/27, integration 19/19, baseline regression, mutation checks). Hosted CI: see the Draft PR.
+
+### Deviations and uncertainties for the reviewer
+- Dependencies use a hash-checked contained copy, not an offline frozen install (impossible here: `ERR_PNPM_NO_OFFLINE_META`); documented in the task file as option (b). Detect-only.
+- The Chromium cache was missing and was re-downloaded with the documented `playwright install chromium`; this is the only network access.
+- Trace-based proof depends on the Playwright 1.64.1 trace layout.
+
+### Not done on purpose
+C3-A validator/adapter, scoreboard, report UI, any model or provider call, any model-generated candidate, merge, deploy.
+
+### Next action
+GPT-6 review; then owner decisions.
+
+## Handoff: PP-META-I2-C3-0-R1
+
+- **Task / phase:** `tasks/PP-META-I2-C3.md` (C3-0), remediation of GPT-6 audit 6461860392 on PR #7
+- **From:** Implementation agent (Claude Code, Claude Sonnet 5.5)
+- **To:** GPT-6 independent exact-head re-audit, then project owner
+- **Branch:** `phase/pp-meta-i2-c3-0-staging-spike` (Draft PR #7); audited head `9f1ec0d43d77b3c9e78f80cff69805bf5870e16f`; remediation code head `0d2a139a93c24741232649819ca70f81fbad012b`; audit the branch head
+- **State:** READY FOR RE-AUDIT
+
+### Completed
+- **MAJOR-1:** pure `decideOutcome`: pass needs exit 0 plus both trusted tests passing with the expected observations; passing rows with a nonzero or missing exit are `INCONCLUSIVE` (`ORACLE_EXIT_ABNORMAL`); `PATCH_FAILED` only for exit 1 with settled rows. Unit table and integration tests (exit forced to 7 with passing rows, exit forced to 0 with failing rows, genuine NC-1 still `PATCH_FAILED`).
+- **MAJOR-2:** `finalizeEvidence` / `verifyPersistedEvidence`: required artifacts (report, stdout, two traces, two observations) must exist and be hashed; atomic record write; read-back re-verification; any failure downgrades to `INCONCLUSIVE`/`EVIDENCE_INCOMPLETE` and removes a stale passing record. Deterministic fault-injection tests: missing artifact (each of the six, unit), incomplete required list, hashing failure, failed record write, hash change between passes, tampered/extra files, and real-run integration faults (write failure, hash failure, trace deleted for a pass and for a fail, stale record removed when the downgrade write also fails). The spike script now fails if evidence is incomplete for NC-1, NC-1b or PC-1.
+- **docs/SECURITY.md:** SEC-C3-01 recorded as approved (bounded, hand-authored controls only until C3-A, tests and audit); broader executable model patches still require independently verified isolation; LIVE-C3-01 and UI-C3-01 remain not approved.
+- Unchanged: `verifier/`, `fixtures/sample-store/`, `config/` (incl. patch policy), `.github/`. No model/provider call. No model-generated candidate.
+
+### Validation
+See `docs/STATUS.md` (spike run `c3-0-20261028T060805Z-b1794a`, unit 152/152, security 27/27, integration 25/25, baseline regression, mutation checks). Hosted CI: see PR #7.
+
+### Open items / limits
+- Dependency integrity is detect-only; browser binaries outside manifests; trace layout pinned to Playwright 1.64.1; the real-browser staging tests are local only.
+- C3-A (validator pipeline V0 to V7 and provider adapter), LIVE-C3-01 and UI-C3-01 remain not started or not approved.
+
+### Next action
+GPT-6: re-audit the exact head. Owner: decisions after audit; no merge by the agent.
+
 <!-- HANDOFF_ENTRIES_END -->
