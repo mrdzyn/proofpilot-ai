@@ -5,13 +5,13 @@
 ## Project
 
 - **Name:** ProofPilot AI — Meta Global AI Developer Hackathon (Push the Frontier)
-- **Current phase:** PP-META-I2-C3-A — strict Muse Spark proposal pipeline (implemented with mocks only; awaiting independent exact-head review)
-- **Status:** C3-0 (PR #7, staging spike) is merged; independent audit 6462249567. C3-A is implemented on a Draft PR: strict proposal validation, a fail-closed proposal adapter, single-use billing reservations. **The production proposal entry point is hard-disabled** (no live provider call is possible through it) and no model-generated candidate executes.
-- **Primary branch:** protected `main` at `142cd5b36aef4288c48a25caf401bd023e29b441` (PR #7 squash merge)
-- **Working branch:** `phase/pp-meta-i2-c3-a-proposal-pipeline` (Draft PR; audited head `9cce80c` was FIX REQUIRED (MAJOR-1, MAJOR-2); remediation code head `6747b2949b95c0be60be91131c45adba5710a942`, then a docs commit; the branch head is authoritative)
-- **Active task:** `tasks/PP-META-I2-C3.md` (C3-A only)
-- **Active handoff:** PP-META-I2-C3-A-R1
-- **Authorization:** Both single-use live smokes are **spent**. **APPROVED:** SEC-C3-01 (F01-only closed-grammar CSS, hand-authored controls only until further gates). **NOT APPROVED:** LIVE-C3-01 (the effective live quota is a code constant of 0) and UI-C3-01. No Meta/Baseten call, no execution of model-generated code, no deployment or merge by the agent.
+- **Current phase:** PP-META-I2-C3-B1 — offline candidate verification coordinator (implemented over hand-authored controls; awaiting independent exact-head review)
+- **Status:** C3-A (PR #8, audit PASS) is merged. C3-B1 adds a deterministic coordinator, 3-replay VERIFIED logic, a machine-readable scoreboard and the separate DID-1 demonstration, all over hand-authored controls only. The production proposal entry point stays hard-disabled and no provider, Modal or model call is possible from this code.
+- **Primary branch:** protected `main` at `65e2a1f5c4f7aaaa56da1abb86c22485b2610209` (PR #8 squash merge)
+- **Working branch:** `phase/pp-meta-i2-c3-b1-offline-verification` (Draft PR #9; audited heads `02dfa82` (MAJOR-1, MAJOR-2) and `4363000` (MAJOR-3) were FIX REQUIRED; latest remediation code head `bb64b736a57f83a90884f516f79ac5de3e283ef7`, then a docs commit; the branch head is authoritative)
+- **Active task:** `tasks/PP-META-I2-C3.md` (C3-B1 only)
+- **Active handoff:** PP-META-I2-C3-B1-R2
+- **Authorization:** Both single-use live smokes are **spent**. **APPROVED:** SEC-C3-01 (F01-only closed-grammar CSS, hand-authored controls only until further gates). **NOT APPROVED:** LIVE-C3-01 (live quota is a frozen code constant of 0), UI-C3-01 (no report UI), HOST-C3-01 (no hosted backend or Modal). No Meta/Baseten/Modal call, no execution of model-generated code, no deployment or merge by the agent.
 
 ## Completed milestones
 
@@ -69,10 +69,54 @@
 | Five-screen product UI (`design/screens/PP-PRODUCT-SCREEN-MAP.md`) | CUT for the hackathon; stays PROPOSED and unbuilt |
 | Independently verified Docker/ARM64 or OS sandbox | **NOT VERIFIED**. Still required before any model-authored HTML, JavaScript or free-form patch executes |
 | C3-0 staging spike (unmodified oracle run in a per-candidate stage) | **MERGED** (PR #7, independent audit PASS) |
-| C3-A proposal validator + adapter + reservations | **IMPLEMENTED, mock-tested only**; independent review PENDING |
-| C3-B candidate runner for model proposals, C3-C scoreboard/evidence, C3-D report + replay + audit, C3-E demo, C3-F submission | NOT STARTED (C3-B needs a new handoff and authorization) |
+| C3-A proposal validator + adapter + reservations | **MERGED** (PR #8, independent audit PASS); production entry point hard-disabled |
+| C3-B1 offline coordinator, 3-replay VERIFIED logic, scoreboard, DID-1 (hand-authored controls) | **IMPLEMENTED**; independent review PENDING |
+| C3-B2 model proposals through the coordinator | NOT STARTED; needs LIVE-C3-01, enabling the proposal entry point in a separately reviewed commit and a new handoff |
+| C3-C scoreboard report UI, C3-D report + replay + audit, C3-E demo, C3-F submission | NOT STARTED (UI-C3-01 not approved) |
+| Baseten compatibility (`docs/BASETEN-COMPATIBILITY-PLAN.md`) | PLAN ONLY; pinned id vs public docs discrepancy and a structured-output doubt recorded; NOT TESTED |
+| Modal sandbox (`docs/MODAL-FEASIBILITY-PROPOSAL.md`) | PROPOSAL ONLY; the C3 contract forbids hosted backends; HOST-C3-01 not requested; not a verified boundary |
 | Muse Wonder as patcher | UNVERIFIED and not a dependency |
 | Baseten | NOT TESTED |
+
+## C3-B1 audit remediation 2 (GPT-6 comment 6464385552; MAJOR-3; MAJOR-1 and MAJOR-2 re-audited RESOLVED, code head `bb64b73`)
+
+- **MAJOR-3 (replay display metadata and baseline provenance):** every published `ReplayEntry` field now comes from one pure builder, `buildReplayEntry`, which the coordinator publishes with and `verifyScoreboard` calls again on the persisted record, its file bytes and the independently recomputed evidence check. The verifier compares the whole entry field by field (`n`, `outcome`, `failureCode`, `failureMessage`, `oracleExitCode`, `evidenceDir`, `recordSha256`, `candidateCssSha256`, `nonce`, `mobile`, `desktop`, `servedCssSha256`, `evidenceFinalized`, `evidenceProblems`) and rejects any extra key, for the baseline and every candidate replay. The baseline must be exactly `BASELINE/replay-1` with a record labelled `BASELINE`; every candidate replay record must carry its own control id as its label. A real evidence problem that the published entry omits is reported. Truthful failed and inconclusive scoreboards (including real failure messages) still verify. `decideVerification`, the oracle and `candidate-stage.ts` are unchanged.
+- **Tests:** 14 single-field forgeries across 7 kinds of replay (failed, inconclusive, passing, the baseline) without touching the authentic evidence; evidence tampered after the scoreboard was written; baseline redirected to NC-1 (authentic, hash-matching, fields copied) fails on path and label; baseline and candidate record-label forgeries with matching hashes; truthful negative scoreboards; real-browser checks on the real evidence. Also fixed a flaky concurrency test (either coordinator may win the lock; the old test assumed one). Lint/typecheck clean; unit 242/242; security 41/41; integration 29/29 (real browser, local); `pnpm f01:baseline` exit 0 certified; `pnpm test:e2e:f01` exit 1 (expected); C3-0 spike unchanged. 8 of 8 new-guard mutants killed.
+- **Real run `c3-b1-20261028T084508Z-e27b62` (approved SHA = code head, clean tree):** baseline REPRODUCED; NC-1, NC-1b, NC-3 `PATCH_FAILED`; NC-6 and NC-7 `INCONCLUSIVE`; PC-1 `VERIFIED` 3/3; NC-5 `NOT_REPRODUCED`; the stricter verifier accepted it; DID-1 passed (separate). Example scoreboard regenerated.
+- No provider, Modal or model call; `proposeCandidate` still hard-disabled; live quota 0; no report UI.
+
+## C3-B1 audit remediation (GPT-6 comment 6464103194; remediation code head `6002b60`)
+
+- **MAJOR-1 (scoreboard completeness, NC-5):** `verifyScoreboard` no longer trusts the scoreboard's own list. It checks the exact inventory from trusted code (`HAND_AUTHORED_CONTROLS`: NC-1, NC-1b, NC-3, NC-6, NC-7, PC-1 in order, no missing, extra, duplicated, renamed or reordered control), each control's description, adjustments, rendered CSS, candidate id, fault kind, replays required and expected status, sequential replay numbering and paths, and recomputes `replaysAttempted`, `replaysPassed`, `status`, `reason`, `expectationMet` and `expectationProblems` from the persisted records. A replay list that is truncated or padded relative to the evidence is rejected (a truthful run stops at the first replay that is not a clean pass, or attempts none without a reproduced baseline). NC-5 is recomputed from the persisted PC-1 evidence (baseline gate then decision) and a missing, altered or VERIFIED-claiming NC-5 fails. Top-level fields, `complete`, the label, zero provider/Modal calls and an `approvedSha` shape check are enforced; a `did1` field fails. A truthful scoreboard of a run whose expectations were not met (for example a failing third PC-1 replay, or a baseline that did not reproduce) still verifies.
+- **MAJOR-2 (SHA, manifest and viewport proof binding):** `baselineGate(e, approvedSha)` and `replayPassProblems(e, approvedSha)` require the record and its manifest to name the approved SHA, so a certified baseline from another SHA cannot certify a candidate. `decideVerification` now takes the approved SHA and the baseline evidence itself (not a boolean): every replay must also carry the baseline's trusted-file manifest. `sourceProof` must contain exactly one `F01-MOBILE` and exactly one `F01-DESKTOP` entry, each valid, for the baseline and for every qualifying replay; duplicates, missing and mislabeled proofs never promote. The three-replay `VERIFIED` rule and the C3-0 staging runner (`candidate-stage.ts`) are unchanged.
+- **Tests:** lint/typecheck clean; unit 237/237; security 41/41; integration 28/28 (real browser, local); `pnpm f01:baseline` exit 0 REPRODUCED/certified; `pnpm test:e2e:f01` exit 1 (expected); C3-0 spike unchanged. Regression tests cover `candidates=[]`, omitted PC-1, duplicated/extra/renamed/reordered controls, fake counts, truncated replay lists, altered metadata, false `complete`, forged NC-5 (VERIFIED, `neverVerified` false, removed, altered), cross-SHA baseline, mismatched record/manifest SHAs, drifted trusted manifests, and duplicate/missing/mislabeled viewport proofs. 16 new-guard mutants: 15 killed, 1 equivalent (the proof-label check is implied by the exactly-one-each rule).
+- **Real run `c3-b1-20261028T082601Z-589dba` (approved SHA = code head, clean tree):** baseline REPRODUCED; NC-1, NC-1b, NC-3 `PATCH_FAILED`; NC-6 `INCONCLUSIVE` (TAMPER); NC-7 `INCONCLUSIVE` (PORT_BUSY); PC-1 `VERIFIED` 3/3; NC-5 `NOT_REPRODUCED`; scoreboard re-verified OK by the stricter verifier; DID-1 passed (separate). Example: `docs/examples/c3-b1-scoreboard.example.json`.
+- No provider, Modal or model call; `proposeCandidate` still hard-disabled; live quota still 0; `verifier/`, `fixtures/`, `config/`, `.github/` and `candidate-stage.ts` unchanged.
+
+## C3-B1 result (local; code head `358c273`, clean tree, macOS arm64, Node 24.21.0)
+
+- **Mechanism:** `packages/core/src/candidate-coordinator.ts` drives the unchanged C3-0 runner serially, one fresh disposable stage per replay, under a coordinator lock plus the existing oracle lock and port preflight. A baseline gate (`baselineGate`) must certify F01 REPRODUCED in a fresh stage first. `decideVerification` is the only place `VERIFIED` is returned: it needs a reproduced baseline, exactly three replays, each a complete clean pass (oracle exit 0, evidence finalized and hash-verified, integrity intact, stage removed, both viewports passed with the tap received by `add-to-cart` and cart 1, trace proof that the staged CSS was served for both viewports), identical approved SHA, rendered CSS, adjustments and trusted-file manifest, and a fresh nonce per replay. One pass is `ORACLE_PASS`. `verifyScoreboard` recomputes every status from the persisted evidence, so a forged, truncated or tampered scoreboard fails closed. The scoreboard is written atomically only when the run completes.
+- **Controls (all hand-authored literals; none read from a file, environment or model):** NC-1, NC-1b, NC-3, NC-6 (stage tamper), NC-7 (busy port), PC-1 (3 replays), and NC-5 derived by applying the baseline gate to the real PC-1 stage (a tree where the oracle passes). DID-1 is a separate demonstration (`containment-demo.ts`, not exported from the package index, not in the scoreboard, result type `isCandidateVerdict: false`).
+- **Run `c3-b1-20261028T080446Z-7091e5` (approved SHA `358c273`; evidence `.proofpilot/c3-b1/…`, gitignored; real, sanitized example in `docs/examples/c3-b1-scoreboard.example.json`):**
+
+| Control | Status | Replays passed | Detail |
+|---|---|---|---|
+| BASELINE gate | REPRODUCED (certified) | n/a | mobile fails by interception, desktop passes, exit 1 |
+| NC-1 | `PATCH_FAILED` | 0/1 | baseline-identical |
+| NC-1b | `PATCH_FAILED` | 0/1 | baseline-identical |
+| NC-3 | `PATCH_FAILED` | 0/1 | mobile and desktop both failed |
+| NC-6 | `INCONCLUSIVE` | 0/1 | `TAMPER`, oracle never ran |
+| NC-7 | `INCONCLUSIVE` | 0/1 | `PORT_BUSY`, oracle never ran |
+| PC-1 | **`VERIFIED`** | 3/3 | three fresh stages, three distinct nonces, exit 0 each |
+| NC-5 | `NOT_REPRODUCED` | n/a | never VERIFIED |
+| DID-1 | passed (separate) | n/a | 2 URLs aborted, canary 0 connections routed, control canary 1 |
+
+- **Independent re-check of the saved evidence (separate script):** every replay record hash matches, every evidence hash matches, and in every trace of every stage that ran the browser, the served `/styles.css` equals baseline + nonce + rendered rules.
+- **VERIFIED scope:** "the hand-authored PC-1 candidate passes the unmodified F01 oracle in 3 fresh staged replays under the approved SHA". It says nothing about a model, about other fixtures, or about sandboxing.
+- **Tests:** lint/typecheck clean; unit 228/228; security 41/41; integration 28/28 (real browser, local only); `pnpm f01:baseline` exit 0 REPRODUCED/certified; `pnpm test:e2e:f01` exit 1 (expected); C3-0 spike unchanged (NC-1 and NC-1b `PATCH_FAILED`, PC-1 `ORACLE_PASS`). 14 of 14 guard mutants killed (fewer than 3 replays, baseline bypass, desktop requirement, freshness, identical CSS and adjustments, trusted hashes, evidence problems, exit code, scoreboard recompute, record hash, continue-after-failure, coordinator lock, baseline desktop check, DID-1 in scoreboard); two initial survivors were fixed with sharper tests.
+- **Zero provider/Modal calls:** the coordinator, the script and DID-1 import no inference, intake or proposal code and name no provider endpoint (security test); `modelOrProviderCalls` and `modalCalls` are 0 in the scoreboard and a scoreboard claiming otherwise fails verification; `proposeCandidate` still throws `LIVE_NOT_APPROVED`; the live quota constant is still `{meta: 0, baseten: 0}`.
+- **Unchanged:** `verifier/`, `fixtures/sample-store/`, `config/` (patch policy), `.github/`, `candidate-stage.ts`, the proposal modules and the C2B spent run records.
+- **Limits:** a spike-grade harness, not a sandbox; dependency integrity is detect-only; the nonce proof depends on the Playwright 1.64.1 trace layout; VERIFIED here means the closed-grammar CSS control passed three local runs; the coordinator lock and the oracle lock are not crash-safe (a stale lock fails closed and needs manual removal); the real-browser tests and the script are local only (hosted CI runs lint, typecheck, unit, security and the baseline).
 
 ## C3-A result (local; remediation code head `6747b29`, clean tree, macOS arm64, Node 24.21.0)
 
@@ -111,7 +155,7 @@
 
 ## Next action
 
-1. Independent exact-head review of the C3-A Draft PR (hosted CI plus the evidence above).
-2. Owner decides merge. C3-B (running accepted model proposals through the staging runner) needs a new handoff and authorization; LIVE-C3-01 must be approved before any billable call; UI-C3-01 before any report UI.
+1. Independent exact-head review of the C3-B1 Draft PR (hosted CI plus the evidence above).
+2. Owner decides merge and whether to pursue any of: LIVE-C3-01 (live proposals; needs real human consent capture and a reviewed commit enabling the entry point), the Baseten compatibility stages, HOST-C3-01 (Modal), UI-C3-01 (report). None is started or authorized.
 
 Submission deadline: Nov 4, 9:00 PM EST = **Nov 5, 10:00 AM PHT**; internal target is Nov 4 PHT.

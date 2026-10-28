@@ -548,4 +548,75 @@ Unit 211/211, security 36/36, integration 25/25, F01 baseline certified, C3-0 sp
 ### Next action
 GPT-6: re-audit the exact head. Owner: decisions after audit; no merge by the agent.
 
+## Handoff: PP-META-I2-C3-B1-A1
+
+- **Task / phase:** `tasks/PP-META-I2-C3.md` (C3-B1: offline candidate verification coordinator, hand-authored controls only)
+- **From:** Implementation agent (Claude Code, Claude Sonnet 5.5)
+- **To:** GPT-6 independent exact-head review, then project owner
+- **Branch:** `phase/pp-meta-i2-c3-b1-offline-verification` from `main` `65e2a1f5c4f7aaaa56da1abb86c22485b2610209`; code head `358c273d6cfcf06829b62c05810fe8f116e1086a`; Draft PR (audit the branch head)
+- **State:** READY FOR REVIEW
+
+### Completed
+- Coordinator, `decideVerification`/`baselineGate`/`replayPassProblems`, atomic scoreboard, `verifyScoreboard`; controls NC-1, NC-1b, NC-3, NC-6, NC-7, PC-1 (3 replays) and derived NC-5; separate DID-1 demonstration; `scripts/c3-offline-verification.ts`. Example scoreboard: `docs/examples/c3-b1-scoreboard.example.json`.
+- Result: PC-1 `VERIFIED` 3/3 (hand-authored, three fresh stages, distinct nonces, evidence re-checked independently); NC-1, NC-1b, NC-3 `PATCH_FAILED`; NC-6 `TAMPER` and NC-7 `PORT_BUSY` `INCONCLUSIVE`; NC-5 `NOT_REPRODUCED`; DID-1 passed as a separate demonstration.
+- Docs only: `docs/BASETEN-COMPATIBILITY-PLAN.md` (pinned id `meta-models/muse-spark-open-1026` vs public docs naming "Muse Spark Open" without a slug, and the public statement that Muse Spark Open does not support structured outputs, which our Baseten request uses; staged B0 to B4 plan, nothing run) and `docs/MODAL-FEASIBILITY-PROPOSAL.md` (feasibility and scope-change proposal; the C3 contract prohibits hosted backends; egress controls not found in the guide page read; not a verified boundary; HOST-C3-01 not requested).
+- Unchanged: `candidate-stage.ts`, proposal modules, `verifier/`, `fixtures/sample-store/`, `config/`, `.github/`. No Meta/Baseten/Modal call. No model-generated candidate. Production `proposeCandidate` still hard-disabled; live quota still 0.
+
+### Validation
+Unit 228/228, security 41/41, integration 28/28, F01 baseline certified, C3-0 spike unchanged, 14/14 mutants killed. Hosted CI: see the Draft PR.
+
+### Open items and questions for the reviewer
+- Whether `VERIFIED` for a hand-authored closed-grammar CSS control under local replays is worded narrowly enough (scope text in STATUS).
+- The coordinator and oracle locks are not crash-safe (fail closed).
+- Baseten: structured-output support and the served id are unresolved; Modal: egress control undocumented in the page read.
+- Not done on purpose: report UI (UI-C3-01), model proposals through the coordinator (C3-B2), any provider or Modal call.
+
+### Next action
+GPT-6 review; owner decides merge and any of LIVE-C3-01, Baseten stages, HOST-C3-01, UI-C3-01.
+
+## Handoff: PP-META-I2-C3-B1-R1
+
+- **Task / phase:** `tasks/PP-META-I2-C3.md` (C3-B1), remediation of GPT-6 audit 6464103194 on PR #9
+- **From:** Implementation agent (Claude Code, Claude Sonnet 5.5)
+- **To:** GPT-6 independent exact-head re-audit, then project owner
+- **Branch:** `phase/pp-meta-i2-c3-b1-offline-verification` (Draft PR #9); audited head `02dfa8208a7f0179066f22858ffd5384a3c7af2e`; remediation code head `6002b6009dd952da019b64319ec2c4f15367d211`; audit the branch head
+- **State:** READY FOR RE-AUDIT
+
+### Completed
+- **MAJOR-1:** `verifyScoreboard` enforces the exact trusted control inventory and recomputes counts, status, reason, expectation metadata and NC-5 from persisted evidence; truncated/padded replay lists, forged NC-5, fake counts and a false `complete` fail; truthful negative-case scoreboards still verify.
+- **MAJOR-2:** baseline and every replay must name the approved SHA in record and manifest; replays must match the baseline's trusted manifest; exactly one `F01-MOBILE` and one `F01-DESKTOP` proof per run. `decideVerification` now takes `{approvedSha, baseline, replays}`. Three-replay VERIFIED rule and `candidate-stage.ts` unchanged.
+- STATUS and SECURITY updated; example scoreboard regenerated from the new run.
+- Unchanged: `verifier/`, `fixtures/sample-store/`, `config/`, `.github/`, proposal modules. No Meta/Baseten/Modal call. No model-generated candidate. No report UI.
+
+### Validation
+Unit 237/237, security 41/41, integration 28/28, F01 baseline certified, C3-0 spike unchanged, real C3-B1 run all expectations met and re-verified, 15/16 new mutants killed (1 equivalent). Hosted CI: see PR #9.
+
+### Open items
+- The coordinator and oracle locks are not crash-safe (fail closed). Baseten, Modal, LIVE-C3-01, UI-C3-01 remain unstarted/unapproved.
+
+### Next action
+GPT-6: re-audit the exact head. Owner: decisions after audit; no merge by the agent.
+
+## Handoff: PP-META-I2-C3-B1-R2
+
+- **Task / phase:** `tasks/PP-META-I2-C3.md` (C3-B1), remediation of GPT-6 re-audit 6464385552 (MAJOR-3) on PR #9
+- **From:** Implementation agent (Claude Code, Claude Sonnet 5.5)
+- **To:** GPT-6 independent exact-head re-audit, then project owner
+- **Branch:** `phase/pp-meta-i2-c3-b1-offline-verification` (Draft PR #9); audited head `43630004d605d1809dcfa6f34538a8ecb674241c`; remediation code head `bb64b736a57f83a90884f516f79ac5de3e283ef7`; audit the branch head
+- **State:** READY FOR RE-AUDIT
+
+### Completed
+- MAJOR-3: shared `buildReplayEntry`; `verifyScoreboard` rebuilds and compares every ReplayEntry field (and rejects extra keys) for the baseline and every candidate replay; baseline pinned to `BASELINE/replay-1` with a `BASELINE`-labelled record; candidate records must carry their control ids. MAJOR-1 and MAJOR-2 fixes untouched. `decideVerification`, the oracle and C3-0 staging unchanged.
+- Test race fixed (concurrent coordinators: either may win).
+- Unchanged: `verifier/`, `fixtures/sample-store/`, `config/`, `.github/`, `candidate-stage.ts`, proposal modules. No Meta/Baseten/Modal call. No model-generated candidate. No report UI.
+
+### Validation
+Unit 242/242, security 41/41, integration 29/29, F01 baseline certified, C3-0 spike unchanged, real C3-B1 run all expectations met and re-verified, 8/8 new mutants killed. Hosted CI: see PR #9.
+
+### Open items
+- Locks are not crash-safe (fail closed). Baseten, Modal, LIVE-C3-01, HOST-C3-01, UI-C3-01 unstarted/unapproved.
+
+### Next action
+GPT-6: re-audit the exact head. Owner: decisions after audit; no merge by the agent.
+
 <!-- HANDOFF_ENTRIES_END -->

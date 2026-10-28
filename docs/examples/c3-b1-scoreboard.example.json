@@ -1,0 +1,391 @@
+{
+  "_example": "Real scoreboard from the local, gitignored run c3-b1-20261028T084508Z-e27b62 at code head bb64b736a57f83a90884f516f79ac5de3e283ef7. Evidence directories are relative to that run directory and are not committed. Produced by scripts/c3-offline-verification.ts; verified by verifyScoreboard().",
+  "schemaVersion": 1,
+  "label": "HAND-AUTHORED CONTROLS ONLY \u2014 NO MODEL INPUT",
+  "complete": true,
+  "approvedSha": "bb64b736a57f83a90884f516f79ac5de3e283ef7",
+  "createdAt": "2026-10-28T08:45:41.462Z",
+  "modelOrProviderCalls": 0,
+  "modalCalls": 0,
+  "baseline": {
+    "reproduced": true,
+    "reasons": [],
+    "replay": {
+      "n": 1,
+      "outcome": "PATCH_FAILED",
+      "failureCode": null,
+      "failureMessage": null,
+      "oracleExitCode": 1,
+      "evidenceDir": "BASELINE/replay-1",
+      "recordSha256": "1238722bfb3da5af1db311f0e4da86fa7ad36c33ace998f957ff4e7fcd446f85",
+      "candidateCssSha256": "ee4378172d30b6a74357dc82f8f852c067bf5dad28054fb977f997d28db0b249",
+      "nonce": "de7fb4a81daf35439cc69d91",
+      "mobile": {
+        "status": "failed",
+        "hitTestTarget": "promo-overlay",
+        "cartCountAfter": "0"
+      },
+      "desktop": {
+        "status": "passed",
+        "hitTestTarget": "add-to-cart",
+        "cartCountAfter": "1"
+      },
+      "servedCssSha256": [
+        "ee4378172d30b6a74357dc82f8f852c067bf5dad28054fb977f997d28db0b249",
+        "ee4378172d30b6a74357dc82f8f852c067bf5dad28054fb977f997d28db0b249"
+      ],
+      "evidenceFinalized": true,
+      "evidenceProblems": []
+    }
+  },
+  "candidates": [
+    {
+      "id": "NC-1",
+      "description": "no-op: empty adjustments",
+      "provenance": "hand-authored-control",
+      "candidateId": "5df4bd37285610965fc5a7744904a5a70d07c2bc6bc2bba1a1e533e4430abaf8",
+      "adjustments": [],
+      "renderedCss": "",
+      "fault": null,
+      "replaysRequired": 1,
+      "replaysAttempted": 1,
+      "replaysPassed": 0,
+      "status": "PATCH_FAILED",
+      "reason": "replay 1: outcome is PATCH_FAILED",
+      "expected": "PATCH_FAILED",
+      "expectationMet": true,
+      "expectationProblems": [],
+      "replays": [
+        {
+          "n": 1,
+          "outcome": "PATCH_FAILED",
+          "failureCode": null,
+          "failureMessage": null,
+          "oracleExitCode": 1,
+          "evidenceDir": "NC-1/replay-1",
+          "recordSha256": "b3f0bd7c02c6eef5a0656e4668896102e399cdac2ea105157a254a24db63ccfc",
+          "candidateCssSha256": "483de638bbad12dc71725a8d3cb2adb33793b9e98f6559f9ad97785ae200ed82",
+          "nonce": "92a5bdf714851f5549763bf8",
+          "mobile": {
+            "status": "failed",
+            "hitTestTarget": "promo-overlay",
+            "cartCountAfter": "0"
+          },
+          "desktop": {
+            "status": "passed",
+            "hitTestTarget": "add-to-cart",
+            "cartCountAfter": "1"
+          },
+          "servedCssSha256": [
+            "483de638bbad12dc71725a8d3cb2adb33793b9e98f6559f9ad97785ae200ed82",
+            "483de638bbad12dc71725a8d3cb2adb33793b9e98f6559f9ad97785ae200ed82"
+          ],
+          "evidenceFinalized": true,
+          "evidenceProblems": []
+        }
+      ]
+    },
+    {
+      "id": "NC-1b",
+      "description": "irrelevant allowed rule: .promo z-index 5",
+      "provenance": "hand-authored-control",
+      "candidateId": "c03dae278988ec34b5ec042f8bb65ff8d7b484f978144665ac165a9a4b343f63",
+      "adjustments": [
+        {
+          "selector": ".promo",
+          "property": "z-index",
+          "value": "5"
+        }
+      ],
+      "renderedCss": ".promo{z-index:5}\n",
+      "fault": null,
+      "replaysRequired": 1,
+      "replaysAttempted": 1,
+      "replaysPassed": 0,
+      "status": "PATCH_FAILED",
+      "reason": "replay 1: outcome is PATCH_FAILED",
+      "expected": "PATCH_FAILED",
+      "expectationMet": true,
+      "expectationProblems": [],
+      "replays": [
+        {
+          "n": 1,
+          "outcome": "PATCH_FAILED",
+          "failureCode": null,
+          "failureMessage": null,
+          "oracleExitCode": 1,
+          "evidenceDir": "NC-1b/replay-1",
+          "recordSha256": "c8b3822c063cf0bd53aff12749d20b39c38005b96194ab050738f1ebfcf30596",
+          "candidateCssSha256": "6fcf3f7f8ae6b814fda70641429f6938ff6e13f3e589b0df34e9900530d93fa7",
+          "nonce": "6418d3f027f3d16e646195f6",
+          "mobile": {
+            "status": "failed",
+            "hitTestTarget": "promo-overlay",
+            "cartCountAfter": "0"
+          },
+          "desktop": {
+            "status": "passed",
+            "hitTestTarget": "add-to-cart",
+            "cartCountAfter": "1"
+          },
+          "servedCssSha256": [
+            "6fcf3f7f8ae6b814fda70641429f6938ff6e13f3e589b0df34e9900530d93fa7",
+            "6fcf3f7f8ae6b814fda70641429f6938ff6e13f3e589b0df34e9900530d93fa7"
+          ],
+          "evidenceFinalized": true,
+          "evidenceProblems": []
+        }
+      ]
+    },
+    {
+      "id": "NC-3",
+      "description": "regression: .add-to-cart pointer-events none (both oracle tests must fail)",
+      "provenance": "hand-authored-control",
+      "candidateId": "e0d9795ddb63a1b2455a6d1293271a3189846c1e8a75dab17dc8ad1bb9a31e1b",
+      "adjustments": [
+        {
+          "selector": ".add-to-cart",
+          "property": "pointer-events",
+          "value": "none"
+        }
+      ],
+      "renderedCss": ".add-to-cart{pointer-events:none}\n",
+      "fault": null,
+      "replaysRequired": 1,
+      "replaysAttempted": 1,
+      "replaysPassed": 0,
+      "status": "PATCH_FAILED",
+      "reason": "replay 1: outcome is PATCH_FAILED",
+      "expected": "PATCH_FAILED",
+      "expectationMet": true,
+      "expectationProblems": [],
+      "replays": [
+        {
+          "n": 1,
+          "outcome": "PATCH_FAILED",
+          "failureCode": null,
+          "failureMessage": null,
+          "oracleExitCode": 1,
+          "evidenceDir": "NC-3/replay-1",
+          "recordSha256": "4dead93167fe004500d808c69e96ecd393d7c3139595700177bd2ed83c2f1dc9",
+          "candidateCssSha256": "3713948edc2cb0ae9152c3d831af3412d6bbfb64c08ccca91190ed9808fd9fe6",
+          "nonce": "0b2170ad2796dbb1b6490b59",
+          "mobile": {
+            "status": "failed",
+            "hitTestTarget": "promo-overlay",
+            "cartCountAfter": "0"
+          },
+          "desktop": {
+            "status": "failed",
+            "hitTestTarget": "section",
+            "cartCountAfter": "0"
+          },
+          "servedCssSha256": [
+            "3713948edc2cb0ae9152c3d831af3412d6bbfb64c08ccca91190ed9808fd9fe6",
+            "3713948edc2cb0ae9152c3d831af3412d6bbfb64c08ccca91190ed9808fd9fe6"
+          ],
+          "evidenceFinalized": true,
+          "evidenceProblems": []
+        }
+      ]
+    },
+    {
+      "id": "NC-6",
+      "description": "stage tamper between manifest and run (verifier file edited in the stage)",
+      "provenance": "hand-authored-control",
+      "candidateId": "31a88f0a001a13e055da1b149f270efff2b121589c73cb45e88f978d7252c954",
+      "adjustments": [
+        {
+          "selector": ".promo-overlay",
+          "property": "pointer-events",
+          "value": "none"
+        }
+      ],
+      "renderedCss": ".promo-overlay{pointer-events:none}\n",
+      "fault": "stage-tamper",
+      "replaysRequired": 1,
+      "replaysAttempted": 1,
+      "replaysPassed": 0,
+      "status": "INCONCLUSIVE",
+      "reason": "replay 1: outcome is INCONCLUSIVE",
+      "expected": "INCONCLUSIVE",
+      "expectationMet": true,
+      "expectationProblems": [],
+      "replays": [
+        {
+          "n": 1,
+          "outcome": "INCONCLUSIVE",
+          "failureCode": "TAMPER",
+          "failureMessage": "trusted staged file changed: verifier/f01/f01.oracle.spec.ts",
+          "oracleExitCode": null,
+          "evidenceDir": "NC-6/replay-1",
+          "recordSha256": "70d7233783b7ff52dcb27be624e7ded19e5de06653cc8fe07722eb5ff770c33d",
+          "candidateCssSha256": "e4e4b559a2e7c281312f5ac9144c9bed27c5e54a1cb707263a5c2b4494a0e5b3",
+          "nonce": "afabe67a75d080d8b59ad6e9",
+          "mobile": null,
+          "desktop": null,
+          "servedCssSha256": [],
+          "evidenceFinalized": false,
+          "evidenceProblems": []
+        }
+      ]
+    },
+    {
+      "id": "NC-7",
+      "description": "port 4173 held by another listener",
+      "provenance": "hand-authored-control",
+      "candidateId": "31a88f0a001a13e055da1b149f270efff2b121589c73cb45e88f978d7252c954",
+      "adjustments": [
+        {
+          "selector": ".promo-overlay",
+          "property": "pointer-events",
+          "value": "none"
+        }
+      ],
+      "renderedCss": ".promo-overlay{pointer-events:none}\n",
+      "fault": "busy-port",
+      "replaysRequired": 1,
+      "replaysAttempted": 1,
+      "replaysPassed": 0,
+      "status": "INCONCLUSIVE",
+      "reason": "replay 1: outcome is INCONCLUSIVE",
+      "expected": "INCONCLUSIVE",
+      "expectationMet": true,
+      "expectationProblems": [],
+      "replays": [
+        {
+          "n": 1,
+          "outcome": "INCONCLUSIVE",
+          "failureCode": "PORT_BUSY",
+          "failureMessage": "127.0.0.1:4173 is not free; refusing to run the oracle against an unknown server",
+          "oracleExitCode": null,
+          "evidenceDir": "NC-7/replay-1",
+          "recordSha256": "900b3994454c3b13eb262ade126e1e523cad57ce8b7474817ba47fb621b581d6",
+          "candidateCssSha256": null,
+          "nonce": null,
+          "mobile": null,
+          "desktop": null,
+          "servedCssSha256": [],
+          "evidenceFinalized": false,
+          "evidenceProblems": []
+        }
+      ]
+    },
+    {
+      "id": "PC-1",
+      "description": "hand-written correct fix: .promo-overlay pointer-events none",
+      "provenance": "hand-authored-control",
+      "candidateId": "31a88f0a001a13e055da1b149f270efff2b121589c73cb45e88f978d7252c954",
+      "adjustments": [
+        {
+          "selector": ".promo-overlay",
+          "property": "pointer-events",
+          "value": "none"
+        }
+      ],
+      "renderedCss": ".promo-overlay{pointer-events:none}\n",
+      "fault": null,
+      "replaysRequired": 3,
+      "replaysAttempted": 3,
+      "replaysPassed": 3,
+      "status": "VERIFIED",
+      "reason": null,
+      "expected": "VERIFIED",
+      "expectationMet": true,
+      "expectationProblems": [],
+      "replays": [
+        {
+          "n": 1,
+          "outcome": "ORACLE_PASS",
+          "failureCode": null,
+          "failureMessage": null,
+          "oracleExitCode": 0,
+          "evidenceDir": "PC-1/replay-1",
+          "recordSha256": "1447648ab569148fcbe4b2346b396249cafcab356b7324535f7ec2e10a2215b9",
+          "candidateCssSha256": "4e693f458b6e21c2502d66789e603eebaa255f4299105e0c82258a3ea56a0d80",
+          "nonce": "69bb2dc3c84df2a97a16c9e2",
+          "mobile": {
+            "status": "passed",
+            "hitTestTarget": "add-to-cart",
+            "cartCountAfter": "1"
+          },
+          "desktop": {
+            "status": "passed",
+            "hitTestTarget": "add-to-cart",
+            "cartCountAfter": "1"
+          },
+          "servedCssSha256": [
+            "4e693f458b6e21c2502d66789e603eebaa255f4299105e0c82258a3ea56a0d80",
+            "4e693f458b6e21c2502d66789e603eebaa255f4299105e0c82258a3ea56a0d80"
+          ],
+          "evidenceFinalized": true,
+          "evidenceProblems": []
+        },
+        {
+          "n": 2,
+          "outcome": "ORACLE_PASS",
+          "failureCode": null,
+          "failureMessage": null,
+          "oracleExitCode": 0,
+          "evidenceDir": "PC-1/replay-2",
+          "recordSha256": "d847ff568d7dc667c9ee30fdf798626fe9f5eb565373f1e273662f77e485e557",
+          "candidateCssSha256": "820478be6c852fb82cbd85b63c29ef032bb19bd6b09d7078f80e67e7abf5564c",
+          "nonce": "5a1b87f228ecac3bc996b002",
+          "mobile": {
+            "status": "passed",
+            "hitTestTarget": "add-to-cart",
+            "cartCountAfter": "1"
+          },
+          "desktop": {
+            "status": "passed",
+            "hitTestTarget": "add-to-cart",
+            "cartCountAfter": "1"
+          },
+          "servedCssSha256": [
+            "820478be6c852fb82cbd85b63c29ef032bb19bd6b09d7078f80e67e7abf5564c",
+            "820478be6c852fb82cbd85b63c29ef032bb19bd6b09d7078f80e67e7abf5564c"
+          ],
+          "evidenceFinalized": true,
+          "evidenceProblems": []
+        },
+        {
+          "n": 3,
+          "outcome": "ORACLE_PASS",
+          "failureCode": null,
+          "failureMessage": null,
+          "oracleExitCode": 0,
+          "evidenceDir": "PC-1/replay-3",
+          "recordSha256": "2878917dc3d12aaf9d2cdbb0dcf4d97f1f005b5811faa60f4659f8bdfcf8e2e7",
+          "candidateCssSha256": "e9c8d652de72bd2cee56498fa2364ad2b29744575fad0589d755d723a32ad19a",
+          "nonce": "ea52adebd5818ef3fd5e0a43",
+          "mobile": {
+            "status": "passed",
+            "hitTestTarget": "add-to-cart",
+            "cartCountAfter": "1"
+          },
+          "desktop": {
+            "status": "passed",
+            "hitTestTarget": "add-to-cart",
+            "cartCountAfter": "1"
+          },
+          "servedCssSha256": [
+            "e9c8d652de72bd2cee56498fa2364ad2b29744575fad0589d755d723a32ad19a",
+            "e9c8d652de72bd2cee56498fa2364ad2b29744575fad0589d755d723a32ad19a"
+          ],
+          "evidenceFinalized": true,
+          "evidenceProblems": []
+        }
+      ]
+    }
+  ],
+  "nc5": {
+    "description": "verdict logic applied to a real staged tree whose oracle passes (the PC-1 stage) as if it were the baseline",
+    "baselineReproduced": false,
+    "status": "NOT_REPRODUCED",
+    "neverVerified": true
+  },
+  "notes": [
+    "ORACLE_PASS is a single oracle pass. VERIFIED needs 3 fresh, consistent, evidence-intact replays under the approved SHA and a REPRODUCED baseline.",
+    "Not a sandbox: candidates are host-rendered CSS from a closed grammar run through the unmodified oracle; the network-containment demonstration is separate and proves nothing about candidate runs."
+  ]
+}
