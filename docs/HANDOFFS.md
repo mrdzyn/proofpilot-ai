@@ -499,4 +499,29 @@ See `docs/STATUS.md` (spike run `c3-0-20261028T060805Z-b1794a`, unit 152/152, se
 ### Next action
 GPT-6: re-audit the exact head. Owner: decisions after audit; no merge by the agent.
 
+## Handoff: PP-META-I2-C3-A-A1
+
+- **Task / phase:** `tasks/PP-META-I2-C3.md` (C3-A: strict proposal pipeline, mocks only)
+- **From:** Implementation agent (Claude Code, Claude Sonnet 5.5)
+- **To:** GPT-6 independent exact-head review, then project owner
+- **Branch:** `phase/pp-meta-i2-c3-a-proposal-pipeline` from `main` `142cd5b36aef4288c48a25caf401bd023e29b441`; code head `9f6b8930cfc2625fc307fac4022ab663f1bace2d`; Draft PR (audit the branch head)
+- **State:** READY FOR REVIEW
+
+### Completed
+- Parser V0 to V7 (`packages/core/src/patch-proposal.ts`), adapter (`packages/inference/src/patch-proposal.ts`, `structuredResponse` in `client.ts`), reservations (`reservations.ts`), artifacts under gitignored `.proofpilot/proposals/`. Details and limits: `docs/STATUS.md` (C3-A result).
+- Tests: `tests/unit/patch-proposal-parser.test.ts` (all contract vectors), `tests/unit/patch-proposal-adapter.test.ts` (lifecycle, model, no-retry, redaction, consent, bounds, quota, duplicate/concurrent/restart/burned reservations, Baseten mock), `tests/security/proposal-boundary.test.ts` (no execution path, no VERIFIED, no caller outside tests, live quota 0, real-transport refusal under a fetch trap).
+- Contract fix: vector G-1 `.promo-overlay > *` is `SECURITY_BLOCKED` by precedence (table corrected, G-1b).
+- Unchanged: `candidate-stage.ts`, `verifier/`, `fixtures/sample-store/`, `config/`, `.github/`. No Meta/Baseten call, no execution of any proposal, no C3-B.
+
+### Validation
+Unit 207/207, security 33/33, integration 25/25, F01 baseline certified, C3-0 spike NC-1/NC-1b `PATCH_FAILED` and PC-1 `ORACLE_PASS`, 14/14 mutants killed. Hosted CI: see the Draft PR.
+
+### Open questions for the reviewer
+- Whether the `provider.transport` flag is an acceptable guard against real network use (it cannot be forged by configuration, only by deliberately passing a real `fetch` to `createProvider`).
+- The proposal structured-output schema and the Baseten chat-completions request/response shape are unverified against the real APIs.
+- The reservation lock fails closed on a stale lock and needs a manual delete.
+
+### Next action
+GPT-6 review; owner decides merge. C3-B and any live use need a new handoff, LIVE-C3-01 and fresh authorization.
+
 <!-- HANDOFF_ENTRIES_END -->
