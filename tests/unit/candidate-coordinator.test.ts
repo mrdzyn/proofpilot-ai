@@ -120,6 +120,8 @@ test('replays must be the identical candidate under one approved SHA with fresh 
     ['different css', [base[0]!, base[1]!, ev(record([{ selector: '.promo-overlay', property: 'z-index', value: '-1' }], 'pass'))]],
     ['different trusted hashes', [base[0]!, base[1]!, ev((() => { const r = record(PC1, 'pass'); r.manifest!.trusted = { ...TRUSTED, 'verifier/x': TRUSTED['verifier/f01/f01.oracle.spec.ts'] }; return r; })())]],
     ['repeated nonce (not fresh)', [base[0]!, base[1]!, ev((() => { const r = record(PC1, 'pass'); r.manifest!.candidateCss.nonce = base[0]!.record.manifest!.candidateCss.nonce; return r; })())]],
+    ['same adjustments but different rendered css', [base[0]!, base[1]!, ev(record(PC1, 'pass', { renderedCss: '.promo-overlay{pointer-events:auto}\n' }))]],
+    ['same css but different adjustments', [base[0]!, base[1]!, ev(record(PC1, 'pass', { adjustments: [{ selector: '.promo-overlay', property: 'pointer-events', value: 'auto' }] }))]],
     ['four replays', [...base, ev(record(PC1, 'pass'))]],
   ];
   for (const [name, replays] of sets) assert.equal(decideVerification({ baselineReproduced: true, replays }).status, 'INCONCLUSIVE', name);
@@ -151,6 +153,7 @@ test('baselineGate certifies only the genuine REPRODUCED signature', () => {
     ['adjustments present', record(PC1, 'fail-baseline-sig')],
     ['not finalized', record([], 'fail-baseline-sig', { evidenceFinalized: false })],
     ['not classified REPRODUCED', record([], 'fail-baseline-sig', { baselineIdentical: false })],
+    ['desktop control failed (other signals intact)', record([], 'fail-baseline-sig', { desktop: { status: 'failed', hitTestTarget: 'promo-overlay', cartCountAfter: '0' } })],
     ['no source proof', record([], 'fail-baseline-sig', { sourceProof: [] })],
     ['stage kept', record([], 'fail-baseline-sig', { stageRemoved: false })],
   ];
