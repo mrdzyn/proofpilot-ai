@@ -574,4 +574,27 @@ Unit 228/228, security 41/41, integration 28/28, F01 baseline certified, C3-0 sp
 ### Next action
 GPT-6 review; owner decides merge and any of LIVE-C3-01, Baseten stages, HOST-C3-01, UI-C3-01.
 
+## Handoff: PP-META-I2-C3-B1-R1
+
+- **Task / phase:** `tasks/PP-META-I2-C3.md` (C3-B1), remediation of GPT-6 audit 6464103194 on PR #9
+- **From:** Implementation agent (Claude Code, Claude Sonnet 5.5)
+- **To:** GPT-6 independent exact-head re-audit, then project owner
+- **Branch:** `phase/pp-meta-i2-c3-b1-offline-verification` (Draft PR #9); audited head `02dfa8208a7f0179066f22858ffd5384a3c7af2e`; remediation code head `6002b6009dd952da019b64319ec2c4f15367d211`; audit the branch head
+- **State:** READY FOR RE-AUDIT
+
+### Completed
+- **MAJOR-1:** `verifyScoreboard` enforces the exact trusted control inventory and recomputes counts, status, reason, expectation metadata and NC-5 from persisted evidence; truncated/padded replay lists, forged NC-5, fake counts and a false `complete` fail; truthful negative-case scoreboards still verify.
+- **MAJOR-2:** baseline and every replay must name the approved SHA in record and manifest; replays must match the baseline's trusted manifest; exactly one `F01-MOBILE` and one `F01-DESKTOP` proof per run. `decideVerification` now takes `{approvedSha, baseline, replays}`. Three-replay VERIFIED rule and `candidate-stage.ts` unchanged.
+- STATUS and SECURITY updated; example scoreboard regenerated from the new run.
+- Unchanged: `verifier/`, `fixtures/sample-store/`, `config/`, `.github/`, proposal modules. No Meta/Baseten/Modal call. No model-generated candidate. No report UI.
+
+### Validation
+Unit 237/237, security 41/41, integration 28/28, F01 baseline certified, C3-0 spike unchanged, real C3-B1 run all expectations met and re-verified, 15/16 new mutants killed (1 equivalent). Hosted CI: see PR #9.
+
+### Open items
+- The coordinator and oracle locks are not crash-safe (fail closed). Baseten, Modal, LIVE-C3-01, UI-C3-01 remain unstarted/unapproved.
+
+### Next action
+GPT-6: re-audit the exact head. Owner: decisions after audit; no merge by the agent.
+
 <!-- HANDOFF_ENTRIES_END -->

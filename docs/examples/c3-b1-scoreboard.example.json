@@ -1,10 +1,10 @@
 {
-  "_example": "Real scoreboard from the local, gitignored run c3-b1-20261028T080446Z-7091e5 at code head 358c273d6cfcf06829b62c05810fe8f116e1086a. Evidence directories are relative to that run directory and are not committed. Produced by scripts/c3-offline-verification.ts; verified by verifyScoreboard().",
+  "_example": "Real scoreboard from the local, gitignored run c3-b1-20261028T082601Z-589dba at code head 6002b6009dd952da019b64319ec2c4f15367d211. Evidence directories are relative to that run directory and are not committed. Produced by scripts/c3-offline-verification.ts; verified by verifyScoreboard().",
   "schemaVersion": 1,
   "label": "HAND-AUTHORED CONTROLS ONLY \u2014 NO MODEL INPUT",
   "complete": true,
-  "approvedSha": "358c273d6cfcf06829b62c05810fe8f116e1086a",
-  "createdAt": "2026-10-28T08:05:19.404Z",
+  "approvedSha": "6002b6009dd952da019b64319ec2c4f15367d211",
+  "createdAt": "2026-10-28T08:26:35.588Z",
   "modelOrProviderCalls": 0,
   "modalCalls": 0,
   "baseline": {
@@ -17,9 +17,9 @@
       "failureMessage": null,
       "oracleExitCode": 1,
       "evidenceDir": "BASELINE/replay-1",
-      "recordSha256": "e4334bcee39a035bf335ba4022fc0d81c0c64fce8c88eae99a1d2aa8b3f0f9be",
-      "candidateCssSha256": "250d3b29a6e05f48a53b027abf698d1dc6f66ddc59c8a02ee4f544d4da65d1e1",
-      "nonce": "414e5708282f1edecf72be90",
+      "recordSha256": "71ceb5ebebdb8b96cb713761d2a87b2647345fd3309840a38c74e88361b4019e",
+      "candidateCssSha256": "3c11559a91739355784829eec6d42059b87dbbacedf78d66cc9d205cfce938b6",
+      "nonce": "58fdea6625db732a2095cdfe",
       "mobile": {
         "status": "failed",
         "hitTestTarget": "promo-overlay",
@@ -31,8 +31,8 @@
         "cartCountAfter": "1"
       },
       "servedCssSha256": [
-        "250d3b29a6e05f48a53b027abf698d1dc6f66ddc59c8a02ee4f544d4da65d1e1",
-        "250d3b29a6e05f48a53b027abf698d1dc6f66ddc59c8a02ee4f544d4da65d1e1"
+        "3c11559a91739355784829eec6d42059b87dbbacedf78d66cc9d205cfce938b6",
+        "3c11559a91739355784829eec6d42059b87dbbacedf78d66cc9d205cfce938b6"
       ],
       "evidenceFinalized": true,
       "evidenceProblems": []
@@ -43,7 +43,7 @@
       "id": "NC-1",
       "description": "no-op: empty adjustments",
       "provenance": "hand-authored-control",
-      "candidateId": "4de67052cad8239731ba739dd07708a695e24fb06f2827f3f7203e7f29f37a94",
+      "candidateId": "0ef7ec0370ea6c2895de1e7f49a0915fa211e3e05d2f7ff0ff8c295f6d23d89e",
       "adjustments": [],
       "renderedCss": "",
       "fault": null,
@@ -63,9 +63,9 @@
           "failureMessage": null,
           "oracleExitCode": 1,
           "evidenceDir": "NC-1/replay-1",
-          "recordSha256": "fcbc8de4e031aa38f37391d2deca20fce2998a6e6bc9e452f5c678cb7a92666e",
-          "candidateCssSha256": "a39acee85b27adf49fb544827c4670013f5a830dc66f6dde8f8e9706db6dcbc9",
-          "nonce": "67cf0a9d3864b3fa5322ad6f",
+          "recordSha256": "cf8f77d1170acdcee99114d36048e07be74d95ea62c1d92d83e88c79f3e76350",
+          "candidateCssSha256": "3ddcfccd2a89686cff39432cc41f03befa815d28d69aabf221bee5aa7158da78",
+          "nonce": "e1a01153f121512fc3c58808",
           "mobile": {
             "status": "failed",
             "hitTestTarget": "promo-overlay",
@@ -77,8 +77,8 @@
             "cartCountAfter": "1"
           },
           "servedCssSha256": [
-            "a39acee85b27adf49fb544827c4670013f5a830dc66f6dde8f8e9706db6dcbc9",
-            "a39acee85b27adf49fb544827c4670013f5a830dc66f6dde8f8e9706db6dcbc9"
+            "3ddcfccd2a89686cff39432cc41f03befa815d28d69aabf221bee5aa7158da78",
+            "3ddcfccd2a89686cff39432cc41f03befa815d28d69aabf221bee5aa7158da78"
           ],
           "evidenceFinalized": true,
           "evidenceProblems": []
@@ -89,7 +89,7 @@
       "id": "NC-1b",
       "description": "irrelevant allowed rule: .promo z-index 5",
       "provenance": "hand-authored-control",
-      "candidateId": "96eadfb520bcd911ce760dd1da3551eba8b6a9a8a374685e93191b0af6730b01",
+      "candidateId": "c09bc014375c5bb47b2c72f39f18eb3e565397b74eb101462f4ccb87d88568ee",
       "adjustments": [
         {
           "selector": ".promo",
@@ -115,9 +115,9 @@
           "failureMessage": null,
           "oracleExitCode": 1,
           "evidenceDir": "NC-1b/replay-1",
-          "recordSha256": "25f5aecc0b012185c0ae16e37c807b19e266e6737c066040d813409d0785d845",
-          "candidateCssSha256": "54c20c5d25c0e9a5db1fa410f0a9d7b125b6ee59641c98db410792364d3d86e1",
-          "nonce": "055558ef3722f5538276dd97",
+          "recordSha256": "d6098bd55c05ffc687787fc7af4fd6dc052dbd0cc0f802273c4dd7004c093365",
+          "candidateCssSha256": "9f7275164877c63e861735321da7ce0688f83e503c2cfba6aaa6a6b10b89d04c",
+          "nonce": "70f18ef0bc5e79b5c2ff80ff",
           "mobile": {
             "status": "failed",
             "hitTestTarget": "promo-overlay",
@@ -129,8 +129,8 @@
             "cartCountAfter": "1"
           },
           "servedCssSha256": [
-            "54c20c5d25c0e9a5db1fa410f0a9d7b125b6ee59641c98db410792364d3d86e1",
-            "54c20c5d25c0e9a5db1fa410f0a9d7b125b6ee59641c98db410792364d3d86e1"
+            "9f7275164877c63e861735321da7ce0688f83e503c2cfba6aaa6a6b10b89d04c",
+            "9f7275164877c63e861735321da7ce0688f83e503c2cfba6aaa6a6b10b89d04c"
           ],
           "evidenceFinalized": true,
           "evidenceProblems": []
@@ -141,7 +141,7 @@
       "id": "NC-3",
       "description": "regression: .add-to-cart pointer-events none (both oracle tests must fail)",
       "provenance": "hand-authored-control",
-      "candidateId": "f039fbf351dbfd08ae5f17d767d24dc914fce74c5bafadfbc86fb530cee7d901",
+      "candidateId": "96ee65450773485eecdf196f227d2f35eda92388e52ae2b6504db1913f01a216",
       "adjustments": [
         {
           "selector": ".add-to-cart",
@@ -167,9 +167,9 @@
           "failureMessage": null,
           "oracleExitCode": 1,
           "evidenceDir": "NC-3/replay-1",
-          "recordSha256": "71ded701c936272e1881f7fd790a0b07c106c108d755f852a76af6db849d9d0f",
-          "candidateCssSha256": "f78f870cb71ddd0ce2d50dc8c2c1fdd351e66370578577cb7fd5ce5aa9531b5b",
-          "nonce": "6081cb0c598adffa4a4ad8ab",
+          "recordSha256": "fa8f3fe249bc5eae0541f5d18b635d3877c053d82f4e9cd4ebc06a4f866cc52b",
+          "candidateCssSha256": "090d53954dc1a6744824d76c54ab58022bceaff3ca63ba357d02fcde2e379acd",
+          "nonce": "9af12daf59edd3fdfef64260",
           "mobile": {
             "status": "failed",
             "hitTestTarget": "promo-overlay",
@@ -181,8 +181,8 @@
             "cartCountAfter": "0"
           },
           "servedCssSha256": [
-            "f78f870cb71ddd0ce2d50dc8c2c1fdd351e66370578577cb7fd5ce5aa9531b5b",
-            "f78f870cb71ddd0ce2d50dc8c2c1fdd351e66370578577cb7fd5ce5aa9531b5b"
+            "090d53954dc1a6744824d76c54ab58022bceaff3ca63ba357d02fcde2e379acd",
+            "090d53954dc1a6744824d76c54ab58022bceaff3ca63ba357d02fcde2e379acd"
           ],
           "evidenceFinalized": true,
           "evidenceProblems": []
@@ -193,7 +193,7 @@
       "id": "NC-6",
       "description": "stage tamper between manifest and run (verifier file edited in the stage)",
       "provenance": "hand-authored-control",
-      "candidateId": "393fa6dc8d47a0dbb9d502f98518dcb833824af903936e2e1136d2f71bd243d2",
+      "candidateId": "8605e06a760e20fc04628b2ac0e7958a3d636c026dc9bed10e3a1c0de5e8e3b8",
       "adjustments": [
         {
           "selector": ".promo-overlay",
@@ -219,9 +219,9 @@
           "failureMessage": "trusted staged file changed: verifier/f01/f01.oracle.spec.ts",
           "oracleExitCode": null,
           "evidenceDir": "NC-6/replay-1",
-          "recordSha256": "5340caa853219d554670ea92ffc9d570d56f652d829a518ba15ee483854a1b7d",
-          "candidateCssSha256": "3752e7ce3a8d1afe47d64e822a9b62ea4f1a3a77a5d95638ab5a28adc6510134",
-          "nonce": "6905f365fbdd3e1d3996bc00",
+          "recordSha256": "a1c9f108041833a26d6f4da0f698db3074b56959847c005d97f269abaf7bcdd1",
+          "candidateCssSha256": "1c39657c4524624a2976adfdd5152a266df83de5716da2091e4df2875586c639",
+          "nonce": "a837310740e45ec447c5d950",
           "mobile": null,
           "desktop": null,
           "servedCssSha256": [],
@@ -234,7 +234,7 @@
       "id": "NC-7",
       "description": "port 4173 held by another listener",
       "provenance": "hand-authored-control",
-      "candidateId": "393fa6dc8d47a0dbb9d502f98518dcb833824af903936e2e1136d2f71bd243d2",
+      "candidateId": "8605e06a760e20fc04628b2ac0e7958a3d636c026dc9bed10e3a1c0de5e8e3b8",
       "adjustments": [
         {
           "selector": ".promo-overlay",
@@ -260,7 +260,7 @@
           "failureMessage": "127.0.0.1:4173 is not free; refusing to run the oracle against an unknown server",
           "oracleExitCode": null,
           "evidenceDir": "NC-7/replay-1",
-          "recordSha256": "a7f74dc3def53ed8d17f2f08f8ef53dddb68a10085f0cbbf53c5557f390de39d",
+          "recordSha256": "349a4fc3a064cbd97f09d63d83cff757563703571f8492cf3ac151131d0d9026",
           "candidateCssSha256": null,
           "nonce": null,
           "mobile": null,
@@ -275,7 +275,7 @@
       "id": "PC-1",
       "description": "hand-written correct fix: .promo-overlay pointer-events none",
       "provenance": "hand-authored-control",
-      "candidateId": "393fa6dc8d47a0dbb9d502f98518dcb833824af903936e2e1136d2f71bd243d2",
+      "candidateId": "8605e06a760e20fc04628b2ac0e7958a3d636c026dc9bed10e3a1c0de5e8e3b8",
       "adjustments": [
         {
           "selector": ".promo-overlay",
@@ -301,9 +301,9 @@
           "failureMessage": null,
           "oracleExitCode": 0,
           "evidenceDir": "PC-1/replay-1",
-          "recordSha256": "10a2bb97c65971d814c82c26b9de9eaaa02ea90d0cf98db762bbb7a8f55c24ab",
-          "candidateCssSha256": "34d462bebf356784f94209586bff6e0ea8cafa90ba31053f29ba85096d8365da",
-          "nonce": "1c9473d0dcf14715b011f648",
+          "recordSha256": "fa053de2ec6c420deaecdbc202c3f4d9bf86348ec51b96198ffdfb7e37b0d4dc",
+          "candidateCssSha256": "e24d846d4501a786c20a603cf73affd2613a9284b0360618262f6aaacb836066",
+          "nonce": "de42d9ad0bbf12355a91f106",
           "mobile": {
             "status": "passed",
             "hitTestTarget": "add-to-cart",
@@ -315,8 +315,8 @@
             "cartCountAfter": "1"
           },
           "servedCssSha256": [
-            "34d462bebf356784f94209586bff6e0ea8cafa90ba31053f29ba85096d8365da",
-            "34d462bebf356784f94209586bff6e0ea8cafa90ba31053f29ba85096d8365da"
+            "e24d846d4501a786c20a603cf73affd2613a9284b0360618262f6aaacb836066",
+            "e24d846d4501a786c20a603cf73affd2613a9284b0360618262f6aaacb836066"
           ],
           "evidenceFinalized": true,
           "evidenceProblems": []
@@ -328,9 +328,9 @@
           "failureMessage": null,
           "oracleExitCode": 0,
           "evidenceDir": "PC-1/replay-2",
-          "recordSha256": "e08c3d8f32b159966d3c83acd015f796b82ac309e18467643e32f9b0901dd937",
-          "candidateCssSha256": "32ba770c838799746b7333778e05d18004bde2897457e5d06e82d098b2b65205",
-          "nonce": "3e9dd2ba176098b576ed0b20",
+          "recordSha256": "3afade9da97ad28db3da229a7acd47e962d646c55e26392a2176ee2a0bb5fffb",
+          "candidateCssSha256": "48ce4502fffa898c1bd88d0621d0b3ba203e2a1665cfc2ef9bee95027beb7c5c",
+          "nonce": "23319831224075afbbf59aa9",
           "mobile": {
             "status": "passed",
             "hitTestTarget": "add-to-cart",
@@ -342,8 +342,8 @@
             "cartCountAfter": "1"
           },
           "servedCssSha256": [
-            "32ba770c838799746b7333778e05d18004bde2897457e5d06e82d098b2b65205",
-            "32ba770c838799746b7333778e05d18004bde2897457e5d06e82d098b2b65205"
+            "48ce4502fffa898c1bd88d0621d0b3ba203e2a1665cfc2ef9bee95027beb7c5c",
+            "48ce4502fffa898c1bd88d0621d0b3ba203e2a1665cfc2ef9bee95027beb7c5c"
           ],
           "evidenceFinalized": true,
           "evidenceProblems": []
@@ -355,9 +355,9 @@
           "failureMessage": null,
           "oracleExitCode": 0,
           "evidenceDir": "PC-1/replay-3",
-          "recordSha256": "31904e07fb4833a02bb26f568c415785e1917cb62e52465d3fefe03ce6c22299",
-          "candidateCssSha256": "e3480a78300422661e40d47c66971cb8e14ac0d4b2c4d6a59d500a9663bd1236",
-          "nonce": "ff906998e2f10cd95efd0e83",
+          "recordSha256": "5b08e24684af2c30371537aa92ee178d0b9ef0af7d5af67da3b006875cd0516b",
+          "candidateCssSha256": "a96e24bc209450784fb1418e9ece331f6d7e30a7dc0ea49963ef5b47fd8870bb",
+          "nonce": "259a79da55672b4435ed5637",
           "mobile": {
             "status": "passed",
             "hitTestTarget": "add-to-cart",
@@ -369,8 +369,8 @@
             "cartCountAfter": "1"
           },
           "servedCssSha256": [
-            "e3480a78300422661e40d47c66971cb8e14ac0d4b2c4d6a59d500a9663bd1236",
-            "e3480a78300422661e40d47c66971cb8e14ac0d4b2c4d6a59d500a9663bd1236"
+            "a96e24bc209450784fb1418e9ece331f6d7e30a7dc0ea49963ef5b47fd8870bb",
+            "a96e24bc209450784fb1418e9ece331f6d7e30a7dc0ea49963ef5b47fd8870bb"
           ],
           "evidenceFinalized": true,
           "evidenceProblems": []
