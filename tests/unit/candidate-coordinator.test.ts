@@ -172,6 +172,7 @@ function fakeRunner(script: Script, calls: string[] = [], delayMs = 0): Runner {
     calls.push(`${opts.label}#${n}`);
     if (delayMs) await new Promise((r) => setTimeout(r, delayMs));
     const rec = script(opts.label, n, [...opts.adjustments]);
+    rec.label = opts.label; // runCandidate records the label it was given
     mkdirSync(opts.evidenceDir, { recursive: true });
     for (const f of REQUIRED) {
       mkdirSync(path.dirname(path.join(opts.evidenceDir, f)), { recursive: true });
@@ -257,7 +258,11 @@ test('coordinator: concurrent coordinators do not interleave; the second is refu
   const rejected = results.find((r) => r.status === 'rejected') as PromiseRejectedResult;
   assert.ok(rejected.reason instanceof CoordinatorBusyError);
   assert.equal(calls.length, 9, 'only one coordinator ran its controls');
-  assert.equal(existsSync(path.join(root, 'out-b', SCOREBOARD_FILE)), false);
+  // either coordinator may win the race; only the loser must have produced nothing
+  const loser = results[0]!.status === 'rejected' ? a : b;
+  const winner = loser === a ? b : a;
+  assert.equal(existsSync(path.join(loser.outDir, SCOREBOARD_FILE)), false, 'the refused coordinator wrote no scoreboard');
+  assert.equal(existsSync(path.join(winner.outDir, SCOREBOARD_FILE)), true);
   assert.equal(existsSync(a.coordinatorLockPath), false);
 });
 
@@ -533,4 +538,106 @@ test('MAJOR-2: through the coordinator, a cross-SHA baseline stops the run, awar
   assert.deepEqual(await verifyScoreboard(o.outDir), []);
   edit(o.outDir, (b) => { b.baseline.reproduced = true; });
   assert.match((await verifyScoreboard(o.outDir)).join(), /baseline verdict does not match/);
+});
+
+// ============================================================ remediation: MAJOR-3 (every published replay field is reverified)
+
+const REPLAY_FORGERIES: Array<[string, (e: any) => void]> = [
+  ['n', (e) => { e.n = e.n + 1; }],
+  ['outcome', (e) => { e.outcome = e.outcome === 'ORACLE_PASS' ? 'PATCH_FAILED' : 'ORACLE_PASS'; }],
+  ['failureCode', (e) => { e.failureCode = e.failureCode === null ? 'PORT_BUSY' : null; }],
+  ['failureMessage', (e) => { e.failureMessage = e.failureMessage === null ? 'everything is fine' : null; }],
+  ['oracleExitCode', (e) => { e.oracleExitCode = e.oracleExitCode === 0 ? 1 : 0; }],
+  ['recordSha256', (e) => { e.recordSha256 = 'f'.repeat(64); }],
+  ['candidateCssSha256', (e) => { e.candidateCssSha256 = 'f'.repeat(64); }],
+  ['nonce', (e) => { e.nonce = 'forged'; }],
+  ['mobile', (e) => { e.mobile = { status: 'forged', hitTestTarget: 'add-to-cart', cartCountAfter: '9' }; }],
+  ['desktop', (e) => { e.desktop = { status: 'forged', hitTestTarget: 'promo-overlay', cartCountAfter: '9' }; }],
+  ['servedCssSha256', (e) => { e.servedCssSha256 = ['f'.repeat(64)]; }],
+  ['evidenceFinalized', (e) => { e.evidenceFinalized = !e.evidenceFinalized; }],
+  ['evidenceProblems', (e) => { e.evidenceProblems = ['hash mismatch: forged']; }],
+  ['extra', (e) => { e.extra = 'x'; }],
+];
+
+test('MAJOR-3: forging ANY single published replay field fails, for every kind of replay, without touching the authentic evidence', async () => {
+  const base = await honestBoard();
+  assert.deepEqual(await verifyScoreboard(base), []);
+  const targets: Array<[string, (b: any) => any]> = [
+    ['NC-1 (failed)', (b) => b.candidates.find((c: any) => c.id === 'NC-1').replays[0]],
+    ['NC-3 (failed)', (b) => b.candidates.find((c: any) => c.id === 'NC-3').replays[0]],
+    ['NC-6 (inconclusive)', (b) => b.candidates.find((c: any) => c.id === 'NC-6').replays[0]],
+    ['NC-7 (inconclusive)', (b) => b.candidates.find((c: any) => c.id === 'NC-7').replays[0]],
+    ['PC-1 replay 1 (pass)', (b) => b.candidates.find((c: any) => c.id === 'PC-1').replays[0]],
+    ['PC-1 replay 3 (pass)', (b) => b.candidates.find((c: any) => c.id === 'PC-1').replays[2]],
+    ['BASELINE', (b) => b.baseline.replay],
+  ];
+  for (const [tname, pick] of targets) {
+    for (const [field, forge] of REPLAY_FORGERIES) {
+      const d = copy(base);
+      edit(d, (b) => forge(pick(b)));
+      const problems = (await verifyScoreboard(d)).join(' | ');
+      const key = field === 'n' ? 'n does not match|replay numbering is not sequential|baseline replay number must be 1' : `${field}\\b`;
+      assert.match(problems, new RegExp(key), `${tname}: forged ${field} was not reported (got: ${problems || 'no problems'})`);
+    }
+  }
+});
+
+test('MAJOR-3: a real stored evidence problem that the published entry omits is reported', async () => {
+  const base = await honestBoard();
+  const d = copy(base);
+  writeFileSync(path.join(d, 'NC-1/replay-1/oracle-stdout.txt'), 'tampered after the scoreboard was written');
+  const problems = (await verifyScoreboard(d)).join(' | ');
+  assert.match(problems, /hash mismatch: oracle-stdout\.txt/);
+  assert.match(problems, /evidenceProblems does not match the persisted record and evidence/);
+});
+
+test('MAJOR-3: the baseline must be BASELINE/replay-1 with a BASELINE-labelled record; redirecting it to NC-1 fails', async () => {
+  const base = await honestBoard();
+  // redirect the baseline pointer to NC-1's authentic, hash-matching replay (display fields copied from it)
+  const redirect = copy(base);
+  edit(redirect, (b) => { b.baseline.replay = JSON.parse(JSON.stringify(b.candidates.find((c: any) => c.id === 'NC-1').replays[0])); });
+  const rp = (await verifyScoreboard(redirect)).join(' | ');
+  assert.match(rp, /baseline evidence must be BASELINE\/replay-1/);
+  assert.match(rp, /baseline record is labelled "NC-1"/);
+  // wrong replay number
+  const wrongN = copy(base);
+  edit(wrongN, (b) => { b.baseline.replay.n = 2; });
+  assert.match((await verifyScoreboard(wrongN)).join(), /baseline replay number must be 1/);
+  // a baseline record that carries another label, with the scoreboard hash updated to match (display and record agree)
+  const relabelled = copy(base);
+  const recPath = path.join(relabelled, 'BASELINE/replay-1', RECORD_FILE);
+  const rec = JSON.parse(readFileSync(recPath, 'utf8'));
+  rec.label = 'NC-1';
+  const bytes = JSON.stringify(rec, null, 2) + '\n';
+  writeFileSync(recPath, bytes);
+  edit(relabelled, (b) => { b.baseline.replay.recordSha256 = sha256(bytes); });
+  assert.match((await verifyScoreboard(relabelled)).join(' | '), /baseline record is labelled "NC-1"/);
+});
+
+test('MAJOR-3: every candidate replay record must carry its own control id as its label', async () => {
+  const base = await honestBoard();
+  for (const [control, wrong, replayIdx] of [['NC-1', 'NC-3', 0], ['NC-6', 'PC-1', 0], ['PC-1', 'NC-1', 1], ['NC-7', 'BASELINE', 0]] as const) {
+    const d = copy(base);
+    const recPath = path.join(d, `${control}/replay-${replayIdx + 1}`, RECORD_FILE);
+    const rec = JSON.parse(readFileSync(recPath, 'utf8'));
+    rec.label = wrong;
+    const bytes = JSON.stringify(rec, null, 2) + '\n';
+    writeFileSync(recPath, bytes);
+    edit(d, (b) => { b.candidates.find((c: any) => c.id === control).replays[replayIdx].recordSha256 = sha256(bytes); });
+    assert.match((await verifyScoreboard(d)).join(' | '), new RegExp(`${control}: replay record is labelled "${wrong}", expected "${control}"`), `${control}`);
+  }
+});
+
+test('MAJOR-3: truthful failed and inconclusive scoreboards, with real failure messages, still verify', async () => {
+  const failing = coordOpts(fakeRunner((label, n, adj) => (label === 'PC-1' && n === 3 ? record(adj, 'desktop-fail') : honest(label, n, adj))));
+  await runOfflineVerification(failing);
+  assert.deepEqual(await verifyScoreboard(failing.outDir), []);
+  const withMessages = coordOpts(fakeRunner((label, n, adj) => {
+    const r = honest(label, n, adj);
+    if (label === 'NC-7') r.failure = { code: 'PORT_BUSY', message: 'a real, specific message about port 4173' };
+    return r;
+  }));
+  const board = await runOfflineVerification(withMessages);
+  assert.equal(byId(board, 'NC-7').replays[0]!.failureMessage, 'a real, specific message about port 4173');
+  assert.deepEqual(await verifyScoreboard(withMessages.outDir), []);
 });

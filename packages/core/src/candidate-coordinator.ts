@@ -274,14 +274,22 @@ async function readEvidence(record: CandidateRecord, evidenceDir: string): Promi
   return { record, evidenceProblems: finalizedVerdict ? await verifyPersistedEvidence(evidenceDir) : [] };
 }
 
-async function entryOf(n: number, e: ReplayEvidence, evidenceDir: string, rel: string): Promise<ReplayEntry> {
+/**
+ * The single source of every published ReplayEntry field. The coordinator publishes what this returns and
+ * verifyScoreboard() rebuilds it from the persisted record, its file bytes and the independent evidence
+ * check, then compares EVERY field, so no display field can be edited without detection.
+ */
+export function buildReplayEntry(n: number, e: ReplayEvidence, rel: string, recordBytes: Uint8Array | null): ReplayEntry {
   const r = e.record;
-  const raw = await readFile(path.join(evidenceDir, RECORD_FILE)).catch(() => null);
   return {
     n, outcome: r.outcome, failureCode: r.failure?.code ?? null, failureMessage: r.failure?.message ?? null, oracleExitCode: r.oracleExitCode,
-    evidenceDir: rel, recordSha256: raw ? sha256(raw) : null, candidateCssSha256: r.manifest?.candidateCss.sha256 ?? null, nonce: r.manifest?.candidateCss.nonce ?? null,
+    evidenceDir: rel, recordSha256: recordBytes ? sha256(recordBytes) : null, candidateCssSha256: r.manifest?.candidateCss.sha256 ?? null, nonce: r.manifest?.candidateCss.nonce ?? null,
     mobile: r.mobile, desktop: r.desktop, servedCssSha256: r.sourceProof.map((s) => s.servedSha256 ?? ''), evidenceFinalized: r.evidenceFinalized, evidenceProblems: e.evidenceProblems,
   };
+}
+
+async function entryOf(n: number, e: ReplayEvidence, evidenceDir: string, rel: string): Promise<ReplayEntry> {
+  return buildReplayEntry(n, e, rel, await readFile(path.join(evidenceDir, RECORD_FILE)).catch(() => null));
 }
 
 export type CoordinatorOptions = {
@@ -440,18 +448,20 @@ export async function verifyScoreboard(outDir: string): Promise<string[]> {
     const finalizedVerdict = record.outcome === 'ORACLE_PASS' || record.outcome === 'PATCH_FAILED';
     const evidenceProblems = finalizedVerdict ? await verifyPersistedEvidence(dir) : [];
     for (const x of evidenceProblems) problems.push(`${entry.evidenceDir}: ${x}`);
-    const meta: Array<[string, unknown, unknown]> = [
-      ['outcome', entry.outcome, record.outcome], ['oracleExitCode', entry.oracleExitCode, record.oracleExitCode], ['failureCode', entry.failureCode, record.failure?.code ?? null],
-      ['nonce', entry.nonce, record.manifest?.candidateCss.nonce ?? null], ['candidateCssSha256', entry.candidateCssSha256, record.manifest?.candidateCss.sha256 ?? null],
-      ['evidenceFinalized', entry.evidenceFinalized, record.evidenceFinalized], ['servedCssSha256', entry.servedCssSha256, record.sourceProof.map((x) => x.servedSha256 ?? '')],
-    ];
-    for (const [name, a, b] of meta) if (!sameJson(a, b)) problems.push(`${entry.evidenceDir}: scoreboard ${name} does not match the persisted record`);
+    // Rebuild the entire published entry from the persisted record and compare every field (and reject extras).
+    const rebuilt = buildReplayEntry(entry.n, { record, evidenceProblems }, entry.evidenceDir, raw) as unknown as Record<string, unknown>;
+    const published = entry as unknown as Record<string, unknown>;
+    for (const key of new Set([...Object.keys(rebuilt), ...Object.keys(published)])) {
+      if (!sameJson(published[key], rebuilt[key])) problems.push(`${entry.evidenceDir}: scoreboard ${key} does not match the persisted record and evidence`);
+    }
     return { record, evidenceProblems };
   };
 
   // ---- baseline: same approved SHA, same evidence, same verdict ----
   const b = await load(board.baseline.replay);
-  if (b && board.baseline.replay.n !== 1) problems.push('baseline replay number must be 1');
+  if (board.baseline.replay.n !== 1) problems.push('baseline replay number must be 1');
+  if (board.baseline.replay.evidenceDir !== 'BASELINE/replay-1') problems.push(`baseline evidence must be BASELINE/replay-1, not ${String(board.baseline.replay.evidenceDir)}`);
+  if (b && b.record.label !== 'BASELINE') problems.push(`baseline record is labelled ${JSON.stringify(b.record.label)}, expected "BASELINE"`);
   const gate = b ? baselineGate(b, sha) : { reproduced: false, reasons: ['baseline evidence unavailable'] };
   if (gate.reproduced !== board.baseline.reproduced) problems.push('baseline verdict does not match its evidence');
   if (!sameJson(gate.reasons, board.baseline.reasons)) problems.push('baseline reasons do not match its evidence');
@@ -487,7 +497,10 @@ export async function verifyScoreboard(outDir: string): Promise<string[]> {
     const replays: ReplayEvidence[] = [];
     for (const entry of c.replays) {
       const ev = await load(entry);
-      if (ev) replays.push(ev);
+      if (ev) {
+        replays.push(ev);
+        if (ev.record.label !== control.id) problems.push(`${where}: replay record is labelled ${JSON.stringify(ev.record.label)}, expected ${JSON.stringify(control.id)}`);
+      }
     }
     if (replays.length !== c.replays.length) {
       problems.push(`${where}: evidence unavailable`);
