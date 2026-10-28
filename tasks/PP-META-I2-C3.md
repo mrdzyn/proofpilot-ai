@@ -117,7 +117,8 @@ Raw model text is **not** scanned for JSON syntax characters: a valid proposal m
 | FC-4 (NC-4) | comment-split `u/**/rl(` | `SECURITY_BLOCKED` (`/*`) |
 | FC-5 (NC-4) | `value` = `none; background:url(x)` or `none}` or `none"` | `SECURITY_BLOCKED` |
 | FC-6 | forbidden class in a **selector** or **property** string, or in an array element of an unknown field | `SECURITY_BLOCKED` |
-| G-1 | unknown selector (`body`, `.promo-overlay > *`, `#x`) | `PATCH_REJECTED` `UNKNOWN_SELECTOR` |
+| G-1 | unknown selector (`body`, `.promo-overlay .child`, `#x`, `.Promo-Overlay`) | `PATCH_REJECTED` `UNKNOWN_SELECTOR` |
+| G-1b | a selector with a combinator character: `.promo-overlay > *` | `SECURITY_BLOCKED` (`>` is in the markup class; precedence rule 3). Corrected in C3-A: the earlier table listed this as `PATCH_REJECTED`, contradicting V2 |
 | G-2 | disallowed pair (`.add-to-cart` with `display`; `.promo` with `height`) | `PATCH_REJECTED` `PROPERTY_NOT_ALLOWED` |
 | G-3 | `z-index` `"101"`, `"-2"`, `"01"`, `"+5"`, `"1e1"`, `"5.0"`, `""`; `height` `"0px "`, `"101vh"`, `"601px"` | `PATCH_REJECTED` `VALUE_NOT_ALLOWED` |
 | G-4 | `"none !important"`, `" none"`, `"None"`, `"NONE"` | `PATCH_REJECTED` `VALUE_NOT_ALLOWED` |

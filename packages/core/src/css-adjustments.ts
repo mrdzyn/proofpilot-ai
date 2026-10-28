@@ -64,6 +64,24 @@ function renderValue(property: string, value: string): string | null {
   return null;
 }
 
+/** Read-only description of the closed grammar, derived from the same tables the renderer enforces. */
+export function describeGrammar(): { selectors: Array<{ selector: string; properties: string[] }>; values: Array<{ property: string; allowed: string }> } {
+  const props = new Set<string>();
+  const selectors = [...SELECTORS].map(([selector, properties]) => {
+    properties.forEach((p) => props.add(p));
+    return { selector, properties: [...properties] };
+  });
+  const values = [...props].map((property) => ({
+    property,
+    allowed:
+      ENUM_VALUES.get(property)?.join(' | ') ??
+      (property === 'z-index'
+        ? 'an integer from -1 to 100 as a string, no plus sign and no leading zeros'
+        : '"0", or 1 to 100 followed by "vh", or 1 to 600 followed by "px"'),
+  }));
+  return { selectors, values };
+}
+
 /**
  * Validate and render. Throws CssAdjustmentError on the first violation; returns the
  * canonical rule block (rules sorted by selector then property table order, newline

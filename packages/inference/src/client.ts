@@ -57,6 +57,16 @@ export type ResponseLifecycle = {
   /** True only for a completed response with no error, no incomplete_details and no refusal. */
   completed: boolean;
 };
+export type StructuredRequest = { model: string; prompt: string; schemaName: string; schema: object; maxOutputTokens: number };
+export type StructuredResponse = {
+  providerId: string;
+  model: string;
+  /** Empty unless the provider reported a completed response. */
+  text: string;
+  requestId: string | null;
+  usage: VideoUsage | null;
+  lifecycle: ResponseLifecycle;
+};
 export type VideoResponse = {
   providerId: string;
   model: string;
@@ -81,6 +91,10 @@ const SCHEMA_NAME = /^[A-Za-z0-9_-]{1,64}$/;
 
 export interface InferenceProvider {
   readonly id: string;
+  /** 'injected' when the caller supplied the transport (tests, mocks); 'live' means the real network. */
+  readonly transport: 'live' | 'injected';
+  /** Whether PROOFPILOT_ALLOW_BILLABLE_CALLS=1 was configured. */
+  readonly billableCallsAllowed: boolean;
   readonly models: Partial<Record<ModelRole, string>>;
   listModels(): Promise<string[]>;
   checkModelAvailability(modelId: string): Promise<ModelAvailability>;
@@ -89,6 +103,11 @@ export interface InferenceProvider {
   uploadVideoFile(req: UploadVideoRequest): Promise<UploadedFile>;
   /** Responses call referencing an uploaded video via `input_file`. */
   respondWithVideo(req: VideoResponseRequest): Promise<VideoResponse>;
+  /**
+   * One structured-JSON generation (C3-A proposals). Never retried regardless of configuration; only a
+   * completed response yields text. Text-only: no tools, no files.
+   */
+  structuredResponse(req: StructuredRequest): Promise<StructuredResponse>;
   /** Best-effort cleanup of an uploaded file. */
   deleteFile(fileId: string): Promise<void>;
 }
@@ -235,6 +254,8 @@ export function createProvider(config: ProviderConfig, deps: ClientDeps = {}): I
 
   return {
     id: config.id,
+    transport: deps.fetch ? 'injected' : 'live',
+    billableCallsAllowed: config.billableCallsAllowed,
     models: config.models,
 
     async listModels() {
@@ -379,6 +400,74 @@ export function createProvider(config: ProviderConfig, deps: ClientDeps = {}): I
         text,
         requestId: requestId ?? (typeof json?.id === 'string' ? json.id : null),
         usage: videoUsageOf(json?.usage),
+        lifecycle,
+      };
+    },
+
+    async structuredResponse(req) {
+      validateTextRequest({ model: req.model, prompt: req.prompt, maxOutputTokens: req.maxOutputTokens });
+      if (typeof req.schemaName !== 'string' || !SCHEMA_NAME.test(req.schemaName)) {
+        throw new InferenceError('INVALID_INPUT', config.id, 'schemaName is invalid');
+      }
+      if (!config.billableCallsAllowed) {
+        throw new InferenceError('BILLABLE_NOT_AUTHORIZED', config.id, 'billable inference is disabled; set PROOFPILOT_ALLOW_BILLABLE_CALLS=1 only with owner authorization');
+      }
+      if (config.textApi === 'responses') {
+        // No retry: a replayed generation would be billed twice. Not config.maxRetries, ever.
+        const { json, requestId } = await request(
+          'structured response',
+          'POST',
+          '/responses',
+          {
+            model: req.model,
+            input: [{ type: 'message', role: 'user', content: [{ type: 'input_text', text: req.prompt }] }],
+            text: { format: { type: 'json_schema', name: req.schemaName, schema: req.schema, strict: true } },
+            reasoning: { effort: VIDEO_REASONING_EFFORT },
+            max_output_tokens: req.maxOutputTokens,
+          },
+          { retries: 0 },
+        );
+        const lifecycle = lifecycleOf(json);
+        return {
+          providerId: config.id,
+          model: typeof json?.model === 'string' ? json.model : '',
+          text: lifecycle.completed ? extractResponsesText(json) : '',
+          requestId: requestId ?? (typeof json?.id === 'string' ? json.id : null),
+          usage: videoUsageOf(json?.usage),
+          lifecycle,
+        };
+      }
+      const { json, requestId } = await request(
+        'structured chat completion',
+        'POST',
+        '/chat/completions',
+        {
+          model: req.model,
+          messages: [{ role: 'user', content: req.prompt }],
+          max_tokens: req.maxOutputTokens,
+          response_format: { type: 'json_schema', json_schema: { name: req.schemaName, schema: req.schema, strict: true } },
+        },
+        { retries: 0 },
+      );
+      const choice = Array.isArray(json?.choices) && json.choices.length === 1 ? json.choices[0] : null;
+      const finish = typeof choice?.finish_reason === 'string' ? choice.finish_reason : null;
+      const refusal = typeof choice?.message?.refusal === 'string' && choice.message.refusal.length > 0;
+      const errorCode = codeOf(json?.error, 'code');
+      const completed = finish === 'stop' && !refusal && errorCode === null;
+      const lifecycle: ResponseLifecycle = {
+        status: completed ? 'completed' : finish === 'length' ? 'incomplete' : 'failed',
+        errorCode,
+        incompleteReason: finish === 'length' ? 'max_output_tokens' : null,
+        refusal,
+        completed,
+      };
+      const u = json?.usage;
+      return {
+        providerId: config.id,
+        model: typeof json?.model === 'string' ? json.model : '',
+        text: completed && typeof choice?.message?.content === 'string' ? choice.message.content : '',
+        requestId: requestId ?? (typeof json?.id === 'string' ? json.id : null),
+        usage: u && typeof u === 'object' ? { inputTokens: num(u.prompt_tokens), outputTokens: num(u.completion_tokens), totalTokens: num(u.total_tokens), reasoningTokens: null, videoFramesProcessed: null } : null,
         lifecycle,
       };
     },
