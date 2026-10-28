@@ -22,7 +22,7 @@ ProofPilot separates **patch generation** from **verification**. A pre-registere
 
 ## MVP scope (hard boundary)
 
-Curated, synthetic fixture repositories only (F01 headline; F02 optional; F03 negative control). Video → Muse Spark analysis → Playwright reproduction → Muse Wonder patch proposal → explicit local approval → independent verifier → hashed evidence. Excluded: arbitrary repositories or URLs, auto-PR/merge, native apps, credentials/logins, multi-user cloud.
+Curated, synthetic fixture repositories only (F01 headline; F02 optional; F03 negative control). Video → Muse Spark analysis → Playwright reproduction → candidate proposals (Muse Spark; Muse Wonder is not a dependency) → explicit local approval → independent verifier → hashed evidence. The hackathon C3 plan in `tasks/PP-META-I2-C3.md` is a draft, not approved. Excluded: arbitrary repositories or URLs, auto-PR/merge, native apps, credentials/logins, multi-user cloud.
 
 ## Fixtures
 

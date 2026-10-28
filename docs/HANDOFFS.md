@@ -388,8 +388,8 @@ GPT-6: review the exact head. Owner: decide when to start C3 (proposal only).
 - **Task / phase:** PP-META-I2-C3, hackathon pivot contract (docs only)
 - **From:** Owner-directed planning session (Claude, Sonnet 5.5)
 - **To:** GPT-6 independent review, then the implementation agent
-- **Branch:** documentation drafted on a local checkout of `main` at `5658529`; not pushed
-- **State:** READY FOR REVIEW
+- **Branch:** `docs/pp-meta-i2-c3-pivot` (PR #6), based on `main` at `5658529`
+- **State:** SUPERSEDED by PP-META-I2-C3-PIVOT-2. GPT-6 audited head `1e8a3b5` as FIX REQUIRED; the statements below about owner acceptance of the sandbox decision are withdrawn.
 
 ### Completed
 - `tasks/PP-META-I2-C3.md` written: verified candidate scoreboard, work packages C3-A to C3-F with PHT dates, execution controls replacing Docker, verdict rules, acceptance criteria, stop conditions.
@@ -398,10 +398,32 @@ GPT-6: review the exact head. Owner: decide when to start C3 (proposal only).
 
 ### Open items
 - Live-call cap (12 Spark + 4 Spark Open) is a proposal until the owner confirms.
-- The sandbox decision is a security-boundary change accepted by the owner in chat; the independent reviewer must accept or reject it, and `docs/SECURITY.md` still needs the matching text (assigned to C3-B).
+- (Withdrawn) The sandbox decision was described as accepted by the owner in chat. It is NOT APPROVED; see PP-META-I2-C3-PIVOT-2.
 - Muse Wonder's role is unconfirmed.
 
 ### Next action
 GPT-6: review the contract and the sandbox decision. Owner: confirm the cap, ask about Wonder, authorize the start of C3-A.
+
+## Handoff: PP-META-I2-C3-PIVOT-2
+
+- **Task / phase:** PP-META-I2-C3, remediation of the PR #6 audit (docs only)
+- **From:** implementation agent (Claude Code)
+- **To:** GPT-6 re-audit of the new exact head, then the owner
+- **Branch / PR:** `docs/pp-meta-i2-c3-pivot`, PR #6; base `main` at `5658529319032236fcddb472a617fbdc5cf9aadd`
+- **State:** READY FOR RE-AUDIT. Verify the exact head SHA on the PR before reviewing.
+
+### Completed
+- `tasks/PP-META-I2-C3.md` revision 2: decision register (SEC-C3-01, LIVE-C3-01, UI-C3-01 all not approved), closed-grammar CSS adjustment boundary for F01, verifier facts (fixed root and port 4173) and a per-candidate staging mechanism with a zero-model spike, NC-4 rewritten to fail closed, separate DID-1 interception harness, fail-closed proposal adapter requirements, report design gate.
+- `design/screens/PP-C3-REPORT-CONTRACT.md` added (approval pending).
+- `docs/SECURITY.md`: stale "mocks only" text corrected, `generateText` gap recorded, proposed boundary added as NOT APPROVED. `docs/STATUS.md`, README, PRODUCT and ARCHITECTURE corrected for stale branch, merge and Muse Wonder statements. `docs/CHATGPT-PIVOT-PROMPT.md` removed.
+- No code, test, `verifier/`, `fixtures/`, `config/` or `.github/` change. No Meta request, no billable call, no AI-generated patch executed.
+
+### Open items
+- Owner decisions: SEC-C3-01, LIVE-C3-01 (exact numbers), UI-C3-01.
+- Candidate oracle runs are uninstrumented by design; the re-audit should confirm that closed-grammar rendering plus DID-1 is an acceptable substitute for runtime interception.
+- The staging spike (dependency symlink resolution, trace-based nonce proof) is unproven until C3-B.
+
+### Next action
+GPT-6: re-audit the exact head. Owner: record decisions, merge if satisfied. Implementation agent: do not start C3 until the start gates in the task are met.
 
 <!-- HANDOFF_ENTRIES_END -->

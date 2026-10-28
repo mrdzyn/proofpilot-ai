@@ -70,7 +70,23 @@ Security-sensitive authorization must be enforced server-side or at the authorit
 
 Data classification: the MVP handles only synthetic fixtures and owner-made recordings. Model inputs are sent to Meta (or Baseten if selected); this is not an offline-privacy product.
 
-Known gaps (C1/C2A): real Meta video/Responses behaviour is unverified (mocks only; live smoke needs owner authorization); the `text.format` and response shapes are OpenAI-compatible assumptions; H.264-only acceptance is a deliberate fail-safe pending live confirmation of other codecs; no container sandbox yet (container validation NOT VERIFIED — agent environment lacks Docker access; required before executing AI-generated code or candidate patches); the policy lint is a pattern check, not a full secret scanner.
+Known gaps:
+
+- **Live Meta behaviour.** Two single-use live video-analysis smokes ran in C2B; run 002 completed (agent-reported, not independently replayed or provider-confirmed; see `docs/STATUS.md`). The text/patch-proposal path has **never** been run live.
+- **`generateText` is not safe for proposals.** It uses the configured retry count (`PROOFPILOT_INFERENCE_MAX_RETRIES` may exceed 0) and does not check Responses `status`, `error`, `incomplete_details` or refusal items before extracting text. The video path is stricter. C3 must use a separate fail-closed adapter (`tasks/PP-META-I2-C3.md`); `generateText` must not be used for patch proposals.
+- The `text.format` and response shapes are OpenAI-compatible assumptions. H.264-only acceptance is a deliberate fail-safe pending live confirmation of other codecs.
+- **No verified sandbox.** Container validation is NOT VERIFIED (the agent environment lacks Docker access). **In force today:** no AI-generated code or candidate patch executes until an independently verified OS/container sandbox exists. This remains the rule for HTML, JavaScript, free-form CSS and multi-file patches.
+- The policy lint is a pattern check, not a full secret scanner.
+
+## Proposed C3 boundary (NOT APPROVED, not in force)
+
+`tasks/PP-META-I2-C3.md` proposes a narrower exception for fixture F01 only (decision SEC-C3-01, **NOT APPROVED**). It becomes part of this policy only after the owner records approval in a reviewable form and the independent reviewer accepts the exact head. As proposed:
+
+- The model returns structured selector/property/value adjustments, never markup, scripts, CSS text or file paths. Trusted code validates them against a closed allowlist (forbidden-token scan first, then grammar), renders CSS from constants and applies it to `styles.css` in a disposable per-candidate staging workspace. `product.html`, `app.js`, the server and the whole trusted verifier are the approved-SHA bytes, hash-checked before and after the run.
+- The unmodified oracle runs in that staging workspace at its fixed root and fixed port 4173, strictly serial. Nothing derived from a proposal is executed by Node.
+- This removes model-authored executable content instead of containing it. It is not a sandbox and must not be described as one.
+- Playwright request interception is defense in depth only, tested in a separate harness that cannot award a verdict. It is not process or OS isolation, and candidate oracle runs are not instrumented because that would require changing trust-root verifier files.
+- Live proposal calls require a separate fail-closed adapter: completed lifecycle only, `retries: 0` regardless of configuration, exact model id match on request and response, bounded input and output, one-time exclusive reservations that are burned on every outcome, and a pre-authorized per-provider slot count that defaults to 0. No quantity is approved (decision LIVE-C3-01, **NOT APPROVED**).
 
 ## AI-agent boundaries
 

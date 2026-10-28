@@ -11,7 +11,7 @@
 
 ## System context
 
-A developer supplies a short recording of a UI defect in one of the curated synthetic fixtures. ProofPilot asks Muse Spark to describe the symptom, reproduces it with Playwright, asks Muse Wonder for a scoped patch, applies it only after explicit local approval, and re-runs the hidden oracle in a fresh runner.
+A developer supplies a short recording of a UI defect in one of the curated synthetic fixtures. ProofPilot asks Muse Spark to describe the symptom, reproduces it with Playwright, asks a Meta model for a scoped candidate (the C3 draft uses Muse Spark and structured CSS adjustments; Muse Wonder is not a dependency), applies it only after explicit local approval, and re-runs the hidden oracle in a fresh runner.
 
 ```mermaid
 flowchart TD
@@ -36,7 +36,7 @@ flowchart TD
 | Media tooling | FFmpeg / ffprobe on PATH (local) | Required by `packages/intake` for probing, decode checks and WebM→MP4; `TOOL_UNAVAILABLE` if missing |
 | UI/API | Next.js (planned, C2+) | Requires the design-first gate |
 | Storage | Local `.proofpilot/runs/<runId>/` (gitignored) | SQLite job store planned |
-| Sandbox | Docker linux/arm64 (planned) | **NOT VERIFIED — agent environment lacks Docker access** (owner reports Docker Desktop installed on the host; not independently confirmed). Mandatory gate before executing AI-generated code or candidate patches. |
+| Sandbox | Docker linux/arm64 (planned) | **NOT VERIFIED — agent environment lacks Docker access** (owner reports Docker Desktop installed on the host; not independently confirmed). Mandatory gate before executing AI-generated code or candidate patches. A narrower F01-only CSS-adjustment boundary is proposed in `tasks/PP-META-I2-C3.md` (SEC-C3-01) and is NOT APPROVED. |
 | CI/CD | GitHub Actions: Project baseline + Stack validation | |
 
 ## Component boundaries (C1 + C2A)

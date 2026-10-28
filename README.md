@@ -4,7 +4,7 @@
 
 ProofPilot AI turns a short recording of a UI defect into an observed browser reproduction, a candidate patch, and an **independent** re-test against trusted acceptance checks that the patching agent can neither see nor change. A patch counts as a success only when a separate verifier has confirmed both the original failure and the corrected behaviour.
 
-Built for the Meta Global AI Developer Hackathon (Push the Frontier). Runtime models: **Muse Spark 1.3** (visual analysis) and **Muse Wonder 1.0** (patch proposal) via the Meta Model API. Baseten-hosted **Muse Spark Open** is an optional secondary provider. See [HACKATHON_CONTRIBUTIONS.md](HACKATHON_CONTRIBUTIONS.md) for provenance.
+Built for the Meta Global AI Developer Hackathon (Push the Frontier). Runtime model: **Muse Spark 1.3** (visual analysis) via the Meta Model API. The C3 plan (Muse Spark candidate proposals, trusted verification, scoreboard) is a draft contract pending owner approval; Muse Wonder is not a planned dependency. Baseten-hosted **Muse Spark Open** is an optional secondary provider. See [HACKATHON_CONTRIBUTIONS.md](HACKATHON_CONTRIBUTIONS.md) for provenance.
 
 ## Current state (Day 2 / C2A)
 
@@ -18,7 +18,7 @@ Built for the Meta Global AI Developer Hackathon (Push the Frontier). Runtime mo
 | Video intake: real container/size/duration/codec/decode validation, WebM→MP4, per-run consent | Implemented |
 | Muse Spark native-video integration (Files + Responses), local `Symptom` validation, cleanup | Implemented and **MOCK TESTED only. Real Meta model/video upload NOT TESTED.** |
 | Product UI | Screen-map proposal only (`design/screens/`); **not approved, not built** |
-| Muse Wonder patching, candidate verifier, evidence export | Not started (C3+) |
+| Candidate proposals, candidate verifier, scoreboard/evidence export, static report | Not started. Draft contract `tasks/PP-META-I2-C3.md` (PR #6) is under review and not approved |
 
 Nothing in this repository is currently labelled `VERIFIED`; no code path in C1 can produce that status.
 

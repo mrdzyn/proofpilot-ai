@@ -5,13 +5,13 @@
 ## Project
 
 - **Name:** ProofPilot AI — Meta Global AI Developer Hackathon (Push the Frontier)
-- **Current phase:** PP-META-I1-C2B complete (docs closure); **hackathon pivot contracted 2026-10-28 as PP-META-I2-C3** (verified candidate scoreboard); C3 implementation not started
-- **Status:** C2B closed as **T04 completed (agent-reported live result)**. The v1.1 plan (Muse Wonder patcher, Docker-isolated verifier, five-screen UI) is replaced by `tasks/PP-META-I2-C3.md`: Muse Spark proposes several candidate patches, the trusted oracle scores each, output is a scoreboard, hashed evidence and a static HTML report. Contract awaits owner confirmation of the live-call cap and independent review of the sandbox decision.
-- **Primary branch:** protected `main` at `9103d00e1b82f260a41498e7c64201ccd398be15` (C2B-R1 squash merge; PR #4)
-- **Working branch:** `docs/pp-meta-i1-c2b-completion` (docs only); implementation branch will be `phase/pp-meta-i2-c3`
-- **Active task:** `PP-META-I2-C3` (status Ready, not started)
-- **Active handoff:** PP-META-I2-C3-PIVOT-1
-- **Authorization:** Both single-use live smokes are **spent**. **Owner-accepted 2026-10-28 (chat), conditional on independent review:** replacing "no AI-generated patch executes until Docker is verified" with the execution controls in `tasks/PP-META-I2-C3.md` (front-end `src/` only, executed in headless Chromium, no Node execution of AI code). **Proposed live-call cap, owner to confirm before C3-B:** 12 Muse Spark patch-proposal calls plus 4 Muse Spark Open (Baseten) calls, fresh run ID and consent each. **Still not authorized:** merge by the agent, deployment, push to `main`, submission by the agent, Docker work, product UI shell, any live call beyond the confirmed cap.
+- **Current phase:** PP-META-I1-C2B complete and merged (PR #5). Hackathon pivot **PP-META-I2-C3 is a DRAFT contract under review in PR #6** (branch `docs/pp-meta-i2-c3-pivot`); C3 implementation not started.
+- **Status:** C2B closed as **T04 completed (agent-reported live result)**. GPT-6's exact-head audit of PR #6 returned **FIX REQUIRED**; this revision remediates it (see `tasks/PP-META-I2-C3.md`, revision 2). The pivot keeps F01 video analysis, Muse Spark candidates, trusted verification, a scoreboard, hashed evidence and a static report, and narrows execution to a proposed closed-grammar CSS boundary. Nothing in the pivot is approved yet.
+- **Primary branch:** protected `main` at `5658529319032236fcddb472a617fbdc5cf9aadd` (C2B docs closure, PR #5)
+- **Working branch:** `docs/pp-meta-i2-c3-pivot` (docs only, PR #6, awaiting GPT-6 re-audit of the exact head). The implementation branch `phase/pp-meta-i2-c3` does not exist yet.
+- **Active task:** None. `PP-META-I2-C3` is a DRAFT contract; it has not started and its start gates are not met.
+- **Active handoff:** PP-META-I2-C3-PIVOT-2
+- **Authorization:** Both single-use live smokes are **spent**. **NOT APPROVED:** the proposed execution boundary (SEC-C3-01) and the proposed live-call quantities of 12 Muse Spark plus 4 Baseten calls (LIVE-C3-01); the report layout (UI-C3-01) is PENDING design approval. An earlier chat "yes" is not a reviewable authorization and is not relied on. No Meta request of any kind, no execution of AI-generated code or patches, no merge or deployment by an agent, no push to `main`, and no C3 implementation is authorized.
 
 ## Completed milestones
 
@@ -60,16 +60,23 @@
 
 | Gate | Status |
 |---|---|
-| C2B (Workstream A, R1, live smokes) | DONE; this docs closure pending review |
+| C2B (Workstream A, R1, live smokes) | DONE and merged (PR #5) |
 | T04 real Muse Spark video analysis | **COMPLETED (agent-reported)** |
-| Product five-screen design `design/screens/PP-PRODUCT-SCREEN-MAP.md` | CUT for the hackathon; stays PROPOSED and unbuilt |
-| Isolated Docker/ARM64 patch runner | CUT. Replaced by the execution controls in `tasks/PP-META-I2-C3.md`, pending independent review. Not a verified sandbox |
-| C3-A patch proposal (Muse Spark), C3-B candidate runner, C3-C scoreboard/evidence, C3-D report + replay + audit, C3-E demo, C3-F submission | NOT STARTED (see schedule in the task file; go/no-go Oct 31 PHT) |
-| Muse Wonder as patcher | UNVERIFIED. Guide lists Wonder under creative/image use; owner to ask in #office-hours. Not a dependency |
+| PR #6 contract: GPT-6 re-audit of the exact head | PENDING (previous head `1e8a3b5` was FIX REQUIRED) |
+| SEC-C3-01 execution boundary (closed-grammar CSS adjustments, F01 only) | **NOT APPROVED**; needs a recorded owner approval and independent acceptance |
+| LIVE-C3-01 live-call quantities | **NOT APPROVED**; every live path stays disabled |
+| UI-C3-01 one-page static report (`design/screens/PP-C3-REPORT-CONTRACT.md`) | PENDING owner design approval |
+| Five-screen product UI (`design/screens/PP-PRODUCT-SCREEN-MAP.md`) | CUT for the hackathon; stays PROPOSED and unbuilt |
+| Independently verified Docker/ARM64 or OS sandbox | **NOT VERIFIED**. Still required before any model-authored HTML, JavaScript or free-form patch executes |
+| Staging spike (unmodified oracle run in a per-candidate stage) | NOT STARTED |
+| C3-A proposal adapter, C3-B candidate runner, C3-C scoreboard/evidence, C3-D report + replay + audit, C3-E demo, C3-F submission | NOT STARTED |
+| Muse Wonder as patcher | UNVERIFIED and not a dependency |
 | Baseten | NOT TESTED |
 
 ## Next action
 
-1. Owner confirms or edits the live-call cap in `tasks/PP-META-I2-C3.md`, and asks about Muse Wonder in #office-hours.
-2. Independent reviewer (GPT-6) reviews the contract, in particular the sandbox decision, then the implementation agent starts C3-A on `phase/pp-meta-i2-c3`.
-3. No live Meta request beyond the confirmed cap; each run needs a fresh run ID and consent.
+1. GPT-6 re-audits the new exact head of PR #6.
+2. Owner decides SEC-C3-01, LIVE-C3-01 (exact numbers) and UI-C3-01, recording each in `tasks/PP-META-I2-C3.md`, and merges the PR if satisfied.
+3. Only then does the implementation agent cut `phase/pp-meta-i2-c3` from the merged `main` and start with the zero-model staging spike.
+
+Submission deadline: Nov 4, 9:00 PM EST = **Nov 5, 10:00 AM PHT**; internal target is Nov 4 PHT.
