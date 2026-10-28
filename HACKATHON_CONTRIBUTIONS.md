@@ -57,6 +57,7 @@ Implementation was performed by AI coding agents (Claude Code) under the owner's
 | C1 implementation and publication (original local commits and public commits `1e3f590`, `88243d1`, `8826204`) | Claude Opus 5.5 | The Claude Code session reported `claude-opus-5-5` as its model and supplied the `Co-Authored-By: Claude Opus 5.5` trailer carried by those commits. |
 | Audit remediation of PR #1 (MINOR-1/MINOR-2) | Claude Sonnet 5.5 | The remediation session reported `claude-sonnet-5-5`; its commits carry the `Claude Sonnet 5.5` trailer. |
 | C2A implementation (branch `phase/pp-meta-i1-c2a`) | Claude Sonnet 5.5 | The C2A session reported `claude-sonnet-5-5`; its commits carry the `Claude Sonnet 5.5` trailer. |
+| Pivot contract `tasks/PP-META-I2-C3.md` and its PR #6 audit remediation (docs only, branch `docs/pp-meta-i2-c3-pivot`) | Claude Sonnet 5.5 (configured) | The sessions were configured for `claude-sonnet-5-5`; the serving model was not independently confirmed. The commits carry the `Claude Sonnet 5.5` trailer. |
 
 The owner indicated Claude Sonnet was intended for this project. No execution evidence supports Sonnet for the earlier C1 commits, so their attribution was not changed. If the owner has evidence that those sessions used a different model, the owner should say so and this table will be corrected in a new commit; history is not rewritten. Meta models (Muse Spark / Muse Wonder) are the product's runtime models, not development tools.
 

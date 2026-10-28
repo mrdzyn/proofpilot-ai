@@ -383,4 +383,67 @@ GPT-6: audit the exact head. Owner: after merge, decide on a second live attempt
 ### Next action
 GPT-6: review the exact head. Owner: decide when to start C3 (proposal only).
 
+## Handoff: PP-META-I2-C3-PIVOT-1
+
+- **Task / phase:** PP-META-I2-C3, hackathon pivot contract (docs only)
+- **From:** Owner-directed planning session (Claude, Sonnet 5.5)
+- **To:** GPT-6 independent review, then the implementation agent
+- **Branch:** `docs/pp-meta-i2-c3-pivot` (PR #6), based on `main` at `5658529`
+- **State:** SUPERSEDED by PP-META-I2-C3-PIVOT-2. GPT-6 audited head `1e8a3b5` as FIX REQUIRED; the statements below about owner acceptance of the sandbox decision are withdrawn.
+
+### Completed
+- `tasks/PP-META-I2-C3.md` written: verified candidate scoreboard, work packages C3-A to C3-F with PHT dates, execution controls replacing Docker, verdict rules, acceptance criteria, stop conditions.
+- `docs/STATUS.md` updated: phase, authorization, open gates, next action. Wonder, Docker and the five-screen UI are recorded as cut or unverified, not as done.
+- No code, test, `verifier/`, `fixtures/`, `config/` or `.github/` change. No Meta request made.
+
+### Open items
+- Live-call cap (12 Spark + 4 Spark Open) is a proposal until the owner confirms.
+- (Withdrawn) The sandbox decision was described as accepted by the owner in chat. It is NOT APPROVED; see PP-META-I2-C3-PIVOT-2.
+- Muse Wonder's role is unconfirmed.
+
+### Next action
+GPT-6: review the contract and the sandbox decision. Owner: confirm the cap, ask about Wonder, authorize the start of C3-A.
+
+## Handoff: PP-META-I2-C3-PIVOT-2
+
+- **Task / phase:** PP-META-I2-C3, remediation of the PR #6 audit (docs only)
+- **From:** implementation agent (Claude Code)
+- **To:** GPT-6 re-audit of the new exact head, then the owner
+- **Branch / PR:** `docs/pp-meta-i2-c3-pivot`, PR #6; base `main` at `5658529319032236fcddb472a617fbdc5cf9aadd`
+- **State:** READY FOR RE-AUDIT. Verify the exact head SHA on the PR before reviewing.
+
+### Completed
+- `tasks/PP-META-I2-C3.md` revision 2: decision register (SEC-C3-01, LIVE-C3-01, UI-C3-01 all not approved), closed-grammar CSS adjustment boundary for F01, verifier facts (fixed root and port 4173) and a per-candidate staging mechanism with a zero-model spike, NC-4 rewritten to fail closed, separate DID-1 interception harness, fail-closed proposal adapter requirements, report design gate.
+- `design/screens/PP-C3-REPORT-CONTRACT.md` added (approval pending).
+- `docs/SECURITY.md`: stale "mocks only" text corrected, `generateText` gap recorded, proposed boundary added as NOT APPROVED. `docs/STATUS.md`, README, PRODUCT and ARCHITECTURE corrected for stale branch, merge and Muse Wonder statements. `docs/CHATGPT-PIVOT-PROMPT.md` removed.
+- No code, test, `verifier/`, `fixtures/`, `config/` or `.github/` change. No Meta request, no billable call, no AI-generated patch executed.
+
+### Open items
+- Owner decisions: SEC-C3-01, LIVE-C3-01 (exact numbers), UI-C3-01.
+- Candidate oracle runs are uninstrumented by design; the re-audit should confirm that closed-grammar rendering plus DID-1 is an acceptable substitute for runtime interception.
+- The staging spike (dependency symlink resolution, trace-based nonce proof) is unproven until C3-B.
+
+### Next action
+GPT-6: re-audit the exact head. Owner: record decisions, merge if satisfied. Implementation agent: do not start C3 until the start gates in the task are met.
+
+## Handoff: PP-META-I2-C3-PIVOT-3
+
+- **Task / phase:** `tasks/PP-META-I2-C3.md` revision 3 (docs only; PR #6)
+- **From:** Implementation agent (Claude Code, Claude Sonnet 5.5)
+- **To:** GPT-6 final exact-head review, then project owner
+- **Branch:** `docs/pp-meta-i2-c3-pivot` (Draft/Open PR #6); previous reviewed head `aeb3821db4959f0212d440bd85863a2a3958201b`; audit the branch head
+- **State:** READY FOR REVIEW
+
+### Completed (remediation of re-audit 6460634258)
+- **BLOCKER-1:** the raw-text brace/quote scanner is removed. New "Proposal validation pipeline": byte bound before parse; strict single-value JSON with duplicate-key detection; forbidden-content scan over decoded, NFKC-normalised keys and string values of the parsed tree; exact shape, 0 to 4 string-only items, closed selector/property/value grammar, duplicate-pair rejection; deterministic precedence (size and syntax first, then forbidden content, then grammar); `PATCH_REJECTED` vs `SECURITY_BLOCKED` defined; rendering only from host constants, plus exact staged-byte check. Vector table covers valid JSON (PV-1 to PV-4), malformed JSON, fenced/BOM JSON, braces/quotes as framing, extra `path`/`html` keys, `url(` in a field, escaped/fullwidth/comment-split variants, prototype keys, duplicate pairs and keys, five entries, wrong types, each with its exact status and a no-side-effects assertion. NC-2, NC-4, NC-1 and PC-1 now point to it.
+- **README / ARCHITECTURE:** stale "real inference NOT TESTED / MOCK TESTED only" replaced by the C2B live results with attribution (agent-reported, two runs spent, charge unverified); ARCHITECTURE marks the original topology historical and lists what is built vs not built.
+- **Symlink wording:** a symlink is stated not to enforce read-only; frozen install inside the stage preferred; the symlink option requires a before/after dependency manifest, a stage containment walk and a no-write check, and is detect-only. Staging proofs are labelled proposed, not demonstrated.
+- Approval register unchanged: SEC-C3-01, LIVE-C3-01 and UI-C3-01 remain NOT APPROVED. No code, test, `verifier/`, `fixtures/`, `config/` or `.github/` change; no Meta call; no patch execution.
+
+### Open items
+- The pipeline and staging spike are specifications only; nothing is implemented or demonstrated. Docker/sandbox NOT VERIFIED. Owner decisions pending.
+
+### Next action
+GPT-6: final exact-head review. Owner: decide SEC-C3-01, LIVE-C3-01, UI-C3-01 and merge.
+
 <!-- HANDOFF_ENTRIES_END -->

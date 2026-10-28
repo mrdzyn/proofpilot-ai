@@ -5,13 +5,13 @@
 ## Project
 
 - **Name:** ProofPilot AI — Meta Global AI Developer Hackathon (Push the Frontier)
-- **Current phase:** PP-META-I1-C2B complete (docs closure); C3 not started
-- **Status:** C2B closed as **T04 completed (agent-reported live result)**. This docs-only branch awaits independent exact-head review. No Meta request of any kind is currently authorized.
-- **Primary branch:** protected `main` at `9103d00e1b82f260a41498e7c64201ccd398be15` (C2B-R1 squash merge; PR #4)
-- **Working branch:** `docs/pp-meta-i1-c2b-completion` (docs only)
-- **Active task:** None (C3 requires a new task contract and owner start)
-- **Active handoff:** PP-META-I1-C2B-DOC-1
-- **Authorization:** Both single-use live smokes are **spent**. **Not authorized:** any further Meta upload or inference, merge by the agent, deployment, product UI shell, Docker bypass, C3, or AI-generated patch execution.
+- **Current phase:** PP-META-I1-C2B complete and merged (PR #5). Hackathon pivot **PP-META-I2-C3 is a DRAFT contract under review in PR #6** (branch `docs/pp-meta-i2-c3-pivot`); C3 implementation not started.
+- **Status:** C2B closed as **T04 completed (agent-reported live result)**. GPT-6's exact-head audit of PR #6 returned **FIX REQUIRED**; this revision remediates it (see `tasks/PP-META-I2-C3.md`, revision 2). The pivot keeps F01 video analysis, Muse Spark candidates, trusted verification, a scoreboard, hashed evidence and a static report, and narrows execution to a proposed closed-grammar CSS boundary. Nothing in the pivot is approved yet.
+- **Primary branch:** protected `main` at `5658529319032236fcddb472a617fbdc5cf9aadd` (C2B docs closure, PR #5)
+- **Working branch:** `docs/pp-meta-i2-c3-pivot` (docs only, PR #6, awaiting GPT-6 re-audit of the exact head). The implementation branch `phase/pp-meta-i2-c3` does not exist yet.
+- **Active task:** None. `PP-META-I2-C3` is a DRAFT contract; it has not started and its start gates are not met.
+- **Active handoff:** PP-META-I2-C3-PIVOT-2
+- **Authorization:** Both single-use live smokes are **spent**. **NOT APPROVED:** the proposed execution boundary (SEC-C3-01) and the proposed live-call quantities of 12 Muse Spark plus 4 Baseten calls (LIVE-C3-01); the report layout (UI-C3-01) is PENDING design approval. An earlier chat "yes" is not a reviewable authorization and is not relied on. No Meta request of any kind, no execution of AI-generated code or patches, no merge or deployment by an agent, no push to `main`, and no C3 implementation is authorized.
 
 ## Completed milestones
 
@@ -60,13 +60,23 @@
 
 | Gate | Status |
 |---|---|
-| C2B (Workstream A, R1, live smokes) | DONE; this docs closure pending review |
+| C2B (Workstream A, R1, live smokes) | DONE and merged (PR #5) |
 | T04 real Muse Spark video analysis | **COMPLETED (agent-reported)** |
-| Product five-screen design `design/screens/PP-PRODUCT-SCREEN-MAP.md` | PROPOSED; awaiting owner's higher-fidelity visual approval |
-| Isolated Docker/ARM64 patch runner | **NOT VERIFIED; no AI-generated patch may execute** |
-| C3 patch proposal (Muse Wonder, proposal only), C4 trusted candidate verification, evidence export, demo/submission | NOT STARTED |
+| PR #6 contract: GPT-6 exact-head review | PENDING (heads `1e8a3b5` and `aeb3821` were FIX REQUIRED; `aeb3821` BLOCKER-1: raw-text scanner contradicted valid JSON, now replaced by a parse-then-scan pipeline with test vectors) |
+| SEC-C3-01 execution boundary (closed-grammar CSS adjustments, F01 only) | **NOT APPROVED**; needs a recorded owner approval and independent acceptance |
+| LIVE-C3-01 live-call quantities | **NOT APPROVED**; every live path stays disabled |
+| UI-C3-01 one-page static report (`design/screens/PP-C3-REPORT-CONTRACT.md`) | PENDING owner design approval |
+| Five-screen product UI (`design/screens/PP-PRODUCT-SCREEN-MAP.md`) | CUT for the hackathon; stays PROPOSED and unbuilt |
+| Independently verified Docker/ARM64 or OS sandbox | **NOT VERIFIED**. Still required before any model-authored HTML, JavaScript or free-form patch executes |
+| Staging spike (unmodified oracle run in a per-candidate stage) | NOT STARTED |
+| C3-A proposal adapter, C3-B candidate runner, C3-C scoreboard/evidence, C3-D report + replay + audit, C3-E demo, C3-F submission | NOT STARTED |
+| Muse Wonder as patcher | UNVERIFIED and not a dependency |
 | Baseten | NOT TESTED |
 
 ## Next action
 
-Independent exact-head review of this docs-only Draft PR. Then the owner decides when to start C3 (proposal only: no generated patch executes until the sandbox is independently verified). No further live Meta request without a new task and fresh owner authorization.
+1. GPT-6 gives a final review of the new exact head of PR #6 (BLOCKER-1 pipeline, README/ARCHITECTURE corrections, dependency-symlink wording).
+2. Owner decides SEC-C3-01, LIVE-C3-01 (exact numbers) and UI-C3-01, recording each in `tasks/PP-META-I2-C3.md`, and merges the PR if satisfied.
+3. Only then does the implementation agent cut `phase/pp-meta-i2-c3` from the merged `main` and start with the zero-model staging spike.
+
+Submission deadline: Nov 4, 9:00 PM EST = **Nov 5, 10:00 AM PHT**; internal target is Nov 4 PHT.
