@@ -8,9 +8,9 @@
 - **Current phase:** PP-META-I2-C3-0 — zero-model candidate-staging spike (implemented; awaiting independent exact-head review)
 - **Status:** C3 contract (`tasks/PP-META-I2-C3.md`, revision 4) is merged (PR #6, audit PASS at `6afb386`). Owner approved **SEC-C3-01** (bounded) and authorized only the C3-0 spike on 2026-10-28 (comment 6460953906). The spike passed locally; no model-generated candidate exists or may execute.
 - **Primary branch:** protected `main` at `c316df930501187543c1296cee41946162565278` (PR #6 squash merge)
-- **Working branch:** `phase/pp-meta-i2-c3-0-staging-spike` (Draft PR; code head `e27c6a5a7947aebd5509692dba36830c641ceae4`, then a docs commit; the branch head is authoritative)
+- **Working branch:** `phase/pp-meta-i2-c3-0-staging-spike` (Draft PR; audited head `9f1ec0d` was FIX REQUIRED (MAJOR-1, MAJOR-2); remediation code head `0d2a139a93c24741232649819ca70f81fbad012b`, then a docs commit; the branch head is authoritative)
 - **Active task:** `tasks/PP-META-I2-C3.md` (C3-0 only)
-- **Active handoff:** PP-META-I2-C3-0-A1
+- **Active handoff:** PP-META-I2-C3-0-R1
 - **Authorization:** Both single-use live smokes are **spent**. **APPROVED:** SEC-C3-01 (F01-only closed-grammar CSS, hand-authored controls only until further gates). **NOT APPROVED:** LIVE-C3-01 (12 Meta + 4 Baseten are proposed maximums; effective billable quota is 0) and UI-C3-01 (report layout). No Meta/Baseten request, no execution of model-generated code, no deployment or merge by the agent.
 
 ## Completed milestones
@@ -68,32 +68,34 @@
 | UI-C3-01 one-page static report (`design/screens/PP-C3-REPORT-CONTRACT.md`) | PENDING owner design approval |
 | Five-screen product UI (`design/screens/PP-PRODUCT-SCREEN-MAP.md`) | CUT for the hackathon; stays PROPOSED and unbuilt |
 | Independently verified Docker/ARM64 or OS sandbox | **NOT VERIFIED**. Still required before any model-authored HTML, JavaScript or free-form patch executes |
-| C3-0 staging spike (unmodified oracle run in a per-candidate stage) | **IMPLEMENTED; local proof PASSED** (NC-1, NC-1b, PC-1 as expected); independent review PENDING |
+| C3-0 staging spike (unmodified oracle run in a per-candidate stage) | **IMPLEMENTED; local proof PASSED** (NC-1, NC-1b, PC-1 as expected); first audit FIX REQUIRED (exit code, mandatory evidence), remediated; re-audit PENDING |
 | C3-A proposal validator + adapter, C3-B candidate runner, C3-C scoreboard/evidence, C3-D report + replay + audit, C3-E demo, C3-F submission | NOT STARTED |
 | Muse Wonder as patcher | UNVERIFIED and not a dependency |
 | Baseten | NOT TESTED |
 
-## C3-0 staging spike result (local, code head `e27c6a5`, clean tree, macOS arm64, Node 24.21.0)
+## C3-0 staging spike result (local; remediation code head `0d2a139`, clean tree, macOS arm64, Node 24.21.0)
 
-- **Mechanism:** `scripts/c3-stage-spike.ts` → `packages/core/src/candidate-stage.ts` (stage, lock, port preflight, verification, oracle run, trace proof), `css-adjustments.ts` (trusted rendering), `zip-read.ts` (trace reader). The oracle, `verifier/`, `fixtures/sample-store/`, `config/` and CI are unchanged.
-- **Run `c3-0-20261028T050720Z-d5443c` (approved SHA = `e27c6a5`; evidence `.proofpilot/c3-spike/…`, gitignored):**
+- **Mechanism:** `scripts/c3-stage-spike.ts` → `packages/core/src/candidate-stage.ts` (stage, lock, port preflight, verification, oracle run, trace proof, evidence gate), `css-adjustments.ts` (trusted rendering), `zip-read.ts` (trace reader). The oracle, `verifier/`, `fixtures/sample-store/`, `config/` and CI are unchanged.
+- **Audit remediation (GPT-6 comment 6461860392):**
+  - **MAJOR-1:** `ORACLE_PASS` now requires the oracle process to exit 0 and both trusted tests to pass with the expected tap target and cart count. Passing rows with any nonzero or missing exit are `INCONCLUSIVE` (`ORACLE_EXIT_ABNORMAL`). `PATCH_FAILED` requires Playwright's ordinary tests-failed exit 1; failing rows with another exit abstain.
+  - **MAJOR-2:** evidence finalization is a mandatory gate (`finalizeEvidence`): all required artifacts (report, stdout, and per viewport the observation and trace) must exist and be hashed, the record is written atomically, then read back and every hash re-verified. Any failure downgrades a pass or fail to `INCONCLUSIVE`/`EVIDENCE_INCOMPLETE` and removes any stale passing record. The spike script now asserts evidence completeness (persisted record, finalized, required artifacts, matching hashes), the expected oracle exit per control (NC: 1, PC: 0), stage removal and post-run integrity.
+- **Run `c3-0-20261028T060805Z-b1794a` (approved SHA = `0d2a139`; evidence `.proofpilot/c3-spike/…`, gitignored):**
 
-| Control | Rendered CSS | Mobile | Desktop | Outcome |
-|---|---|---|---|---|
-| NC-1 no-op | none | failed, tap received by `promo-overlay`, cart 0 | passed, cart 1 | `PATCH_FAILED`, baseline-identical |
-| NC-1b irrelevant | `.promo{z-index:5}` | failed, tap received by `promo-overlay`, cart 0 | passed, cart 1 | `PATCH_FAILED`, baseline-identical |
-| PC-1 correct | `.promo-overlay{pointer-events:none}` | passed, tap received by `add-to-cart`, cart 1 | passed, cart 1 | `ORACLE_PASS` (1 of 3; not `VERIFIED`) |
+| Control | Rendered CSS | Mobile | Desktop | Outcome | Oracle exit | Evidence |
+|---|---|---|---|---|---|---|
+| NC-1 no-op | none | failed, tap received by `promo-overlay`, cart 0 | passed, cart 1 | `PATCH_FAILED` | 1 | complete (20 files, 6 required) |
+| NC-1b irrelevant | `.promo{z-index:5}` | failed, same signature | passed | `PATCH_FAILED` | 1 | complete (20 files) |
+| PC-1 correct | `.promo-overlay{pointer-events:none}` | passed, tap received by `add-to-cart`, cart 1 | passed, cart 1 | `ORACLE_PASS` (1 of 3; not `VERIFIED`) | 0 | complete (19 files) |
 
-- **Source proof, inspected:** for every control and both viewports the Playwright trace's recorded `GET /styles.css` response body equals the staged file byte for byte (baseline + per-candidate nonce marker + rendered rules), re-checked independently outside the harness. Hit-test behaviour flips exactly for PC-1.
-- **Integrity:** 11 trusted files match the approved blobs; hashes re-verified before and after each run (878 dependency files compared with the trusted install); each stage removed; lock released; no stray processes or stage directories.
+- **Independent re-check of the saved evidence (outside the harness):** in every trace the recorded `GET /styles.css` body equals baseline + nonce marker + rendered rules; all evidence hashes match; no required artifact missing.
+- **Integrity:** 11 trusted files match the approved blobs; hashes re-verified before and after each run; stages removed; lock released; no stray processes or stage directories; 0 model/provider calls.
 - **Dependencies:** offline frozen install is impossible here (`ERR_PNPM_NO_OFFLINE_META`); a contained, hash-compared copy of the trusted install is used (detect-only, see the task file).
-- **Environment note:** the Playwright Chromium cache had been cleared since the previous day, which broke even `pnpm f01:baseline`; `pnpm exec playwright install chromium` (documented in README) was re-run. No other network access, no registry, no model or provider call (0 by construction: the harness imports no inference code and the oracle runs with a scrubbed environment).
-- **Tests:** lint/typecheck clean; unit 141/141; security 27/27; integration 19/19 (real browser, local only; now run serially because files share port 4173); `pnpm f01:baseline` exit 0 REPRODUCED, desktop PASS, certified; `pnpm test:e2e:f01` exit 1 (expected). Mutation checks: 8 of 8 effective mutants killed (wrong oracle cwd, skipped pre-run and post-run integrity, skipped port check, skipped lock, proof ignoring bytes, skipped blob compare, skipped containment); one apparent survivor was an equivalent mutant because the port is checked twice, and removing both checks was killed.
+- **Tests:** lint/typecheck clean; unit 152/152; security 27/27; integration 25/25 (real browser, local only, run serially because files share port 4173); `pnpm f01:baseline` exit 0 REPRODUCED, desktop PASS, certified; `pnpm test:e2e:f01` exit 1 (expected). Mutation checks for the remediation: 6 of 6 killed (pass without exit 0, patch-failed on any exit, no downgrade on evidence failure, skipped missing-evidence check, skipped read-back verification, stale record not removed) plus the earlier 8 of 8 staging guards.
 - **Limits:** a spike, not a sandbox. Dependency integrity is detected, not enforced; browser binaries are outside the manifests; nonce proof relies on the pinned Playwright trace format (1.64.1); only hand-written inputs ran; hosted CI does not run the real-browser staging tests.
 
 ## Next action
 
-1. Independent exact-head review of the C3-0 Draft PR (hosted CI plus the evidence above).
+1. Independent exact-head re-audit of the C3-0 Draft PR (hosted CI plus the evidence above).
 2. After merge (owner), C3-A: proposal validator (pipeline V0 to V7) and fail-closed provider adapter, mocks only. LIVE-C3-01 must be approved before any billable call; UI-C3-01 before any report UI. Model-generated candidates stay blocked until C3-A tests, audit and the remaining gates.
 
 Submission deadline: Nov 4, 9:00 PM EST = **Nov 5, 10:00 AM PHT**; internal target is Nov 4 PHT.

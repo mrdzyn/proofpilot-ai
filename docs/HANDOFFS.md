@@ -475,4 +475,28 @@ C3-A validator/adapter, scoreboard, report UI, any model or provider call, any m
 ### Next action
 GPT-6 review; then owner decisions.
 
+## Handoff: PP-META-I2-C3-0-R1
+
+- **Task / phase:** `tasks/PP-META-I2-C3.md` (C3-0), remediation of GPT-6 audit 6461860392 on PR #7
+- **From:** Implementation agent (Claude Code, Claude Sonnet 5.5)
+- **To:** GPT-6 independent exact-head re-audit, then project owner
+- **Branch:** `phase/pp-meta-i2-c3-0-staging-spike` (Draft PR #7); audited head `9f1ec0d43d77b3c9e78f80cff69805bf5870e16f`; remediation code head `0d2a139a93c24741232649819ca70f81fbad012b`; audit the branch head
+- **State:** READY FOR RE-AUDIT
+
+### Completed
+- **MAJOR-1:** pure `decideOutcome`: pass needs exit 0 plus both trusted tests passing with the expected observations; passing rows with a nonzero or missing exit are `INCONCLUSIVE` (`ORACLE_EXIT_ABNORMAL`); `PATCH_FAILED` only for exit 1 with settled rows. Unit table and integration tests (exit forced to 7 with passing rows, exit forced to 0 with failing rows, genuine NC-1 still `PATCH_FAILED`).
+- **MAJOR-2:** `finalizeEvidence` / `verifyPersistedEvidence`: required artifacts (report, stdout, two traces, two observations) must exist and be hashed; atomic record write; read-back re-verification; any failure downgrades to `INCONCLUSIVE`/`EVIDENCE_INCOMPLETE` and removes a stale passing record. Deterministic fault-injection tests: missing artifact (each of the six, unit), incomplete required list, hashing failure, failed record write, hash change between passes, tampered/extra files, and real-run integration faults (write failure, hash failure, trace deleted for a pass and for a fail, stale record removed when the downgrade write also fails). The spike script now fails if evidence is incomplete for NC-1, NC-1b or PC-1.
+- **docs/SECURITY.md:** SEC-C3-01 recorded as approved (bounded, hand-authored controls only until C3-A, tests and audit); broader executable model patches still require independently verified isolation; LIVE-C3-01 and UI-C3-01 remain not approved.
+- Unchanged: `verifier/`, `fixtures/sample-store/`, `config/` (incl. patch policy), `.github/`. No model/provider call. No model-generated candidate.
+
+### Validation
+See `docs/STATUS.md` (spike run `c3-0-20261028T060805Z-b1794a`, unit 152/152, security 27/27, integration 25/25, baseline regression, mutation checks). Hosted CI: see PR #7.
+
+### Open items / limits
+- Dependency integrity is detect-only; browser binaries outside manifests; trace layout pinned to Playwright 1.64.1; the real-browser staging tests are local only.
+- C3-A (validator pipeline V0 to V7 and provider adapter), LIVE-C3-01 and UI-C3-01 remain not started or not approved.
+
+### Next action
+GPT-6: re-audit the exact head. Owner: decisions after audit; no merge by the agent.
+
 <!-- HANDOFF_ENTRIES_END -->
