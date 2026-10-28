@@ -548,4 +548,30 @@ Unit 211/211, security 36/36, integration 25/25, F01 baseline certified, C3-0 sp
 ### Next action
 GPT-6: re-audit the exact head. Owner: decisions after audit; no merge by the agent.
 
+## Handoff: PP-META-I2-C3-B1-A1
+
+- **Task / phase:** `tasks/PP-META-I2-C3.md` (C3-B1: offline candidate verification coordinator, hand-authored controls only)
+- **From:** Implementation agent (Claude Code, Claude Sonnet 5.5)
+- **To:** GPT-6 independent exact-head review, then project owner
+- **Branch:** `phase/pp-meta-i2-c3-b1-offline-verification` from `main` `65e2a1f5c4f7aaaa56da1abb86c22485b2610209`; code head `358c273d6cfcf06829b62c05810fe8f116e1086a`; Draft PR (audit the branch head)
+- **State:** READY FOR REVIEW
+
+### Completed
+- Coordinator, `decideVerification`/`baselineGate`/`replayPassProblems`, atomic scoreboard, `verifyScoreboard`; controls NC-1, NC-1b, NC-3, NC-6, NC-7, PC-1 (3 replays) and derived NC-5; separate DID-1 demonstration; `scripts/c3-offline-verification.ts`. Example scoreboard: `docs/examples/c3-b1-scoreboard.example.json`.
+- Result: PC-1 `VERIFIED` 3/3 (hand-authored, three fresh stages, distinct nonces, evidence re-checked independently); NC-1, NC-1b, NC-3 `PATCH_FAILED`; NC-6 `TAMPER` and NC-7 `PORT_BUSY` `INCONCLUSIVE`; NC-5 `NOT_REPRODUCED`; DID-1 passed as a separate demonstration.
+- Docs only: `docs/BASETEN-COMPATIBILITY-PLAN.md` (pinned id `meta-models/muse-spark-open-1026` vs public docs naming "Muse Spark Open" without a slug, and the public statement that Muse Spark Open does not support structured outputs, which our Baseten request uses; staged B0 to B4 plan, nothing run) and `docs/MODAL-FEASIBILITY-PROPOSAL.md` (feasibility and scope-change proposal; the C3 contract prohibits hosted backends; egress controls not found in the guide page read; not a verified boundary; HOST-C3-01 not requested).
+- Unchanged: `candidate-stage.ts`, proposal modules, `verifier/`, `fixtures/sample-store/`, `config/`, `.github/`. No Meta/Baseten/Modal call. No model-generated candidate. Production `proposeCandidate` still hard-disabled; live quota still 0.
+
+### Validation
+Unit 228/228, security 41/41, integration 28/28, F01 baseline certified, C3-0 spike unchanged, 14/14 mutants killed. Hosted CI: see the Draft PR.
+
+### Open items and questions for the reviewer
+- Whether `VERIFIED` for a hand-authored closed-grammar CSS control under local replays is worded narrowly enough (scope text in STATUS).
+- The coordinator and oracle locks are not crash-safe (fail closed).
+- Baseten: structured-output support and the served id are unresolved; Modal: egress control undocumented in the page read.
+- Not done on purpose: report UI (UI-C3-01), model proposals through the coordinator (C3-B2), any provider or Modal call.
+
+### Next action
+GPT-6 review; owner decides merge and any of LIVE-C3-01, Baseten stages, HOST-C3-01, UI-C3-01.
+
 <!-- HANDOFF_ENTRIES_END -->
