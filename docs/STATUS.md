@@ -8,9 +8,9 @@
 - **Current phase:** PP-META-I2-C3-B1 — offline candidate verification coordinator (implemented over hand-authored controls; awaiting independent exact-head review)
 - **Status:** C3-A (PR #8, audit PASS) is merged. C3-B1 adds a deterministic coordinator, 3-replay VERIFIED logic, a machine-readable scoreboard and the separate DID-1 demonstration, all over hand-authored controls only. The production proposal entry point stays hard-disabled and no provider, Modal or model call is possible from this code.
 - **Primary branch:** protected `main` at `65e2a1f5c4f7aaaa56da1abb86c22485b2610209` (PR #8 squash merge)
-- **Working branch:** `phase/pp-meta-i2-c3-b1-offline-verification` (Draft PR #9; audited head `02dfa82` was FIX REQUIRED (MAJOR-1, MAJOR-2); remediation code head `6002b6009dd952da019b64319ec2c4f15367d211`, then a docs commit; the branch head is authoritative)
+- **Working branch:** `phase/pp-meta-i2-c3-b1-offline-verification` (Draft PR #9; audited heads `02dfa82` (MAJOR-1, MAJOR-2) and `4363000` (MAJOR-3) were FIX REQUIRED; latest remediation code head `bb64b736a57f83a90884f516f79ac5de3e283ef7`, then a docs commit; the branch head is authoritative)
 - **Active task:** `tasks/PP-META-I2-C3.md` (C3-B1 only)
-- **Active handoff:** PP-META-I2-C3-B1-R1
+- **Active handoff:** PP-META-I2-C3-B1-R2
 - **Authorization:** Both single-use live smokes are **spent**. **APPROVED:** SEC-C3-01 (F01-only closed-grammar CSS, hand-authored controls only until further gates). **NOT APPROVED:** LIVE-C3-01 (live quota is a frozen code constant of 0), UI-C3-01 (no report UI), HOST-C3-01 (no hosted backend or Modal). No Meta/Baseten/Modal call, no execution of model-generated code, no deployment or merge by the agent.
 
 ## Completed milestones
@@ -77,6 +77,13 @@
 | Modal sandbox (`docs/MODAL-FEASIBILITY-PROPOSAL.md`) | PROPOSAL ONLY; the C3 contract forbids hosted backends; HOST-C3-01 not requested; not a verified boundary |
 | Muse Wonder as patcher | UNVERIFIED and not a dependency |
 | Baseten | NOT TESTED |
+
+## C3-B1 audit remediation 2 (GPT-6 comment 6464385552; MAJOR-3; MAJOR-1 and MAJOR-2 re-audited RESOLVED, code head `bb64b73`)
+
+- **MAJOR-3 (replay display metadata and baseline provenance):** every published `ReplayEntry` field now comes from one pure builder, `buildReplayEntry`, which the coordinator publishes with and `verifyScoreboard` calls again on the persisted record, its file bytes and the independently recomputed evidence check. The verifier compares the whole entry field by field (`n`, `outcome`, `failureCode`, `failureMessage`, `oracleExitCode`, `evidenceDir`, `recordSha256`, `candidateCssSha256`, `nonce`, `mobile`, `desktop`, `servedCssSha256`, `evidenceFinalized`, `evidenceProblems`) and rejects any extra key, for the baseline and every candidate replay. The baseline must be exactly `BASELINE/replay-1` with a record labelled `BASELINE`; every candidate replay record must carry its own control id as its label. A real evidence problem that the published entry omits is reported. Truthful failed and inconclusive scoreboards (including real failure messages) still verify. `decideVerification`, the oracle and `candidate-stage.ts` are unchanged.
+- **Tests:** 14 single-field forgeries across 7 kinds of replay (failed, inconclusive, passing, the baseline) without touching the authentic evidence; evidence tampered after the scoreboard was written; baseline redirected to NC-1 (authentic, hash-matching, fields copied) fails on path and label; baseline and candidate record-label forgeries with matching hashes; truthful negative scoreboards; real-browser checks on the real evidence. Also fixed a flaky concurrency test (either coordinator may win the lock; the old test assumed one). Lint/typecheck clean; unit 242/242; security 41/41; integration 29/29 (real browser, local); `pnpm f01:baseline` exit 0 certified; `pnpm test:e2e:f01` exit 1 (expected); C3-0 spike unchanged. 8 of 8 new-guard mutants killed.
+- **Real run `c3-b1-20261028T084508Z-e27b62` (approved SHA = code head, clean tree):** baseline REPRODUCED; NC-1, NC-1b, NC-3 `PATCH_FAILED`; NC-6 and NC-7 `INCONCLUSIVE`; PC-1 `VERIFIED` 3/3; NC-5 `NOT_REPRODUCED`; the stricter verifier accepted it; DID-1 passed (separate). Example scoreboard regenerated.
+- No provider, Modal or model call; `proposeCandidate` still hard-disabled; live quota 0; no report UI.
 
 ## C3-B1 audit remediation (GPT-6 comment 6464103194; remediation code head `6002b60`)
 
