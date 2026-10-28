@@ -524,4 +524,28 @@ Unit 207/207, security 33/33, integration 25/25, F01 baseline certified, C3-0 sp
 ### Next action
 GPT-6 review; owner decides merge. C3-B and any live use need a new handoff, LIVE-C3-01 and fresh authorization.
 
+## Handoff: PP-META-I2-C3-A-R1
+
+- **Task / phase:** `tasks/PP-META-I2-C3.md` (C3-A), remediation of GPT-6 audit 6463012075 on PR #8
+- **From:** Implementation agent (Claude Code, Claude Sonnet 5.5)
+- **To:** GPT-6 independent exact-head re-audit, then project owner
+- **Branch:** `phase/pp-meta-i2-c3-a-proposal-pipeline` (Draft PR #8); audited head `9cce80c4657dc7247d5276a7d069adff61dd7306`; remediation code head `6747b2949b95c0be60be91131c45adba5710a942`; audit the branch head
+- **State:** READY FOR RE-AUDIT
+
+### Completed
+- **MAJOR-1:** explicit `status === "completed"` required for Meta proposals (provider layer and `processProposalResponse`); absent/null/empty/wrong-type/unrecognised statuses fail closed with one request, burned run id and slot, and settled reservation. C2B video behaviour unchanged (verified by tests and a mutant).
+- **MAJOR-2:** `transport` label and `injectedTransportQuota` removed; `proposeCandidate` is hard-disabled and does nothing but throw `LIVE_NOT_APPROVED`; full flow moved to the mock-only `tests/support/proposal-harness.ts` over pure production pieces. Adversarial tests (Meta and Baseten; forwarding transport, Proxy-wrapped provider, forged provider object, positive quotas, consent, credentials, billable flags) assert zero callbacks, zero network access, zero reservations and zero files. Static tests assert nothing in `packages/` or `scripts/` calls `structuredResponse` or imports the harness.
+- **Secondary:** orphan-slot behaviour documented, tested and reported by `listOrphanSlots` (never recycled); human-consent requirement for live operation stated explicitly (the mock tests do not demonstrate it).
+- Unchanged: `candidate-stage.ts`, `verifier/`, `fixtures/sample-store/`, `config/`, `.github/`. No Meta/Baseten/Modal call. No model-generated candidate executed. No C3-B.
+
+### Validation
+Unit 211/211, security 36/36, integration 25/25, F01 baseline certified, C3-0 spike NC-1/NC-1b `PATCH_FAILED` and PC-1 `ORACLE_PASS`, 6/6 new mutants killed. Hosted CI: see PR #8.
+
+### Open items
+- Live proposals remain impossible by design; LIVE-C3-01 and UI-C3-01 are not approved. A future live commit must change the entry point, add real human consent capture and audit trail, and be reviewed separately.
+- Unverified: proposal structured-output schema and the Baseten chat-completions shape against the real APIs; reservation lock crash-safety.
+
+### Next action
+GPT-6: re-audit the exact head. Owner: decisions after audit; no merge by the agent.
+
 <!-- HANDOFF_ENTRIES_END -->
