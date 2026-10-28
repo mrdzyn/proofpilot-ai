@@ -57,6 +57,29 @@ test('the persisted scoreboard re-verifies from its evidence; tampering with rea
   assert.match((await verifyScoreboard(forged)).join(), /NC-1: scoreboard says VERIFIED/);
 });
 
+test('real evidence: forged display fields and a baseline redirected to NC-1 fail while the authentic evidence is untouched', { skip: !clean, timeout: 120_000 }, async () => {
+  const forgeDir = path.join(scratch, 'display-forged');
+  cpSync(outDir, forgeDir, { recursive: true });
+  const file = path.join(forgeDir, SCOREBOARD_FILE);
+  const sb = JSON.parse(readFileSync(file, 'utf8'));
+  sb.candidates.find((c: { id: string }) => c.id === 'NC-1').replays[0].mobile = { status: 'passed', hitTestTarget: 'add-to-cart', cartCountAfter: '1' };
+  sb.candidates.find((c: { id: string }) => c.id === 'NC-7').replays[0].failureMessage = 'nothing went wrong';
+  writeFileSync(file, JSON.stringify(sb));
+  const problems = (await verifyScoreboard(forgeDir)).join(' | ');
+  assert.match(problems, /mobile does not match the persisted record and evidence/);
+  assert.match(problems, /failureMessage does not match the persisted record and evidence/);
+
+  const redirected = path.join(scratch, 'baseline-redirected');
+  cpSync(outDir, redirected, { recursive: true });
+  const rf = path.join(redirected, SCOREBOARD_FILE);
+  const rb = JSON.parse(readFileSync(rf, 'utf8'));
+  rb.baseline.replay = JSON.parse(JSON.stringify(rb.candidates.find((c: { id: string }) => c.id === 'NC-1').replays[0]));
+  writeFileSync(rf, JSON.stringify(rb));
+  const rp = (await verifyScoreboard(redirected)).join(' | ');
+  assert.match(rp, /baseline evidence must be BASELINE\/replay-1/);
+  assert.match(rp, /baseline record is labelled "NC-1"/);
+});
+
 test('DID-1: routing aborts everything outside the one allowed origin; it is a separate demonstration, not a verdict', { timeout: 90_000 }, async () => {
   const r = await runDid1();
   assert.equal(r.passed, true);
