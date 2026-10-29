@@ -10,7 +10,7 @@
 - **Primary branch:** protected `main` at `c7e18d318c29ed60014b1f48b6375c29a5640a69` (PR #13 squash merge)
 - **Working branch:** `phase/pp-meta-i2-c3-live01b-activation` (Draft PR; the branch head is authoritative)
 - **Active task:** `tasks/PP-META-I2-C3-LIVE-01B.md`
-- **Active handoff:** PP-META-I2-C3-LIVE-01B-A1
+- **Active handoff:** PP-META-I2-C3-LIVE-01B-A2
 - **Authorization:** Both single-use live smokes are **spent**. **APPROVED:** SEC-C3-01 (F01-only closed-grammar CSS, hand-authored controls only); **LIVE-C3-01 APPROVED for activation preparation (owner, October 29, 2026, one Meta `muse-spark-1.3` attempt; see `docs/LIVE-C3-01-DECISION-RECORD.md`)**. **NOT AUTHORIZED YET:** the real provider invocation (needs the audited and merged implementation, the pinned activation revision, the real operator preflight and per-run confirmation, and the owner's separate go-ahead). **NOT APPROVED:** C3-B2B (evaluating model proposals), UI-C3-01 (report UI), HOST-C3-01 (Modal or any hosted backend), Baseten, additional attempts, automated retries. A credit balance is not permission to spend. No Meta/Baseten/Modal call, no execution of model-generated code, no deployment or merge by the agent.
 
 ## Completed milestones
@@ -64,7 +64,7 @@
 | T04 real Muse Spark video analysis | **COMPLETED (agent-reported)** |
 | PR #6 contract | MERGED (audit PASS at `6afb386`) |
 | SEC-C3-01 execution boundary (closed-grammar CSS adjustments, F01 only) | **APPROVED, bounded** (owner record in the task file). Does not certify the unimplemented C3-A validator; model candidates still blocked |
-| LIVE-C3-01 live-call quantities | **NOT APPROVED**; every live path stays disabled |
+| LIVE-C3-01 live-call quantities (Meta only, `muse-spark-1.3`, 1 attempt in total) | **APPROVED for activation preparation** (owner, October 29, 2026, https://github.com/mrdzyn/proofpilot-ai/pull/6#issuecomment-6496850990). **Real provider invocation: NOT AUTHORIZED YET**; activation revision pin NOT RECORDED (`activation: null`) so every live path still refuses. Baseten and Modal: NOT APPROVED |
 | UI-C3-01 one-page static report (`design/screens/PP-C3-REPORT-CONTRACT.md`) | PENDING owner design approval |
 | Five-screen product UI (`design/screens/PP-PRODUCT-SCREEN-MAP.md`) | CUT for the hackathon; stays PROPOSED and unbuilt |
 | Independently verified Docker/ARM64 or OS sandbox | **NOT VERIFIED**. Still required before any model-authored HTML, JavaScript or free-form patch executes |
@@ -77,7 +77,7 @@
 | C3-LIVE-01B-PREP dormant production proposal runner and Meta transport | **MERGED** (PR #13) |
 | C3-LIVE-01B activation implementation (decision recorded, quota 1, gated entry point, owner CLI, provenance gate) | **IMPLEMENTED** (Draft PR); independent review PENDING; activation pin NOT RECORDED |
 | Real Meta invocation of the first proposal | **NOT AUTHORIZED YET** (operator gates in `tasks/PP-META-I2-C3-LIVE-01B.md`) |
-| LIVE-C3-01 first bounded Muse Spark proposal | **NOT APPROVED** (`docs/LIVE-C3-01-DECISION-RECORD.md`); needs owner approval, per-run operator approval, and a separately reviewed code change |
+| LIVE-C3-01 first bounded Muse Spark proposal | Owner decision **APPROVED for activation preparation** (`docs/LIVE-C3-01-DECISION-RECORD.md`). **The real invocation is NOT AUTHORIZED YET**: it still needs the independently audited and separately merged activation implementation (C3-LIVE-01B, Draft PR #14), the pinned activation revision (NOT RECORDED), a real single-use operator approval, a securely injected credential and the owner's separate go-ahead |
 | C3-B2B model proposals through staging and the coordinator | NOT STARTED and **gated in code** (`assertHandAuthoredControls`); needs its own owner authorization, a reviewed change and a new provenance label |
 | C3-C scoreboard report UI, C3-D report + replay + audit, C3-E demo, C3-F submission | NOT STARTED (UI-C3-01 not approved) |
 | Baseten compatibility (`docs/BASETEN-COMPATIBILITY-PLAN.md`) | PLAN ONLY; pinned id vs public docs discrepancy and a structured-output doubt recorded; NOT TESTED |
@@ -93,6 +93,8 @@
 - Dormant production wiring and activation plan: `tasks/PP-META-I2-C3-LIVE-01B-PREP.md`. The production path is tested by running the unmodified production code from a throwaway copy with its own register, pin and quota (fixtures exist only in the copy), with a mock `fetch`; no network, no real credential.
 - Test and CI evidence: see the Draft PR and handoff `PP-META-I2-C3-LIVE-01B-PREP-A1`.
 
+> **Historical records.** The milestone sections below describe each milestone as it stood when it was written. Where they say quota 0, "hard-disabled", or "LIVE-C3-01 NOT APPROVED", that was true then. The current state is the Project block at the top and the Open gates table: LIVE-C3-01 is APPROVED for activation preparation (owner, October 29, 2026), the real provider invocation is NOT AUTHORIZED YET, and the activation revision pin is NOT RECORDED.
+
 ## C3-LIVE-01B0 result (merged PR #12; branch `phase/pp-meta-i2-c3-live01b0-proposal-integration`;  branch `phase/pp-meta-i2-c3-live01b0-proposal-integration`)
 - Orchestration, isolation and failure matrix: `tasks/PP-META-I2-C3-LIVE-01B0.md`. Synthetic and scripted only; a synthetic result is **not** an authorization and an accepted proposal is **not** verified.
 - Test and CI evidence: see the Draft PR and handoff `PP-META-I2-C3-LIVE-01B0-A1`.
@@ -103,7 +105,7 @@
 - Audit 1 (FIX REQUIRED: MAJOR-1 production boundary, MAJOR-2 owner-pinned revision, MINOR-3 ancestor permissions) remediated in handoff `PP-META-I2-C3-LIVE-01A-A2`: one production gate (`live-gate.ts`) derives root/register/pin/Git/dirs/quota internally; injectable core not exported; `config/live-activation.json` (EMPTY) pins a tree digest excluding itself; `.proofpilot` ancestors checked.
 - Audit 2 (residual MAJOR-2: a same-tree empty descendant passed the digest check) remediated in `PP-META-I2-C3-LIVE-01A-A3`: HEAD must also be a linear, pin-file-only descendant of the pinned activation commit; documented re-pin procedure.
 - Test and CI evidence: see the Draft PR and the handoff.
-- C3-LIVE-01B (real activation) is **not started and not approved**.
+- C3-LIVE-01B (activation implementation) is now the Draft PR above; at the time of C3-LIVE-01A the real activation was not started and the owner decision was not recorded.
 
 ## C3-B2A remediation (audit 1: MAJOR-1, MINOR-2)
 - MAJOR-1: controls are deep-frozen and trusted by identity (module-private WeakSet); clones, model-derived PC-1 equivalents, foreign `check` callbacks and mutation attempts are refused before any lock/stage/runner/browser. `VERIFIED` rule, runner and oracle unchanged.
@@ -200,6 +202,6 @@
 ## Next action
 
 1. Independent exact-head review of the C3-LIVE-01B Draft PR (hosted CI plus the evidence above).
-2. Owner decisions, none started: merge; whether to approve the per-run operator-approval design; whether and with what exact values to record LIVE-C3-01 (then C3-LIVE-01B as a separate PR and audit); run the Baseten discovery yourself; decide separately on C3-B2B, HOST-C3-01 (Modal) and UI-C3-01 (report).
+2. Owner decisions still open (LIVE-C3-01 itself is already APPROVED for activation preparation and recorded): approve the squash merge of the C3-LIVE-01B Draft PR after its audit; then the pin-only activation commit and the operator steps in `tasks/PP-META-I2-C3-LIVE-01B.md`, and a separate go-ahead for the one real request; run the Baseten discovery yourself; decide separately on C3-B2B, HOST-C3-01 (Modal) and UI-C3-01 (report), which are NOT APPROVED.
 
 Submission deadline: Nov 4, 9:00 PM EST = **Nov 5, 10:00 AM PHT**; internal target is Nov 4 PHT.

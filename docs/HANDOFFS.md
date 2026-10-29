@@ -822,4 +822,19 @@ See the Draft PR for exact counts, hosted CI and guard-removal results. No real 
 ### Next action
 GPT-6 review; the owner separately decides merge, then the pin-only commit and the operator steps in the task file.
 
+## Handoff: PP-META-I2-C3-LIVE-01B-A2
+
+- **Task / phase:** `tasks/PP-META-I2-C3-LIVE-01B.md` (remediation of audit MINOR-1; documentation only)
+- **From:** Implementation agent (Claude Code, Claude Sonnet 5.5)
+- **To:** GPT-6 independent exact-head re-audit, then project owner
+- **Branch:** `phase/pp-meta-i2-c3-live01b-activation` (Draft PR #14); audit the branch head
+- **State:** READY FOR RE-REVIEW
+
+### Completed
+- MINOR-1: stale LIVE-C3-01 statuses reconciled in `docs/STATUS.md` (Open gates rows, historical-records banner, next action), `tasks/PP-META-I2-C3.md` (implementation status, state, ordering note, bounded usage, aggregate counter, schedule) and the header of `docs/META-ACTIVATION-CHECKLIST.md`. One consistent statement everywhere: LIVE-C3-01 is APPROVED for activation preparation; the activation implementation is pending review; the activation revision pin is NOT RECORDED; the real provider invocation is NOT AUTHORIZED YET; C3-B2B, UI-C3-01, HOST-C3-01 NOT APPROVED.
+- No implementation code, quota, provider configuration, authorization, approval handling or activation logic changed. `config/live-activation.json` is still `activation: null`. Historical task contracts (B2A, B0, PREP) and code comments keep their as-written wording by design.
+
+### Next action
+GPT-6 re-audit; the owner separately decides merge and the later operational steps.
+
 <!-- HANDOFF_ENTRIES_END -->

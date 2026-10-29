@@ -1,6 +1,6 @@
 # Meta Muse Spark activation readiness checklist (C3-B2A)
 
-> Preparation only. Ticking boxes here does not approve anything: LIVE-C3-01 is **NOT APPROVED** (`docs/LIVE-C3-01-DECISION-RECORD.md`), the live quota is a frozen code constant of `0`, and `proposeCandidate()` is hard-disabled.
+> Preparation only. Ticking boxes here does not approve anything. LIVE-C3-01 is **APPROVED for activation preparation** (owner, October 29, 2026; `docs/LIVE-C3-01-DECISION-RECORD.md`), but the **real provider invocation is NOT AUTHORIZED YET**: the activation implementation is pending independent review, the activation revision pin is **NOT RECORDED** (`config/live-activation.json` is `activation: null`, which alone refuses every request), and a real operator approval and credential do not exist. The Meta quota constant is `1` (lifetime total) and `proposeCandidate()` only delegates to the gated runner. Sections A to A22 below record what each earlier milestone verified at the time.
 
 ## A. Verified in C3-B2A by zero-network tests (mocks only)
 
