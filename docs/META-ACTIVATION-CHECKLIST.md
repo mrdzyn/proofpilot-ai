@@ -1,6 +1,6 @@
 # Meta Muse Spark activation readiness checklist (C3-B2A)
 
-> Preparation only. Ticking boxes here does not approve anything: LIVE-C3-01 is **NOT APPROVED** (`docs/LIVE-C3-01-DECISION-RECORD.md`), the live quota is a frozen code constant of `0`, and `proposeCandidate()` is hard-disabled.
+> Preparation only. Ticking boxes here does not approve anything. LIVE-C3-01 is **APPROVED for activation preparation** (owner, October 29, 2026; `docs/LIVE-C3-01-DECISION-RECORD.md`), but the **real provider invocation is NOT AUTHORIZED YET**: the activation implementation is pending independent review, the activation revision pin is **NOT RECORDED** (`config/live-activation.json` is `activation: null`, which alone refuses every request), and a real operator approval and credential do not exist. The Meta quota constant is `1` (lifetime total) and `proposeCandidate()` only delegates to the gated runner. Sections A to A22 below record what each earlier milestone verified at the time.
 
 ## A. Verified in C3-B2A by zero-network tests (mocks only)
 
@@ -33,6 +33,7 @@ Run it yourself (no network, no secrets read): `node scripts/c3-proposal-preflig
 | A18 | Repository register and activation pin are EMPTY; production validator returns `LIVE_NOT_APPROVED` | `tests/security/live01a-boundary.test.ts`; `node scripts/c3-live-rehearsal.ts` |
 | A22 | The proposal orchestration (preflight, authorize/consume/claim, ONE scripted response, strict validation, sanitized artifact, settle, STOP) works end to end with synthetic trust and scripted responses only; every failure outcome is spent, never retried, stores no raw text | `tests/unit/proposal-orchestrator.test.ts` (C3-LIVE-01B0) |
 | A23 | The orchestrator synthetic runner refuses production contexts and non-scripted transports; `proposeCandidate()` stays disabled | `tests/security/live01b0-boundary.test.ts` |
+| A25 | C3-LIVE-01B: the owner decision is recorded (one non-synthetic register entry), the Meta quota is 1 (lifetime), `proposeCandidate()` delegates only to the audited runner, and the EMPTY activation pin alone still prevents any request; the owner CLI builds its input only from re-verified certified evidence and makes at most one call | `tests/security/live01b-prep-install-copy.test.ts`, `tests/unit/live-input.test.ts`, `tests/unit/live-proposal-cli.test.ts`, `tests/security/live01b-activation-boundary.test.ts` |
 | A24 | The dormant production proposal runner (pre-flight, read-only production authorization, provider/credential, consume + claim, one request, shared tail) works end to end from a throwaway install copy with a mock `fetch`; with the real repository it stops at authorization before any credential is read; no CLI, no importer | `tests/security/live01b-prep-install-copy.test.ts`, `tests/unit/proposal-production.test.ts`, `tests/security/live01b-prep-boundary.test.ts` (C3-LIVE-01B-PREP) |
 | A19 | Production API derives root, register, pin, Git state, directories and quota internally; fake roots, forged probes, synthetic approvals and simulated quotas cannot authorize | `tests/unit/live-approval.test.ts` (MAJOR-1), `tests/security/live01a-boundary.test.ts` |
 | A20 | HEAD must be the owner-pinned activation revision AND a pin-only linear descendant of the activation commit; unauthorized newer clean commits, including same-tree empty/revert-recommit commits, are rejected identically by the CLI and validator | same, real-Git tests (MAJOR-2, incl. residual) |
@@ -50,18 +51,21 @@ Run it yourself (no network, no secrets read): `node scripts/c3-proposal-preflig
 | B6 | Approve a reviewed code change that enables the entry point behind that approval and the approved quota | owner + independent audit | not written |
 | B7 | Decide separately whether accepted proposals may be staged and verified (C3-B2B) | owner | NOT APPROVED |
 
-## C0. C3-LIVE-01B precise checklist (all unchecked; none started)
+## C0. C3-LIVE-01B precise checklist
 
-The orchestration it needs is built and mock-tested in C3-LIVE-01B0; the exact activation diff `runProductionProposalAttempt` already exists, dormant, from C3-LIVE-01B-PREP. What remains for 01B is only the register entry, quota 0 → 1, `proposeCandidate` delegating behind the gate and the owner-run single-call CLI; the plan is in `tasks/PP-META-I2-C3-LIVE-01B-PREP.md` and is NOT applied.
+State: LIVE-C3-01 **APPROVED for activation preparation** by the owner on October 29, 2026 (https://github.com/mrdzyn/proofpilot-ai/pull/6#issuecomment-6496850990). Activation implementation: pending independent review (Draft PR). Activation revision pin: **NOT RECORDED**. Real provider invocation: **NOT AUTHORIZED YET**. C3-B2B, UI-C3-01 and HOST-C3-01: NOT APPROVED.
 
-- [ ] C3-LIVE-01A merged after an independent PASS.
-- [ ] Owner records the LIVE-C3-01 decision (provider Meta, model `muse-spark-1.3`, max 1 billable attempt, input ≤ 12,000 characters, output ≤ 3,072 tokens including reasoning, 0 retries, no fallback, text only, per-run approval mandatory, uncertain results spend the attempt).
-- [ ] 01B PR: register entry (commit A after merge); `APPROVED_LIVE_QUOTA.meta` 0 → 1; `proposeCandidate` wired as authorize → prepareAttempt → one call → process → persist → settle; tests updated; no change to staging, coordinator, oracle or grammar. Independent exact-head audit PASS and merge.
-- [ ] Owner runs `node scripts/c3-activation-digest.ts <A>` and records A and the digest in `config/live-activation.json` in a separate reviewed pin-only commit A' (production and the CLI accept only a HEAD whose digest, pin file excluded, equals the pinned one AND whose history from A is linear, pin-file-only commits; any other commit, including an empty or revert/recommit descendant, is rejected; to re-pin, add another reviewed pin-only commit, or merge a reviewed new activation commit A2 and then a pin-only commit naming it).
-- [ ] Fresh checkout at A', clean tree; zero-network preflight JSON kept.
-- [ ] Owner runs `node scripts/c3-approve-live-run.ts` in a real terminal for the run id and input hash and types the exact phrase (valid 10 minutes).
+- [x] C3-LIVE-01A, C3-LIVE-01B0 and C3-LIVE-01B-PREP merged after independent PASS (PRs #11, #12, #13).
+- [x] Owner recorded the LIVE-C3-01 decision (Meta only, `api.meta.ai`, `muse-spark-1.3`, 1 attempt in total, input <= 12,000 characters, output <= 3,072 tokens including reasoning, text only, strict JSON, low reasoning, no retries, no fallback, uncertain results spend the attempt, mandatory single-use operator authorization).
+- [ ] C3-LIVE-01B Draft PR: independent GPT-6 exact-head audit PASS.
+- [ ] Owner separately approves the squash merge; the merge is the activation commit **A**.
+- [ ] Owner runs `node scripts/c3-activation-digest.ts <A>` and records A and the digest in `config/live-activation.json` in a separate reviewed **pin-only** commit **A'** (production and the CLI accept only a HEAD whose digest, pin file excluded, equals the pinned one AND whose history from A is linear, pin-file-only commits).
+- [ ] Independent verification of A'; fresh clean checkout of A'.
+- [ ] On that checkout: `pnpm f01:baseline` (certified evidence for exactly this HEAD), then `node scripts/c3-live-proposal.ts --analysis <live C2B analysis id> --preflight` (zero network); confirm the displayed input SHA-256 and character count; keep the output.
+- [ ] Owner runs `node scripts/c3-approve-live-run.ts --run-id c3-live-meta-001 --input-sha256 <hash> --input-chars <n>` in a real terminal and types the exact phrase (valid 10 minutes, single use).
 - [ ] Owner injects the Meta key for that one invocation from the secure store; agents never read it.
-- [ ] Run once; stop. Any further attempt needs a new decision. A credit balance is not permission to spend.
+- [ ] Owner separately authorizes execution of one request, then runs `node scripts/c3-live-proposal.ts --analysis <id>` and types the exact confirmation phrase.
+- [ ] Record the sanitized outcome and stop. Any further attempt needs a new decision. A credit balance is not permission to spend.
 
 ## C. Activation sequence (for the future, each step gated)
 

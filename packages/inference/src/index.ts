@@ -12,6 +12,7 @@ export * from './baseten-discovery.ts';
 // re-exported, so future code cannot reach a test-only authorization path through the package index.
 export { authorizeProductionAttempt, prepareProductionAttempt, runProductionApprovalCli, type ProductionAttempt } from './live-gate.ts';
 export { AuthorizationError, ACTIVATION_PIN_PATH, APPROVAL_LABEL, APPROVAL_TTL_MS, DECISION_ID, LIVE_LIMITS, type AuthorizationErrorCode, type AuthorizedAttempt } from './live-approval.ts';
-export { createGitProbe } from './git-probe.ts';
+export { createGitProbe, readFixtureTree } from './git-probe.ts';
+export * from './live-input.ts';
 export * from './live-rehearsal.ts';
 export type { ApprovalIo } from './approval-cli.ts';

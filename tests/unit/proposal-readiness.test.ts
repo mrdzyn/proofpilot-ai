@@ -41,12 +41,12 @@ test('zero provider requests, whatever the environment holds (credentials, billa
   for (const providerId of ['meta', 'baseten'] as const) {
     const r = await run({ providerId, env, checkCredentialPresence: true });
     assert.equal(r.providerRequests, 0);
-    assert.equal(r.liveAuthorization, 'NOT APPROVED (LIVE-C3-01)');
-    assert.equal(r.liveQuota, 0);
+    assert.match(r.liveAuthorization, /^NOT AUTHORIZED BY THIS REPORT/);
+    assert.equal(r.liveQuota, providerId === 'meta' ? 1 : 0);
     assert.equal(r.verdict, 'NOT_AUTHORIZED_TECHNICALLY_READY');
-    assert.ok(r.blockers.some((b) => /LIVE-C3-01 is NOT APPROVED/.test(b)));
-    assert.equal(status(r, 'entry-point-hard-disabled'), 'PASS');
-    assert.equal(status(r, 'live-quota-frozen-at-zero'), 'BLOCKED_BY_DESIGN');
+    assert.ok(r.blockers.some((b) => /never authorizes anything/.test(b)));
+    assert.equal(status(r, 'entry-point-rejects-malformed-calls'), 'PASS');
+    assert.equal(status(r, 'live-quota-is-the-approved-constant'), providerId === 'meta' ? 'INFO' : 'BLOCKED_BY_DESIGN');
     assert.equal(status(r, 'model-proposals-not-executable'), 'BLOCKED_BY_DESIGN');
   }
   assert.equal(trapped, 0);
@@ -129,19 +129,21 @@ test('the preflight leaves no temporary reservation directory behind', async () 
   assert.equal(readdirSync(os.tmpdir()).filter((n) => n.startsWith('pp-preflight-')).length, before);
 });
 
-test('a regressed repository is reported, not hidden: an enabled entry point or a raised live quota fails the preflight', async () => {
+test('a regressed repository is reported, not hidden: an entry point that accepts a malformed call or a quota that differs from the approved constant fails the preflight', async () => {
   const enabled = await run({ inspect: { entryPoint: async () => ({ accepted: true }) } });
-  assert.equal(status(enabled, 'entry-point-hard-disabled'), 'FAIL');
+  assert.equal(status(enabled, 'entry-point-rejects-malformed-calls'), 'FAIL');
   assert.equal(enabled.technicalChecksPassed, false);
   assert.equal(enabled.verdict, 'TECHNICAL_BLOCKERS');
-  assert.ok(enabled.blockers.some((b) => /entry-point-hard-disabled/.test(b)));
+  assert.ok(enabled.blockers.some((b) => /entry-point-rejects-malformed-calls/.test(b)));
   const wrongRefusal = await run({ inspect: { entryPoint: async () => { throw new Error('some other failure'); } } });
-  assert.equal(status(wrongRefusal, 'entry-point-hard-disabled'), 'FAIL', 'only LIVE_NOT_APPROVED counts as the refusal');
-  const raised = await run({ inspect: { liveQuota: { meta: 1 } } });
-  assert.equal(status(raised, 'live-quota-frozen-at-zero'), 'FAIL');
+  assert.equal(status(wrongRefusal, 'entry-point-rejects-malformed-calls'), 'FAIL', 'only the INVALID_INPUT refusal counts');
+  const raised = await run({ inspect: { liveQuota: { meta: 2 } } });
+  assert.equal(status(raised, 'live-quota-is-the-approved-constant'), 'FAIL');
   assert.equal(raised.verdict, 'TECHNICAL_BLOCKERS');
-  assert.equal(raised.liveAuthorization, 'NOT APPROVED (LIVE-C3-01)', 'the preflight never reports an authorization');
-  assert.equal((await run({ providerId: 'baseten', inspect: { liveQuota: { meta: 1 } } })).technicalChecksPassed, true, 'another provider is judged on its own quota');
+  assert.match(raised.liveAuthorization, /^NOT AUTHORIZED BY THIS REPORT/, 'the preflight never reports an authorization');
+  const baseten = await run({ providerId: 'baseten', inspect: { liveQuota: { baseten: 1 } } });
+  assert.equal(status(baseten, 'live-quota-is-the-approved-constant'), 'FAIL', 'Baseten stays at zero');
+  assert.equal((await run({ providerId: 'baseten', inspect: { liveQuota: { meta: 2 } } })).technicalChecksPassed, true, 'another provider is judged on its own quota');
 });
 
 // ---- MINOR-2: provider key fields are read only on explicit credential-check authorization ----

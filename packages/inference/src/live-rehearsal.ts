@@ -105,14 +105,14 @@ export async function runActivationRehearsal(input: { symptom: Symptom; facts: T
       step('authorized-and-reserved', expected, e instanceof AuthorizationError ? `refused ${e.code}${expected ? ' (expected: a spent run id is never reused; the approval stays unspent)' : ''}` : 'refused');
     }
 
-    // the production path, against the repository's real register, must refuse: nothing is approved
+    // the production path (read-only authorization, against the repository's real register and pin) must refuse a synthetic request
     if (input.checkProduction) {
       try {
         await authorizeProductionAttempt({ runId, request, provider, maxOutputTokens: PROPOSAL_LIMITS.maxOutputTokens });
         step('production-validator-refuses', false, 'the production validator authorized something it must not');
       } catch (e) {
         productionValidatorRefusal = e instanceof AuthorizationError ? e.code : 'ERROR';
-        step('production-validator-refuses', e instanceof AuthorizationError && e.code === 'LIVE_NOT_APPROVED', `production validator: ${productionValidatorRefusal} (the repository register holds no approved decision and no activation revision is pinned)`);
+        step('production-validator-refuses', e instanceof AuthorizationError, `production validator: ${productionValidatorRefusal} (read-only; today no activation revision is pinned, and a synthetic request can never match a genuine approval)`);
       }
     }
   } finally {

@@ -42,7 +42,7 @@ export type PreflightReport = {
   credential: { checked: boolean; present: boolean | null };
   checks: PreflightCheck[];
   technicalChecksPassed: boolean;
-  liveAuthorization: 'NOT APPROVED (LIVE-C3-01)';
+  liveAuthorization: 'NOT AUTHORIZED BY THIS REPORT (LIVE-C3-01 owner decision recorded; the production gate decides)';
   liveQuota: number;
   blockers: string[];
   verdict: 'NOT_AUTHORIZED_TECHNICALLY_READY' | 'TECHNICAL_BLOCKERS';
@@ -174,9 +174,11 @@ export async function runProposalPreflight(input: PreflightInput): Promise<Prefl
   }
 
   // ---- the production entry point and the live quota ----
-  add('entry-point-hard-disabled', await refuses(() => (input.inspect?.entryPoint ?? proposeCandidate)({ provider: 'forged', quota: 5 }), 'LIVE_NOT_APPROVED'), 'proposeCandidate() rejects before reading its argument');
+  // Only a MALFORMED call is made here, and it can never get past input validation, so this check can never reach the gate or a provider.
+  add('entry-point-rejects-malformed-calls', await refuses(() => (input.inspect?.entryPoint ?? proposeCandidate)({ runId: '', request: undefined } as never), 'INVALID_INPUT'), 'proposeCandidate() rejects a malformed call before the gate, a credential or a provider is touched');
   const liveQuota = input.inspect?.liveQuota?.[providerId] ?? APPROVED_LIVE_QUOTA[providerId];
-  add('live-quota-frozen-at-zero', liveQuota === 0, `APPROVED_LIVE_QUOTA.${providerId} = ${liveQuota} (a code constant; LIVE-C3-01 is not approved)`, liveQuota === 0 ? 'BLOCKED_BY_DESIGN' : 'FAIL');
+  const quotaOk = liveQuota === APPROVED_LIVE_QUOTA[providerId] && (providerId === 'meta' ? liveQuota === 1 : liveQuota === 0);
+  add('live-quota-is-the-approved-constant', quotaOk, `APPROVED_LIVE_QUOTA.${providerId} = ${liveQuota} (a code constant: a lifetime total, not per run; a positive value authorizes nothing without the pinned revision, an operator approval and a credential)`, quotaOk ? (liveQuota === 0 ? 'BLOCKED_BY_DESIGN' : 'INFO') : 'FAIL');
   add('model-proposals-not-executable', true, 'model-derived adjustments are not connected to the staging runner or the offline coordinator in C3-B2A', 'BLOCKED_BY_DESIGN');
 
   if (input.reservationRoot) {
@@ -186,8 +188,7 @@ export async function runProposalPreflight(input: PreflightInput): Promise<Prefl
 
   const technicalChecksPassed = checks.every((c) => c.status !== 'FAIL');
   const blockers = [
-    'LIVE-C3-01 is NOT APPROVED: the live quota is a frozen code constant of 0 and the production proposal entry point is disabled',
-    'no per-run human operator approval has been captured',
+    'this preflight never authorizes anything: the production gate (owner-pinned activation revision, clean tree, single-use operator approval for the exact run and input hash, credential) is evaluated separately and read-only',
     ...checks.filter((c) => c.status === 'FAIL').map((c) => `technical: ${c.id}`),
   ];
   return {
@@ -203,7 +204,7 @@ export async function runProposalPreflight(input: PreflightInput): Promise<Prefl
     credential,
     checks,
     technicalChecksPassed,
-    liveAuthorization: 'NOT APPROVED (LIVE-C3-01)',
+    liveAuthorization: 'NOT AUTHORIZED BY THIS REPORT (LIVE-C3-01 owner decision recorded; the production gate decides)',
     liveQuota,
     blockers,
     verdict: technicalChecksPassed ? 'NOT_AUTHORIZED_TECHNICALLY_READY' : 'TECHNICAL_BLOCKERS',

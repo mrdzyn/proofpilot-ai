@@ -1,10 +1,53 @@
-# LIVE-C3-01 decision record — PROPOSED, **NOT APPROVED**
+# LIVE-C3-01 decision record — **APPROVED by the repository owner for activation preparation (October 29, 2026)**
 
-> **Status: NOT APPROVED.** Nothing in this document authorizes a provider request, a spend, or the evaluation of a model-generated proposal. It is a draft for the owner to edit, accept or reject. Until the approval register below is filled in by the owner in a reviewable form **and** a separate reviewed commit changes the code, `APPROVED_LIVE_QUOTA` stays `{meta: 0, baseten: 0}` and `proposeCandidate()` stays hard-disabled. **A credit balance is not permission to spend.** A chat "yes" is not relied on (see `tasks/PP-META-I2-C3.md`, "What counts as approval").
+> **Owner decision (authoritative):** https://github.com/mrdzyn/proofpilot-ai/pull/6#issuecomment-6496850990 — posted by the repository owner (`mrdzyn`) on October 29, 2026, 12:36:38 UTC. The values in section 1 are the approved values; nothing is added to them.
+>
+> **What this approval is NOT:** it is not authorization to make a provider request now. The activation implementation is pending independent review; the activation revision pin is NOT RECORDED; the real provider invocation is NOT AUTHORIZED YET. A real attempt may occur only after the activation implementation passes an independent exact-head audit, receives a separate merge approval, is merged and revision-pinned in a separate reviewed pin-only commit, and the owner completes the operator preflight and the per-run confirmation. **A credit balance is not permission to spend.** The token and attempt limits do not guarantee a monetary cost ceiling (acknowledged by the owner).
+>
+> **Not approved (unchanged):** Baseten or Modal calls, additional attempts, automated retries, staging or execution of model-generated CSS, C3-B2B verification, the report UI (UI-C3-01), hosting or deployment (HOST-C3-01).
 
-## 1. Proposed scope (all values are proposals until the owner records them)
+## Status summary
 
-| Term | Proposed value | Notes |
+| Item | State |
+|---|---|
+| LIVE-C3-01 owner decision | **APPROVED** for activation preparation (see the linked comment) |
+| Activation implementation (C3-LIVE-01B) | pending independent review |
+| Activation revision pin (`config/live-activation.json`) | **NOT RECORDED** (`activation: null`) |
+| Real provider invocation | **NOT AUTHORIZED YET** |
+| C3-B2B, UI-C3-01, HOST-C3-01 | NOT APPROVED |
+
+## Owner comment, quoted verbatim
+
+> ## Owner Decision — LIVE-C3-01
+>
+> **Decision: APPROVED**
+> **Date:** October 29, 2026
+> **Scope:** ProofPilot AI — First Meta Muse Spark CSS Proposal
+>
+> I approve LIVE-C3-01 under these exact conditions:
+>
+> - **Provider:** Meta Model API only (`api.meta.ai`).
+> - **Model:** `muse-spark-1.3`, exact identifier.
+> - **Maximum billable attempts:** 1 total.
+> - **Maximum input:** 12,000 characters.
+> - **Maximum output:** 3,072 tokens, including reasoning.
+> - **Request:** Text-only, strict JSON schema, low reasoning effort.
+> - **Retries and fallback:** None.
+> - **Timeout, failure or uncertain completion:** Permanently consumes the attempt.
+> - **Operator authorization:** Mandatory, single-use, bound to the exact run ID, request hash and approved repository revision.
+> - **Credential:** Securely injected for the single owner-operated invocation; never exposed to AI agents or committed to Git.
+>
+> I acknowledge that the token and attempt limits do not guarantee a monetary cost ceiling.
+>
+> This approval authorizes preparation and independent review of the C3-LIVE-01B activation implementation. The actual billable attempt may occur only after the activation implementation passes independent audit, receives separate merge approval, is merged and revision-pinned, and I complete the required operator preflight and per-run confirmation.
+>
+> **Not approved:** Baseten or Modal calls, additional attempts, automated retries, staging or execution of model-generated CSS, C3-B2B verification, report UI, hosting or deployment.
+>
+> No provider call is authorized during implementation, testing or CI.
+
+## 1. Approved scope (the owner approved these values on October 29, 2026; the notes are implementation facts)
+
+| Term | Approved value | Notes |
 |---|---|---|
 | Provider | **Meta Model API only** (`https://api.meta.ai/v1`, host-allowlisted) | Muse Spark 1.3 is the primary hackathon model. Baseten needs its own record (see section 6). |
 | Model | **`muse-spark-1.3`**, exact | No alias, prefix, suffix, contributor variant or fallback. The response `model` must equal it byte for byte. |
@@ -35,26 +78,27 @@ After any stop the run id and slot stay spent and a **new** decision is needed f
 
 ## 3. Prerequisites before this record can even be considered ready
 
-- [ ] C3-B2A merged after an independent exact-head audit PASS.
+- [x] C3-B2A merged after an independent exact-head audit PASS (PR #10).
 - [ ] `docs/META-ACTIVATION-CHECKLIST.md` completed, with the zero-network preflight output attached.
 - [x] (C3-LIVE-01A, pending its audit) The per-run operator approval capture, fail-closed validator and `config/live-authorization.json` register exist as mock-tested code; the register is EMPTY.
-- [ ] A reviewed code change (C3-LIVE-01B, see `tasks/PP-META-I2-C3-LIVE-01A.md`) that (a) is based on the approval capture, (b) enables the proposal entry point only behind that approval and the quota in this record, and (c) leaves model-derived proposals disconnected from execution. That change and the quota constant are a separate PR with its own audit.
-- [ ] The owner records the approval below with exact values.
+- [ ] A reviewed code change (C3-LIVE-01B, see `tasks/PP-META-I2-C3-LIVE-01B.md`; pending independent review) that (a) is based on the approval capture, (b) enables the proposal entry point only behind that approval and the quota in this record, and (c) leaves model-derived proposals disconnected from execution. That change and the quota constant are a separate PR with its own audit.
+- [x] The owner recorded the approval below with exact values (October 29, 2026).
 
-## 4. Approval register (owner-only; empty)
+## 4. Approval register (owner-only)
 
-Two machine-read owner files exist and are both EMPTY: `config/live-authorization.json` (the decision) and `config/live-activation.json` (the pinned activation revision, a tree digest excluding itself; sequence in `tasks/PP-META-I2-C3-LIVE-01A.md`). A live attempt needs both, plus a per-run operator approval made at the pinned revision.
+Two machine-read owner files exist. `config/live-authorization.json` (the decision) holds exactly one non-synthetic LIVE-C3-01 entry recorded from the owner comment below. `config/live-activation.json` (the pinned activation revision, a tree digest excluding itself; sequence in `tasks/PP-META-I2-C3-LIVE-01A.md`) is **EMPTY (`activation: null`)** and stays empty until a separate reviewed pin-only commit after the activation PR is merged. A live attempt needs both, plus a per-run operator approval made at the pinned revision, a clean tree and a credential. No operator approval has been recorded.
 
 | Decision | Approved by / date / link | Exact values approved |
 |---|---|---|
-| LIVE-C3-01 (Meta, `muse-spark-1.3`) | _none recorded_ | _none_ |
-| Per-run operator approval design (C3-LIVE-01A implementation) | _none recorded_ | _none_ |
-| Evaluation of accepted proposals (C3-B2B) | _none recorded_ | _none_ |
+| LIVE-C3-01 (Meta, `muse-spark-1.3`) | APPROVED by the repository owner, October 29, 2026 — https://github.com/mrdzyn/proofpilot-ai/pull/6#issuecomment-6496850990 | Meta Model API only (`api.meta.ai`); exact model `muse-spark-1.3`; **1** billable attempt in total; input <= 12,000 characters; output <= 3,072 tokens including reasoning; text only, strict JSON schema, low reasoning effort; no retries, no fallback; timeout, failure or uncertain completion permanently consumes the attempt; mandatory single-use operator authorization bound to the exact run ID, request hash and approved repository revision; credential injected securely for the single owner-operated invocation, never exposed to AI agents or committed |
+| Per-run operator approval design (C3-LIVE-01A implementation) | _none recorded_ (the design is implemented as code and covered by the decision above only as a requirement) | _none_ |
+| Evaluation of accepted proposals (C3-B2B) | _none recorded_ — NOT APPROVED | _none_ |
+| Activation revision pin | NOT RECORDED | `activation: null` |
 
 ## 5. What this record does not do
 
-It does not enable live inference, raise any quota, approve spending, approve Modal or any hosted backend (HOST-C3-01), approve the report UI (UI-C3-01), or allow a model-generated proposal to be staged or run.
+It does not by itself enable live inference (the activation implementation, the revision pin, the operator approval and the credential are separate gates), approve spending beyond one attempt, approve Modal or any hosted backend (HOST-C3-01), approve the report UI (UI-C3-01), or allow a model-generated proposal to be staged or run.
 
 ## 6. Baseten (optional comparison provider)
 
-Baseten would need its own record after the owner-run discovery in `docs/BASETEN-COMPATIBILITY-PLAN.md` (stages B0 and B1) has been executed, and after the structured-output question there is settled. It is out of scope here and its quota is also frozen at 0.
+Baseten would need its own record (its quota is 0) after the owner-run discovery in `docs/BASETEN-COMPATIBILITY-PLAN.md` (stages B0 and B1) has been executed, and after the structured-output question there is settled. It is out of scope here and its quota is also frozen at 0.

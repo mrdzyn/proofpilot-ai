@@ -47,10 +47,10 @@ test('DID-1 is a separate demonstration: its result can never be a candidate ver
   assert.doesNotMatch(demo, /VERIFIED|ORACLE_PASS|PATCH_FAILED/);
 });
 
-test('the zero live quota and the hard-disabled proposal entry point are untouched', async () => {
-  assert.deepEqual({ ...APPROVED_LIVE_QUOTA }, { meta: 0, baseten: 0 });
+test('the live quota constant and the gated proposal entry point are as approved (Meta 1 lifetime attempt, Baseten 0; malformed calls rejected)', async () => {
+  assert.deepEqual({ ...APPROVED_LIVE_QUOTA }, { meta: 1, baseten: 0 });
   assert.equal(Object.isFrozen(APPROVED_LIVE_QUOTA), true);
-  await assert.rejects(proposeCandidate({ anything: true } as never), (e: unknown) => e instanceof ProposalError && e.code === 'LIVE_NOT_APPROVED');
+  await assert.rejects(proposeCandidate({ anything: true } as never), (e: unknown) => e instanceof ProposalError && e.code === 'INVALID_INPUT');
 });
 
 test('hand-authored only: no control is built from a file, an environment variable or model text', () => {

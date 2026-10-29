@@ -37,28 +37,28 @@ after(() => {
   assert.equal(trapped, 0);
 });
 
-test('the kill switch is intact: quota 0, empty register, empty pin, proposeCandidate rejects before touching its argument whatever the environment says', async () => {
-  assert.deepEqual({ ...APPROVED_LIVE_QUOTA }, { meta: 0, baseten: 0 });
+test('the gate is closed by the EMPTY activation pin: positive quota and the registered owner decision authorize nothing, and the entry point reads only runId and request', async () => {
+  assert.deepEqual({ ...APPROVED_LIVE_QUOTA }, { meta: 1, baseten: 0 });
   assert.equal(Object.isFrozen(APPROVED_LIVE_QUOTA), true);
-  assert.deepEqual(JSON.parse(read('config/live-authorization.json')).decisions, []);
+  assert.equal(JSON.parse(read('config/live-authorization.json')).decisions.length, 1);
   assert.equal(JSON.parse(read('config/live-activation.json')).activation, null);
-  let touched = 0;
-  const trap = new Proxy({}, { get() { touched++; throw new Error('argument was read'); }, has() { touched++; return false; }, ownKeys() { touched++; return []; }, getOwnPropertyDescriptor() { touched++; return undefined; } });
+  const reads: string[] = [];
+  const spy = new Proxy({}, { get(_t, k) { reads.push(String(k)); return undefined; }, has() { reads.push('has'); return false; }, ownKeys() { reads.push('ownKeys'); return []; }, getOwnPropertyDescriptor() { reads.push('gopd'); return undefined; } });
   const saved = { ...process.env };
   Object.assign(process.env, { PROOFPILOT_ALLOW_BILLABLE_CALLS: '1', PROOFPILOT_ALLOW_LIVE_PROPOSALS: '1', PROOFPILOT_LIVE_QUOTA: '5', MODEL_API_KEY: 'pp-env-flag-should-not-matter-0001', META_LIVE_QUOTA: '5' });
   try {
-    for (const arg of [trap, undefined, { quota: 5, provider: 'forged', approved: true }]) {
-      await assert.rejects(proposeCandidate(arg as never), (e: unknown) => e instanceof ProposalError && e.code === 'LIVE_NOT_APPROVED');
+    for (const arg of [spy, undefined, { quota: 5, provider: 'forged', approved: true }]) {
+      await assert.rejects(proposeCandidate(arg as never), (e: unknown) => e instanceof ProposalError && e.code === 'INVALID_INPUT');
     }
-    assert.equal(touched, 0, 'the entry point never touched its argument');
+    assert.deepEqual([...new Set(reads)].sort(), ['request', 'runId'], 'the entry point reads exactly the two attempt facts');
     const request = buildProposalRequest({ symptom: parseSymptom(validSymptom(), { videoDurationSec: 10 }), facts: trustedFactsFromBaseline({ viewport: { width: 390, height: 844 }, tapPoint: { x: 1, y: 1 }, hitTestTarget: 'promo-overlay', cartCountBefore: '0', cartCountAfter: '0' }, true) });
-    await assert.rejects(authorizeProductionAttempt({ runId: 'run-1', request, provider: { id: 'meta', models: { visual: META_PROPOSAL_MODEL } }, maxOutputTokens: 3072 }), (e: unknown) => (e as { code?: string }).code === 'LIVE_NOT_APPROVED');
+    // a perfectly formed call, with every credential-free flag on, is stopped by the empty pin before anything else
+    await assert.rejects(proposeCandidate({ runId: 'c3-live-meta-001', request }), (e: unknown) => (e as { code?: string }).code === 'ACTIVATION_NOT_PINNED');
+    await assert.rejects(authorizeProductionAttempt({ runId: 'c3-live-meta-001', request, provider: { id: 'meta', models: { visual: META_PROPOSAL_MODEL } }, maxOutputTokens: 3072 }), (e: unknown) => (e as { code?: string }).code === 'ACTIVATION_NOT_PINNED');
   } finally {
     for (const k of Object.keys(process.env)) if (!(k in saved)) delete process.env[k];
     Object.assign(process.env, saved);
   }
-  const fn = code('packages/inference/src/patch-proposal.ts');
-  assert.match(fn.slice(fn.indexOf('export async function proposeCandidate')), /^export async function proposeCandidate\(_input\?: unknown\): Promise<never> \{\n  throw new ProposalError\('LIVE_NOT_APPROVED'/);
 });
 
 test('the orchestrator has no provider, network, environment, credential, spawn or execution capability', () => {
@@ -92,16 +92,20 @@ test('nothing outside the synthetic rehearsal imports the orchestrator; the inde
   const importers = prod().filter((f) => /from '[^']*\/proposal-orchestrator\.ts'/.test(readFileSync(f, 'utf8'))).map(rel).sort();
   assert.deepEqual(importers, ['packages/inference/src/live-rehearsal.ts']);
   assert.doesNotMatch(code('packages/inference/src/index.ts'), /proposal-orchestrator|scriptedTransport|runSyntheticProposalAttempt/);
-  assert.doesNotMatch(code('packages/inference/src/patch-proposal.ts'), /proposal-orchestrator|live-gate|prepareProductionAttempt|runSyntheticProposalAttempt/);
+  // the production entry point reaches the orchestrator through ONE lazy import and nothing else (it never names the synthetic runner or the gate)
+  const entryPoint = code('packages/inference/src/patch-proposal.ts');
+  assert.equal((entryPoint.match(/proposal-orchestrator/g) ?? []).length, 1);
+  assert.match(entryPoint, /await import\('\.\/proposal-orchestrator\.ts'\)/);
+  assert.doesNotMatch(entryPoint, /live-gate|prepareProductionAttempt|runSyntheticProposalAttempt|scriptedTransport/);
   for (const f of ['packages/core/src/candidate-stage.ts', 'packages/core/src/candidate-coordinator.ts']) assert.doesNotMatch(code(f), /proposal-orchestrator|inference\/src|PROPOSAL_ACCEPTED|ProposalArtifact/, f);
   assert.doesNotMatch(code('scripts/c3-live-rehearsal.ts'), /process\.env|fetch|createProvider/);
   // scripts reach the rehearsal only through the index
   for (const f of prod().filter((f) => rel(f).startsWith('scripts/'))) assert.doesNotMatch(readFileSync(f, 'utf8'), /proposal-orchestrator/, rel(f));
 });
 
-test('documentation no longer mentions the removed authorizeLiveAttempt, and no approval, quota or decision is recorded anywhere', () => {
+test('documentation no longer mentions the removed authorizeLiveAttempt, and no operator approval or activation pin is recorded anywhere', () => {
   for (const d of ['docs/SECURITY.md', 'docs/TESTING.md', 'docs/META-ACTIVATION-CHECKLIST.md', 'tasks/PP-META-I2-C3-LIVE-01B0.md']) assert.doesNotMatch(read(d), /authorizeLiveAttempt/, d);
-  assert.match(read('docs/LIVE-C3-01-DECISION-RECORD.md'), /\| LIVE-C3-01 \(Meta, `muse-spark-1\.3`\) \| _none recorded_ \| _none_ \|/);
+  assert.match(read('docs/LIVE-C3-01-DECISION-RECORD.md'), /Activation revision pin[^\n]*NOT RECORDED/);
   const tracked = execFileSync('git', ['ls-files'], { cwd: root, encoding: 'utf8' }).split('\n');
   assert.deepEqual(tracked.filter((f) => /(^|\/)\.proofpilot\/|\.consumed$|(^|\/)approvals\//.test(f)), []);
 });

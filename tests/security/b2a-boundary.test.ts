@@ -46,15 +46,15 @@ const rel = (f: string) => path.relative(root, f);
 /** Source without comments, so prose that mentions a word cannot trip a code-shape check. */
 const code = (text: string) => text.replace(/\/\*[\s\S]*?\*\//g, '').split('\n').map((l) => l.replace(/(^|\s)\/\/.*$/, '$1')).join('\n');
 
-test('live proposals stay impossible: frozen zero quota, hard-disabled entry point, and no configuration or provider can change that', async () => {
-  assert.deepEqual({ ...APPROVED_LIVE_QUOTA }, { meta: 0, baseten: 0 });
+test('no configuration or provider can change the live quota (Meta 1 lifetime attempt, Baseten 0), and the entry point only ever delegates to the production gate', async () => {
+  assert.deepEqual({ ...APPROVED_LIVE_QUOTA }, { meta: 1, baseten: 0 });
   assert.equal(Object.isFrozen(APPROVED_LIVE_QUOTA), true);
   const env = { ...liveEnv(), BASETEN_API_KEY: SENTINEL_KEY, PROOFPILOT_ALLOW_PROVIDER_DISCOVERY: '1', PROOFPILOT_ALLOW_LIVE_PROPOSALS: '1', PROOFPILOT_LIVE_QUOTA: '5' };
   for (const id of ['meta', 'baseten'] as const) {
     const provider = createProvider(loadProviderConfig(id, env), { fetch: realFetch });
     const forged = { id, models: provider.models, billableCallsAllowed: true, structuredResponse: () => { throw new Error('must not be called'); } };
     for (const arg of [undefined, { provider }, { provider: forged, quota: 5, injectedTransportQuota: 5, mockQuota: 5 }]) {
-      await assert.rejects(proposeCandidate(arg as never), (e: unknown) => e instanceof ProposalError && e.code === 'LIVE_NOT_APPROVED');
+      await assert.rejects(proposeCandidate(arg as never), (e: unknown) => e instanceof ProposalError && e.code === 'INVALID_INPUT', 'a call without a run id and a built request is malformed whatever else it carries');
     }
   }
   // no environment variable name can raise a quota
@@ -182,14 +182,17 @@ test('the Baseten discovery tool is owner-run only: nothing else imports it, it 
   assert.doesNotMatch(src('package.json'), /baseten-model-discovery|c3-proposal-preflight/, 'no package script runs these implicitly');
 });
 
-test('the LIVE-C3-01 decision record exists, is explicitly NOT APPROVED and states the required limits', () => {
+test('the LIVE-C3-01 decision record states the owner-approved limits, the remaining gates and what is still NOT approved', () => {
   const text = src('docs/LIVE-C3-01-DECISION-RECORD.md');
-  assert.match(text, /\*\*NOT APPROVED\*\*/);
-  assert.doesNotMatch(text, /Status:\s*\*\*APPROVED\*\*/);
-  for (const needle of ['muse-spark-1.3', 'Maximum number of billable attempts', 'per-run', 'No retries', 'No fallback', 'Stop conditions', 'credit balance', 'Baseten']) {
+  assert.match(text, /issuecomment-6496850990/);
+  assert.match(text, /not authorization to make a provider request now/i);
+  assert.match(text, /Activation revision pin[^\n]*NOT RECORDED/);
+  assert.match(text, /Real provider invocation[^\n]*NOT AUTHORIZED YET/);
+  for (const needle of ['muse-spark-1.3', 'Maximum number of billable attempts', 'per-run', 'No retries', 'No fallback', 'Stop conditions', 'credit balance', 'Baseten', 'api.meta.ai', '12,000', '3,072']) {
     assert.match(text, new RegExp(needle, 'i'), needle);
   }
-  assert.match(src('tasks/PP-META-I2-C3.md'), /LIVE-C3-01 \| .*NOT APPROVED/);
+  assert.match(text, /C3-B2B[^\n]*NOT APPROVED/);
+  assert.match(src('tasks/PP-META-I2-C3.md'), /LIVE-C3-01 \| .*APPROVED/);
 });
 
 test('no provider secret, key-shaped string or raw model output is committed', () => {

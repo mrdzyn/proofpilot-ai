@@ -7,6 +7,18 @@ import { promisify } from 'node:util';
 import type { GitProbe } from './live-approval.ts';
 
 const run = promisify(execFile);
+
+// git runs with an ALLOW-LISTED environment: no inherited credential (the provider key never reaches a child process) and no GIT_DIR,
+// GIT_WORK_TREE, GIT_INDEX_FILE, GIT_CONFIG_* or similar variable that could point the probe at a different repository than `repoRoot`.
+const GIT_ENV_ALLOW = ['PATH', 'HOME', 'USER', 'LANG', 'LC_ALL', 'TMPDIR', 'SYSTEMROOT'] as const;
+function gitEnv(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0' };
+  for (const k of GIT_ENV_ALLOW) {
+    const v = process.env[k];
+    if (v !== undefined) env[k] = v;
+  }
+  return env;
+}
 const REV = /^(HEAD|[0-9a-f]{40})$/;
 const MAX_PIN_CHAIN = 50;
 
@@ -23,8 +35,14 @@ export function activationDigestOf(lsTreeOutput: string, excludePath: string): s
   return createHash('sha256').update(lines.join('\n') + '\n', 'utf8').digest('hex');
 }
 
+/** The Git tree id of `fixtures/sample-store` at HEAD (the defect fixture the evidence must belong to). */
+export async function readFixtureTree(repoRoot: string): Promise<string> {
+  const { stdout } = await run('git', ['-C', repoRoot, 'rev-parse', 'HEAD:fixtures/sample-store'], { encoding: 'utf8', timeout: 15_000, env: gitEnv() });
+  return stdout.trim();
+}
+
 export function createGitProbe(repoRoot: string): GitProbe {
-  const git = async (args: string[]) => (await run('git', ['-C', repoRoot, ...args], { encoding: 'utf8', timeout: 15_000, maxBuffer: 16 << 20 })).stdout;
+  const git = async (args: string[]) => (await run('git', ['-C', repoRoot, ...args], { encoding: 'utf8', timeout: 15_000, maxBuffer: 16 << 20, env: gitEnv() })).stdout;
   return {
     async head() {
       return (await git(['rev-parse', 'HEAD'])).trim();

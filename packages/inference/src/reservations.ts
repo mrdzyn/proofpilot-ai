@@ -14,11 +14,13 @@ import path from 'node:path';
 import { isValidRunId } from '../../intake/src/consent.ts';
 
 /**
- * LIVE-C3-01 is NOT APPROVED: the effective quota for real network traffic is zero. This is a code
- * constant on purpose (not an environment variable) so no configuration can raise it. Raising it
- * requires an owner-recorded approval and a reviewed commit.
+ * The approved LIFETIME total of billable provider attempts per provider (not per run, per day or per approval). LIVE-C3-01 (owner
+ * decision, October 29, 2026) approves exactly one Meta attempt; Baseten stays at zero. This is a code constant on purpose (not an
+ * environment variable) so no configuration can raise it. A positive number authorizes nothing by itself: a real attempt also needs the
+ * register decision, the owner-pinned activation revision, a clean tree at that revision, a single-use operator approval for the exact
+ * run and input, and a credential (see live-gate.ts). Raising it requires an owner-recorded approval and a reviewed commit.
  */
-export const APPROVED_LIVE_QUOTA: Readonly<Record<'meta' | 'baseten', number>> = Object.freeze({ meta: 0, baseten: 0 });
+export const APPROVED_LIVE_QUOTA: Readonly<Record<'meta' | 'baseten', number>> = Object.freeze({ meta: 1, baseten: 0 });
 
 export type ReservationErrorCode = 'RUN_ID_INVALID' | 'RUN_ID_SPENT' | 'QUOTA_EXHAUSTED' | 'LOCK_UNAVAILABLE';
 
