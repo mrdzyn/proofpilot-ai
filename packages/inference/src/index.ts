@@ -5,3 +5,5 @@ export * from './video-analysis.ts';
 export * from './analyze-command.ts';
 export * from './reservations.ts';
 export * from './patch-proposal.ts';
+export * from './proposal-readiness.ts';
+export * from './baseten-discovery.ts';

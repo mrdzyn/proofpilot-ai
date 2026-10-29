@@ -1,6 +1,6 @@
 # Baseten compatibility plan (PLAN ONLY — nothing here is authorized or executed)
 
-> Status: **NOT TESTED.** No Baseten request has ever been made by this project. `APPROVED_LIVE_QUOTA.baseten` is a frozen code constant of `0` (LIVE-C3-01 is not approved) and the production proposal entry point is hard-disabled. This document records an observed documentation discrepancy and a staged plan to resolve it later. The model id in the repository is **not** changed and no alias is used.
+> Status: **NOT TESTED.** Updated in C3-B2A (2026-10-29, documentation re-read; still no Baseten request). No Baseten request has ever been made by this project. `APPROVED_LIVE_QUOTA.baseten` is a frozen code constant of `0` (LIVE-C3-01 is not approved) and the production proposal entry point is hard-disabled. This document records an observed documentation discrepancy and a staged plan to resolve it later. The model id in the repository is **not** changed and no alias is used.
 
 ## The pinned id and what the public documentation shows
 
@@ -36,3 +36,26 @@ Rules for every stage: per-run human consent captured and audited (the in-repo c
 
 - A silently ignored `json_schema` could yield free-form text; the strict parser would then reject it (`PATCH_REJECTED`/`MALFORMED_JSON`), which is the safe failure.
 - The hackathon id may be time-limited or account-scoped; B1 is designed to find out before any billable call.
+
+## C3-B2A update: what the documentation says now, and the prepared owner-run discovery
+
+**Documentation re-read on 2026-10-29 (page fetches only; the Baseten API was not contacted and no key was read).**
+
+| Source | What it says | Consequence |
+|---|---|---|
+| Model APIs overview | "All except Muse Spark Open support structured outputs" (and JSON mode); Muse Spark Open also supports audio input; it accepts `logprobs`/`top_logprobs` but ignores them; the models table was empty in the captured content, so **no slug is visible**; discovery is `baseten model-api list` or `GET /v1/models`; "the catalog can report different values from the limits enforced by the endpoint" | Model-specific statement: structured outputs are documented as **unsupported** for Muse Spark Open |
+| Chat Completions API reference | `response_format` accepts `{"type":"json_object"}` (JSON mode) and a `json_schema` object type ("JSON schema response format for structured outputs", `strict` fixed to true); the reference's own example slug is a different model (not a Muse slug); it does not mention Muse Spark Open | General API surface supports `json_schema`; this does **not** override the model-specific "except Muse Spark Open" statement |
+| Provider examples (reported by the owner, not verified here) | name `meta-models/muse-spark-open` | An unversioned id. The repository pins `meta-models/muse-spark-open-1026`. **Not substituted.** |
+
+**Conflict to resolve (cannot be resolved offline):** the general reference allows `response_format: json_schema`, the model overview says Muse Spark Open does not support structured outputs, and the public id differs from the pinned versioned id. Until a live answer exists, the mock-tested Baseten path (which sends `json_schema`) must be treated as **unverified and probably unsupported for this model**. No code change is made: no defect in the mock path was demonstrated without a provider call, and an alternative prompt-JSON mode would need its own review (stage B3).
+
+**Prepared, not executed — owner-run single-request discovery (stage B1).** `scripts/baseten-model-discovery.ts`:
+
+1. Default (no arguments) is a dry run: it prints the plan and `REQUESTS MADE: 0`.
+2. A real request needs both `--execute` and `PROOFPILOT_ALLOW_PROVIDER_DISCOVERY=1` in that invocation, plus `BASETEN_API_KEY` in the environment. It sends exactly one non-billable `GET https://inference.baseten.co/v1/models` with retries forced to 0, redirects refused and the key only in the Authorization header.
+3. It prints the key's presence as present or NOT SET, the number of models listed, whether the **exact pinned id** is `LISTED`, whether the public alias is listed (information only, never used), and related ids (not substituted). It does not print the key or the raw catalog.
+4. Exit 0 only if the exact pinned id is listed. On any failure it stops; there is no retry.
+
+How the owner supplies the key without exposing it: from the secure store directly into one process, for example `op run --env-file=<your own untracked file with an op:// reference> -- env PROOFPILOT_ALLOW_PROVIDER_DISCOVERY=1 node scripts/baseten-model-discovery.ts --execute`. Agents must not read, print, copy or commit the key; a presence-only check is the most an agent may do and only if the owner authorizes it. Listing the id is **not** proof of access, of billing readiness or of structured-output support.
+
+Stage order is unchanged (B0 owner re-reads the guide, B1 this discovery, B2 one minimal billable text call with no `response_format`, B3 decide the structured-output strategy with review, B4 a proposal call only after LIVE-C3-01 and a separate enabling commit). Baseten's quota remains a frozen code constant of 0.

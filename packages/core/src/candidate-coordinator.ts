@@ -254,6 +254,27 @@ export type Scoreboard = {
   notes: string[];
 };
 
+export class UntrustedControlError extends Error {
+  constructor(detail: string) {
+    super(`refused: ${detail}. The offline coordinator only runs the in-code hand-authored controls; model-derived proposals may not enter this path (C3-B2A).`);
+    this.name = 'UntrustedControlError';
+  }
+}
+
+/** Every control handed to the coordinator must be exactly one of the trusted in-code controls (id, CSS, replays, expectation, fault). */
+export function assertHandAuthoredControls(controls: readonly Control[]): void {
+  const seen = new Set<string>();
+  for (const c of controls) {
+    const trusted = HAND_AUTHORED_CONTROLS.find((t) => t.id === c?.id);
+    if (!trusted) throw new UntrustedControlError(`control ${JSON.stringify(c?.id)} is not a hand-authored control`);
+    if (seen.has(c.id)) throw new UntrustedControlError(`control ${c.id} is duplicated`);
+    seen.add(c.id);
+    if (JSON.stringify(c.adjustments) !== JSON.stringify(trusted.adjustments) || c.replays !== trusted.replays || c.expect !== trusted.expect || (c.fault ?? null) !== (trusted.fault ?? null) || c.description !== trusted.description) {
+      throw new UntrustedControlError(`control ${c.id} differs from its hand-authored definition`);
+    }
+  }
+}
+
 export class CoordinatorBusyError extends Error {
   constructor() {
     super('another coordinator run holds the lock (or a crashed run left it); nothing was run and nothing can be verified');
@@ -309,6 +330,7 @@ export type CoordinatorOptions = {
 export async function runOfflineVerification(opts: CoordinatorOptions): Promise<Scoreboard> {
   const runner = opts.runner ?? runCandidate;
   const controls = opts.controls ?? HAND_AUTHORED_CONTROLS;
+  assertHandAuthoredControls(controls); // before any lock, stage or browser
   const now = opts.now ?? (() => new Date());
 
   await mkdir(path.dirname(opts.coordinatorLockPath), { recursive: true });
