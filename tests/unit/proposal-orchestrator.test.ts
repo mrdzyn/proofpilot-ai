@@ -106,6 +106,7 @@ test('a completed, schema-valid synthetic response ends as a sanitized UNTRUSTED
   // evidence: private artifact, settled reservation, spent approval
   assert.equal(statSync(w.artifactFile()).mode & 0o777, 0o600);
   const saved = JSON.parse(readFileSync(w.artifactFile(), 'utf8'));
+  assert.deepEqual(Object.keys(saved).sort(), ['adjustments', 'createdAt', 'forbiddenClass', 'inputSha256', 'label', 'lifecycle', 'limits', 'outputBytes', 'outputSha256', 'provenance', 'providerId', 'reason', 'renderedCss', 'requestId', 'requestedModel', 'respondedModel', 'runId', 'schemaVersion', 'slot', 'status', 'usage'], 'only the sanitized, allow-listed fields are persisted');
   assert.equal(saved.label, PROPOSAL_LABEL);
   assert.equal(saved.requestedModel, 'muse-spark-1.3');
   assert.equal(saved.respondedModel, 'muse-spark-1.3');
@@ -201,6 +202,7 @@ test('an artifact persistence failure fails the attempt (adjustments dropped), k
   assert.equal(out.adjustments, null);
   assert.equal(out.artifactPath, null);
   assert.equal(out.artifact.renderedCss, null);
+  assert.equal(out.artifact.adjustments, null, 'the in-memory artifact no longer carries the accepted adjustments either');
   assert.equal(status(w.runFile()), 'PROPOSAL_FAILED');
   assert.ok(existsSync(w.marker()));
 });
