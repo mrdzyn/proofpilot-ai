@@ -121,3 +121,20 @@ export async function listOrphanSlots(root: string, providerId: string): Promise
   }
   return out.sort();
 }
+
+export type ReservationInspection = { runSpent: boolean; lockPresent: boolean; slotsSpent: number };
+
+/**
+ * Read-only: is this run id already spent, is a claim lock present (a live or crashed claim), and how many slots exist?
+ * Used by the live-approval validator to fail closed BEFORE consuming an approval. It never creates, deletes or recycles anything.
+ */
+export async function inspectReservation(root: string, providerId: string, runId: string): Promise<ReservationInspection> {
+  if (!PROVIDER.test(providerId) || !isValidRunId(runId)) throw new ReservationError('RUN_ID_INVALID', 'provider or run id is malformed');
+  const dir = path.join(root, providerId);
+  const exists = (p: string) => readFile(p).then(() => true, (e: NodeJS.ErrnoException) => e.code !== 'ENOENT');
+  return {
+    runSpent: await exists(path.join(dir, 'runs', `${runId}.json`)),
+    lockPresent: await exists(path.join(dir, '.claim.lock')),
+    slotsSpent: (await readdir(path.join(dir, 'slots')).catch(() => [] as string[])).filter((n) => /^slot-\d{3}$/.test(n)).length,
+  };
+}

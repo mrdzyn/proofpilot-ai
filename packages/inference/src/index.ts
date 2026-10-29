@@ -7,3 +7,7 @@ export * from './reservations.ts';
 export * from './patch-proposal.ts';
 export * from './proposal-readiness.ts';
 export * from './baseten-discovery.ts';
+export * from './live-approval.ts';
+export * from './approval-cli.ts';
+export * from './git-probe.ts';
+export * from './live-rehearsal.ts';

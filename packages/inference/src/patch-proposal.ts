@@ -142,6 +142,11 @@ export function buildProposalRequest(input: { symptom: Symptom; facts: TrustedRe
 
 // ---------------------------------------------------------------- adapter pieces
 
+/** True when the request's hash is the SHA-256 of its prompt (recomputed, not trusted). */
+export function buildProposalRequestHashOk(request: BuiltProposalRequest): boolean {
+  return typeof request?.prompt === 'string' && request.fixtureId === 'F01' && createHash('sha256').update(request.prompt, 'utf8').digest('hex') === request.inputSha256;
+}
+
 export type ProposalStatus = 'PROPOSAL_ACCEPTED' | 'PROPOSAL_REJECTED' | 'PROPOSAL_BLOCKED' | 'PROPOSAL_FAILED';
 
 export type ProposalArtifact = {

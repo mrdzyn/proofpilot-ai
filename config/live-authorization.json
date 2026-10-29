@@ -1,0 +1,5 @@
+{
+  "schemaVersion": 1,
+  "note": "Owner-only register of APPROVED live decisions. EMPTY: LIVE-C3-01 is NOT APPROVED. Adding an entry here is part of a reviewed owner-approved commit; it never enables anything by itself (the code quota constant and the proposal entry point are separate).",
+  "decisions": []
+}
