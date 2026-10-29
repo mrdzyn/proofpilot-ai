@@ -5,13 +5,13 @@
 ## Project
 
 - **Name:** ProofPilot AI — Meta Global AI Developer Hackathon (Push the Frontier)
-- **Current phase:** PP-META-I2-C3-B1 — offline candidate verification coordinator (implemented over hand-authored controls; awaiting independent exact-head review)
-- **Status:** C3-A (PR #8, audit PASS) is merged. C3-B1 adds a deterministic coordinator, 3-replay VERIFIED logic, a machine-readable scoreboard and the separate DID-1 demonstration, all over hand-authored controls only. The production proposal entry point stays hard-disabled and no provider, Modal or model call is possible from this code.
-- **Primary branch:** protected `main` at `65e2a1f5c4f7aaaa56da1abb86c22485b2610209` (PR #8 squash merge)
-- **Working branch:** `phase/pp-meta-i2-c3-b1-offline-verification` (Draft PR #9; audited heads `02dfa82` (MAJOR-1, MAJOR-2) and `4363000` (MAJOR-3) were FIX REQUIRED; latest remediation code head `bb64b736a57f83a90884f516f79ac5de3e283ef7`, then a docs commit; the branch head is authoritative)
-- **Active task:** `tasks/PP-META-I2-C3.md` (C3-B1 only)
-- **Active handoff:** PP-META-I2-C3-B1-R2
-- **Authorization:** Both single-use live smokes are **spent**. **APPROVED:** SEC-C3-01 (F01-only closed-grammar CSS, hand-authored controls only until further gates). **NOT APPROVED:** LIVE-C3-01 (live quota is a frozen code constant of 0), UI-C3-01 (no report UI), HOST-C3-01 (no hosted backend or Modal). No Meta/Baseten/Modal call, no execution of model-generated code, no deployment or merge by the agent.
+- **Current phase:** PP-META-I2-C3-B2A — pre-live readiness (preparation only; awaiting independent exact-head review)
+- **Status:** C3-B1 (PR #9) is **merged** after an independent PASS. C3-B2A adds a zero-network proposal preflight, a coordinator guard that keeps model-derived proposals out of execution, a prepared owner-run Baseten discovery, a LIVE-C3-01 decision record (**NOT APPROVED**), a Meta activation checklist, and corrected Baseten and Modal documentation. No provider, Modal or model call was made; the production proposal entry point is hard-disabled; the live quota is a frozen code constant of 0.
+- **Primary branch:** protected `main` at `4d4a26b2c5969f0330f6e75411e58f037f2b08ed` (PR #9 squash merge)
+- **Working branch:** `phase/pp-meta-i2-c3-b2a-prelive-readiness` (Draft PR; code head `f87fef33791fcad9b56e2049fe59a713a7cbde07`, then a docs commit; the branch head is authoritative)
+- **Active task:** `tasks/PP-META-I2-C3-B2A.md`
+- **Active handoff:** PP-META-I2-C3-B2A-A1
+- **Authorization:** Both single-use live smokes are **spent**. **APPROVED:** SEC-C3-01 (F01-only closed-grammar CSS, hand-authored controls only). **NOT APPROVED:** LIVE-C3-01 (`docs/LIVE-C3-01-DECISION-RECORD.md` is a proposal; quota 0), C3-B2B (evaluating model proposals), UI-C3-01 (report UI), HOST-C3-01 (Modal or any hosted backend). A credit balance is not permission to spend. No Meta/Baseten/Modal call, no execution of model-generated code, no deployment or merge by the agent.
 
 ## Completed milestones
 
@@ -70,13 +70,27 @@
 | Independently verified Docker/ARM64 or OS sandbox | **NOT VERIFIED**. Still required before any model-authored HTML, JavaScript or free-form patch executes |
 | C3-0 staging spike (unmodified oracle run in a per-candidate stage) | **MERGED** (PR #7, independent audit PASS) |
 | C3-A proposal validator + adapter + reservations | **MERGED** (PR #8, independent audit PASS); production entry point hard-disabled |
-| C3-B1 offline coordinator, 3-replay VERIFIED logic, scoreboard, DID-1 (hand-authored controls) | **IMPLEMENTED**; independent review PENDING |
-| C3-B2 model proposals through the coordinator | NOT STARTED; needs LIVE-C3-01, enabling the proposal entry point in a separately reviewed commit and a new handoff |
+| C3-B1 offline coordinator, 3-replay VERIFIED logic, scoreboard, DID-1 (hand-authored controls) | **MERGED** (PR #9, independent PASS) |
+| C3-B2A pre-live readiness (preflight, coordinator guard, Baseten discovery procedure, LIVE-C3-01 record, Meta checklist, Modal update) | **IMPLEMENTED**; independent review PENDING |
+| LIVE-C3-01 first bounded Muse Spark proposal | **NOT APPROVED** (`docs/LIVE-C3-01-DECISION-RECORD.md`); needs owner approval, per-run operator approval, and a separately reviewed code change |
+| C3-B2B model proposals through staging and the coordinator | NOT STARTED and **gated in code** (`assertHandAuthoredControls`); needs its own owner authorization, a reviewed change and a new provenance label |
 | C3-C scoreboard report UI, C3-D report + replay + audit, C3-E demo, C3-F submission | NOT STARTED (UI-C3-01 not approved) |
 | Baseten compatibility (`docs/BASETEN-COMPATIBILITY-PLAN.md`) | PLAN ONLY; pinned id vs public docs discrepancy and a structured-output doubt recorded; NOT TESTED |
 | Modal sandbox (`docs/MODAL-FEASIBILITY-PROPOSAL.md`) | PROPOSAL ONLY; the C3 contract forbids hosted backends; HOST-C3-01 not requested; not a verified boundary |
 | Muse Wonder as patcher | UNVERIFIED and not a dependency |
 | Baseten | NOT TESTED |
+
+## C3-B2A result (local; code head `f87fef3`, clean tree, macOS arm64, Node 24.21.0)
+
+- **Zero-network preflight (`scripts/c3-proposal-preflight.ts`, `runProposalPreflight`):** deterministic (identical inputs give a byte-identical report), mock literals only, no provider construction, no fetch, no secret read. For both providers it reported 28 checks: 24 PASS, 1 NOT_CHECKED (credential presence, not authorized), 1 INFO (billable flag), 2 BLOCKED_BY_DESIGN (live quota frozen at 0; model proposals not executable); verdict `NOT_AUTHORIZED_TECHNICALLY_READY`, `providerRequests: 0`, live quota 0. Local evidence (gitignored): `.proofpilot/preflight/proposal-preflight-{meta,baseten}-*.json`. It exercises and confirms the refusal of: missing consent, foreign consent, model mismatch, billable gate off, tampered request, absent/failed/incomplete status, refusal, wrong response model, empty output, malformed JSON, forbidden content, unknown key, out-of-grammar answer, zero quota, duplicate run id, exhausted quota, and the disabled entry point. A valid mock answer is only an `UNTRUSTED PROPOSAL — NOT VERIFIED` and is never handed to execution. `--check-credentials` reports a boolean only and fails the preflight if no key is present (run here without a key: NOT SET).
+- **Model-derived proposals cannot reach execution:** `runOfflineVerification` now calls `assertHandAuthoredControls` first and refuses (before any lock, stage, browser or runner call) every control that is not byte-for-byte one of `HAND_AUTHORED_CONTROLS`. `acceptedAdjustments` is used nowhere in production; static tests show the stage runner, coordinator and scripts import no proposal, preflight, reservation or discovery code. C3-B1 `VERIFIED` semantics are unchanged (still one producer, exactly three fresh replays, exact inventory).
+- **Baseten (documentation re-read 2026-10-29; no request):** the Model APIs overview says all models except Muse Spark Open support structured outputs, its models table showed no slug, and it notes that `/v1/models` can differ from enforced limits; the Chat Completions reference supports `json_schema` generally and does not mention Muse Spark Open; the public alias reported by the owner is `meta-models/muse-spark-open` while the repository pins `meta-models/muse-spark-open-1026` (not substituted). Conclusion: our `json_schema` request for this model is unverified and probably unsupported. The mock Baseten path is unchanged. A prepared owner-run, single-request discovery (`scripts/baseten-model-discovery.ts`: dry run by default; `--execute` needs `PROOFPILOT_ALLOW_PROVIDER_DISCOVERY=1`; retries forced to 0; one non-billable GET; no secret printed; alias never substituted) is documented in `docs/BASETEN-COMPATIBILITY-PLAN.md` and was only ever run as a dry run. No Baseten key was requested, read or printed.
+- **Modal (`docs/MODAL-FEASIBILITY-PROPOSAL.md`):** corrected from the official Sandbox networking page: outbound network can be fully blocked (`block_network=True` / `blockNetwork: true`) or restricted with CIDR or domain allowlists, with Modal's own caveats (DNS unrestricted unless fully blocked, ECH unsupported, domain fronting); CPU, memory and timeout parameters are documented. Vendor documentation only; not tested; HOST-C3-01 not approved; no Modal resource, token, deployment or billing.
+- **LIVE-C3-01 (`docs/LIVE-C3-01-DECISION-RECORD.md`) and `docs/META-ACTIVATION-CHECKLIST.md`:** a proposed, explicitly NOT APPROVED record (exact provider and model, a maximum of one billable attempt for a first run, bounds, per-run operator approval, credential handling, unique reservation ids, no retries or fallback, response validation, evidence, stop conditions, no automatic evaluation) with an empty owner approval register.
+- **Tests:** lint/typecheck clean; unit 259/259; security 49/49; integration 29/29 (real browser, local); `pnpm f01:baseline` exit 0 REPRODUCED/certified; `pnpm test:e2e:f01` exit 1 (expected); real `scripts/c3-offline-verification.ts` run (`c3-b1-20261029T023912Z-195658`, approved SHA = code head): baseline REPRODUCED, PC-1 `VERIFIED` 3/3, negatives as before, scoreboard re-verified; C3-0 spike unchanged. 22 guard mutants: 20 killed, 2 cosmetic no-ops (my mutation text did not change behavior); the preflight's own entry-point and quota checks gained injectable regression seams so a regressed repository is demonstrably reported.
+- **Zero provider/Modal calls:** the preflight and discovery tests run under a global `fetch` trap (0 calls); the discovery tests use an injected mock transport; the real discovery script was run only without `--execute` (dry run, `REQUESTS MADE: 0`) and with `--execute` but no opt-in (refused, `REQUESTS MADE: 0`). A secret scan of tracked files (key-shaped tokens, private keys, assigned provider keys, bearer tokens) is part of the security suite.
+- **Unchanged:** `verifier/`, `fixtures/sample-store/`, `config/` (patch policy), `.github/`, `candidate-stage.ts`, `patch-proposal.ts`, `reservations.ts`, `APPROVED_LIVE_QUOTA` (still `{meta: 0, baseten: 0}`), `proposeCandidate()` (still throws `LIVE_NOT_APPROVED` first).
+- **Limits:** the preflight proves the repository's offline logic, not Meta's behavior; Meta's acceptance of the proposal request shape, real answer quality and cost are unknown until a separately authorized live call; the per-run operator approval capture does not exist in code yet; locks are not crash-safe (fail closed).
 
 ## C3-B1 audit remediation 2 (GPT-6 comment 6464385552; MAJOR-3; MAJOR-1 and MAJOR-2 re-audited RESOLVED, code head `bb64b73`)
 
@@ -155,7 +169,7 @@
 
 ## Next action
 
-1. Independent exact-head review of the C3-B1 Draft PR (hosted CI plus the evidence above).
-2. Owner decides merge and whether to pursue any of: LIVE-C3-01 (live proposals; needs real human consent capture and a reviewed commit enabling the entry point), the Baseten compatibility stages, HOST-C3-01 (Modal), UI-C3-01 (report). None is started or authorized.
+1. Independent exact-head review of the C3-B2A Draft PR (hosted CI plus the evidence above).
+2. Owner decisions, none started: merge; whether to approve LIVE-C3-01 (Meta) with exact values; run the Baseten discovery (stage B1) yourself; approve the per-run operator approval design; decide separately on C3-B2B (evaluating accepted proposals), HOST-C3-01 (Modal) and UI-C3-01 (report).
 
 Submission deadline: Nov 4, 9:00 PM EST = **Nov 5, 10:00 AM PHT**; internal target is Nov 4 PHT.
