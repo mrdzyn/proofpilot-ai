@@ -72,12 +72,12 @@ test('the orchestrator has no provider, network, environment, credential, spawn 
   assert.equal((text.match(/await t\.call\(/g) ?? []).length, 1);
 });
 
-test('the orchestrator is isolated: synthetic-only runner, data-only transport, module-private tail, and no production runner exists yet', () => {
+test('the orchestrator is isolated: synthetic-only runner, data-only transport, module-private tail; the only production runner is the dormant one', () => {
   const text = code(ORCH);
   assert.match(text, /if \(a\.ctx\?\.kind !== 'synthetic'\) throw new ProposalError\('LIVE_NOT_APPROVED'/);
   assert.match(text, /!SCRIPTED\.has\(a\.transport\)\) throw new ProposalError\('LIVE_NOT_APPROVED'/);
   assert.match(text, /^async function finishAttempt/m, 'the tail is not exported');
-  assert.deepEqual([...text.matchAll(/^export (?:async )?(?:function|class|const|type) (\w+)/gm)].map((m) => m[1]).sort(), ['AttemptOutcome', 'CrashSignal', 'ProviderDescriptor', 'ScriptedOutcome', 'ScriptedTransport', 'SyntheticAttempt', 'SyntheticStep', 'runSyntheticProposalAttempt', 'scriptedTransport']);
+  assert.deepEqual([...text.matchAll(/^export (?:async )?(?:function|class|const|type) (\w+)/gm)].map((m) => m[1]).sort(), ['AttemptOutcome', 'CrashSignal', 'ProductionProposalAttempt', 'ProviderDescriptor', 'ScriptedOutcome', 'ScriptedTransport', 'SyntheticAttempt', 'SyntheticStep', 'runProductionProposalAttempt', 'runSyntheticProposalAttempt', 'scriptedTransport']);
   // the scripted transport is data only: it never receives a function from the caller
   assert.match(text, /export function scriptedTransport\(outcomes: ScriptedOutcome\[\]\)/);
   // no production module wires the production gate to a model call in this milestone

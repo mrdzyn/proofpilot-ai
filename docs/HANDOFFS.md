@@ -773,4 +773,28 @@ GPT-6 review; owner decides merge and whether to record LIVE-C3-01 (then C3-LIVE
 ### Next action
 GPT-6 re-audit; owner decides merge.
 
+## Handoff: PP-META-I2-C3-LIVE-01B-PREP-A1
+
+- **Task / phase:** `tasks/PP-META-I2-C3-LIVE-01B-PREP.md` (dormant production integration)
+- **From:** Implementation agent (Claude Code, Claude Sonnet 5.5)
+- **To:** GPT-6 independent exact-head review, then project owner
+- **Branch:** `phase/pp-meta-i2-c3-live01b-prep` from `main` `939c2be4c3cd40301aa86618183312df7f645501` (audit the branch head)
+- **State:** READY FOR REVIEW
+
+### Completed
+- `runProductionProposalAttempt({ runId, request })` beside the synthetic runner, sharing the module-private tail: credential-free pre-flight, `authorizeProductionAttempt`, `openMetaProposalCall` (zero-argument, retries 0, pinned model; the sole `structuredResponse` call site), `prepareProductionAttempt`, one request, strict validation, sanitized artifact in the fixed private `.proofpilot/evidence/`, settle, stop. `live-gate.ts` gained two fixed-location helpers (`productionEvidenceRoot`, `settleProductionAttempt`); the package index exports neither.
+- Dormant: no importer, no index export, no CLI; real-repository behaviour is a stop at authorization before any credential is read.
+- Unchanged: quota `{meta:0,baseten:0}`, empty register and pin, `proposeCandidate()`, oracle, staging, coordinator, grammar. No credential read, no provider/Modal call, no approval, no merge.
+- Three existing security tests were retargeted (not weakened): importer list of `live-gate.ts`, exported-name list of the orchestrator, and "no production `structuredResponse` call" became "exactly the transport".
+
+### Validation
+See the Draft PR. Production path exercised from a throwaway install copy (fixtures only in the copy). Guard removal: 15 of 15 mutants killed (one caller-controlled-evidence-root survivor was killed after adding a runtime test and a tighter static check).
+
+### Open questions for the reviewer
+- Is opening the provider (reading the key) after read-only authorization and before consumption the right place, given a missing key then spends nothing?
+- Is the throwaway-install-copy harness an acceptable substitute for dependency injection in testing the production path?
+
+### Next action
+GPT-6 review; owner decides merge and whether to record LIVE-C3-01 (then the activation PR).
+
 <!-- HANDOFF_ENTRIES_END -->

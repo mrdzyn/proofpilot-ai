@@ -8,21 +8,21 @@
 //   -> persist a sanitized `UNTRUSTED PROPOSAL — NOT VERIFIED` artifact (never raw provider text)
 //   -> settle the reservation -> STOP.  Nothing here stages, runs or verifies a proposal.
 //
-// This file is deliberately NOT a production path. `runSyntheticProposalAttempt` refuses a production context and any transport that
-// is not a `scriptedTransport` (a closure over canned data: it has no fetch, no credential and no provider). A future, separately
-// approved C3-LIVE-01B adds a sibling production runner here that calls `prepareProductionAttempt` from live-gate.ts (never the
-// injectable core) and then the same private tail below; see tasks/PP-META-I2-C3-LIVE-01B0.md for the exact wiring. Nothing exported
-// here is reachable from the hard-disabled production proposal entry point, and the tail is module-private so it cannot be driven with an
-// arbitrary caller-supplied function and an unchecked reservation.
+// `runSyntheticProposalAttempt` refuses a production context and any transport that is not a `scriptedTransport` (a closure over canned
+// data: it has no fetch, no credential and no provider). The sibling `runProductionProposalAttempt` (C3-LIVE-01B-PREP) is DORMANT: it
+// uses the production gate (live-gate.ts, never the injectable core), takes only a run id and the bounded request, and shares the same
+// private tail. Nothing exported here is reachable from the hard-disabled production proposal entry point, and the tail is
+// module-private so it cannot be driven with an arbitrary caller-supplied function and an unchecked reservation.
 import { proposalJsonSchema, type CssAdjustment } from '../../core/src/index.ts';
 import { InferenceError } from './errors.ts';
 import type { StructuredRequest, StructuredResponse } from './client.ts';
 import {
-  failureReason, PROPOSAL_LABEL, PROPOSAL_LIMITS, PROPOSAL_SCHEMA_NAME, persistProposalArtifact, preflightProposal, processProposalResponse, ProposalError,
+  createProposalConsent, failureReason, PROPOSAL_LABEL, PROPOSAL_LIMITS, PROPOSAL_SCHEMA_NAME, persistProposalArtifact, preflightProposal, processProposalResponse, ProposalError,
   type BuiltProposalRequest, type ProposalArtifact, type ProposalConsent, type ProposalOutcome,
 } from './patch-proposal.ts';
 import { prepareAttemptCore, type PreparedAttempt, type TrustContext } from './live-gate-core.ts';
-import type { ReservationStore } from './reservations.ts';
+import { authorizeProductionAttempt, prepareProductionAttempt, productionEvidenceRoot, settleProductionAttempt } from './live-gate.ts';
+import { openMetaProposalCall, readMetaProposalDescriptor } from './meta-proposal-transport.ts';
 
 // ------------------------------------------------------------------ scripted transport (data only)
 
@@ -94,8 +94,45 @@ export async function runSyntheticProposalAttempt(a: SyntheticAttempt): Promise<
   await a.onStep?.('after-prepare');
 
   return finishAttempt({
-    prepared, store: a.ctx.store, request: a.request, runId: a.runId, model, providerId, evidenceRoot: a.evidenceRoot, now,
+    prepared, settle: (info) => a.ctx.store.settle(prepared.claim, info), request: a.request, runId: a.runId, model, providerId, evidenceRoot: a.evidenceRoot, now,
     call: (req) => a.transport.call(req), onStep: a.onStep,
+  });
+}
+
+// ------------------------------------------------------------------ the production runner (DORMANT)
+
+export type ProductionProposalAttempt = { runId: string; request: BuiltProposalRequest };
+
+/**
+ * The future production attempt. DORMANT: nothing imports or calls it (a static test pins that), the owner-operated CLI that would
+ * is not part of this milestone, and the hard-disabled production proposal entry point never reaches it. Even if something called it
+ * today it would stop at the read-only authorization step (empty decision register, empty activation pin, live quota 0), before any
+ * credential is read or any provider is built.
+ *
+ * It accepts only the two facts about the attempt (run id and the bounded request). It has NO parameter for a provider, transport, key,
+ * root, store, Git probe, clock, evidence directory or consent: all of those are derived inside, and the trust is derived by
+ * live-gate.ts (never the injectable core).
+ *   1. pure pre-flight with the credential-free Meta descriptor (billable flag, pinned model, input bounds, hash)
+ *   2. authorizeProductionAttempt        read-only; every gate must pass; no credential has been read yet
+ *   3. openMetaProposalCall              reads the key and builds the provider; no request; a missing key fails HERE, before anything is spent
+ *   4. prepareProductionAttempt          consume the single-use approval, re-check, claim the reservation
+ *   5. the shared tail                   exactly one request, strict validation, sanitized artifact, settlement, STOP
+ */
+export async function runProductionProposalAttempt(attempt: ProductionProposalAttempt): Promise<AttemptOutcome> {
+  const runId = attempt?.runId;
+  const request = attempt?.request;
+  const now = () => new Date();
+  const descriptor = readMetaProposalDescriptor();
+  const consent = createProposalConsent({ runId, providerId: 'meta', inputSha256: request?.inputSha256, now });
+  const { model, providerId } = preflightProposal({ provider: descriptor, runId, consent, request });
+  const facts = { runId, request, provider: { id: providerId, models: { visual: model } }, maxOutputTokens: PROPOSAL_LIMITS.maxOutputTokens };
+
+  await authorizeProductionAttempt(facts);
+  const call = openMetaProposalCall();
+  const prepared = await prepareProductionAttempt(facts);
+
+  return finishAttempt({
+    prepared, settle: (info) => settleProductionAttempt(prepared, info), request, runId, model, providerId, evidenceRoot: productionEvidenceRoot(), now, call,
   });
 }
 
@@ -103,7 +140,7 @@ export async function runSyntheticProposalAttempt(a: SyntheticAttempt): Promise<
 
 type Tail = {
   prepared: PreparedAttempt;
-  store: ReservationStore;
+  settle: (info: { status: string; reason: string | null }) => Promise<boolean>;
   request: BuiltProposalRequest;
   runId: string;
   model: string;
@@ -170,7 +207,7 @@ async function finishAttempt(t: Tail): Promise<AttemptOutcome> {
   await t.onStep?.('after-persist');
   let settled = false;
   try {
-    settled = await t.store.settle(claim, { status: artifact.status, reason: artifact.reason });
+    settled = await t.settle({ status: artifact.status, reason: artifact.reason });
   } catch {
     settled = false; // best effort by design: a failed settlement leaves the claim spent, never released
   }

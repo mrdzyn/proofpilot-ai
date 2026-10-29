@@ -8,12 +8,12 @@
 // bound); any other property on the argument is ignored. Do not add parameters for roots, probes, registers, directories, quotas or
 // stores. Future C3-LIVE-01B code must call these functions, not live-gate-core.ts (a static test restricts its importers).
 import path from 'node:path';
-import { AuthorizationError, type AuthorizedAttempt } from './live-approval.ts';
+import { AuthorizationError, DEFAULT_RESERVATIONS_ROOT, type AuthorizedAttempt } from './live-approval.ts';
 import { runApprovalCli, type ApprovalIo } from './approval-cli.ts';
 import { createInstallContext, evaluateAuthorizationCore, prepareAttemptCore, type PreparedAttempt } from './live-gate-core.ts';
 import type { InferenceProvider } from './client.ts';
 import type { BuiltProposalRequest } from './patch-proposal.ts';
-import { APPROVED_LIVE_QUOTA } from './reservations.ts';
+import { APPROVED_LIVE_QUOTA, createReservationStore } from './reservations.ts';
 
 /** This checkout (packages/inference/src -> repository root). Fixed by where the code lives, not by any argument. */
 const INSTALL_ROOT = path.resolve(import.meta.dirname, '../../..');
@@ -44,6 +44,13 @@ export async function prepareProductionAttempt(attempt: ProductionAttempt): Prom
     throw e instanceof AuthorizationError ? e : new AuthorizationError('INTERNAL', 'authorization failed closed');
   }
 }
+
+/** Fixed private evidence directory of this checkout (gitignored). Not parameterizable. */
+export const productionEvidenceRoot = (): string => path.join(INSTALL_ROOT, '.proofpilot', 'evidence');
+
+/** Settle the reservation that `prepareProductionAttempt` claimed, in this checkout's reservation store. Never releases it. */
+export const settleProductionAttempt = (prepared: PreparedAttempt, info: { status: string; reason: string | null }): Promise<boolean> =>
+  createReservationStore(path.join(INSTALL_ROOT, DEFAULT_RESERVATIONS_ROOT)).settle(prepared.claim, info);
 
 /** The owner-operated approval command against this checkout. Terminal I/O is the only input; everything else is derived. */
 export async function runProductionApprovalCli(argv: string[], io: ApprovalIo): Promise<number> {
