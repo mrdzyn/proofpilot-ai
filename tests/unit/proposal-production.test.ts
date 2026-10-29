@@ -10,6 +10,7 @@ import { APPROVED_LIVE_QUOTA, buildProposalRequest, InferenceError, META_PROPOSA
 import { openMetaProposalCall, readMetaProposalDescriptor } from '../../packages/inference/src/meta-proposal-transport.ts';
 import { runProductionProposalAttempt } from '../../packages/inference/src/proposal-orchestrator.ts';
 import { json, responsesOk, SENTINEL_KEY, validSymptom } from '../helpers.ts';
+import { expectedGateCode } from '../support/real-gate.ts';
 
 const REAL_ROOT = path.resolve(import.meta.dirname, '../..');
 const realFetch = globalThis.fetch;
@@ -68,11 +69,11 @@ const code = async (p: Promise<unknown>) => {
 
 // ---------------------------------------------------------------- dormancy against the REAL repository
 
-test('with the activation pin EMPTY (positive quota, registered decision) the production runner stops at authorization: no credential read, no network, no reservation, no approval touched', async () => {
+test('with positive quota and the registered decision, the real checkout stops at authorization with the exact code of its pin state (unpinned: ACTIVATION_NOT_PINNED; validly pinned without an operator approval: APPROVAL_MISSING): no credential read, no network, no reservation, no approval touched', async () => {
   assert.deepEqual({ ...APPROVED_LIVE_QUOTA }, { meta: 1, baseten: 0 });
   setEnv({ MODEL_API_KEY: SENTINEL_KEY, PROOFPILOT_ALLOW_BILLABLE_CALLS: '1', PROOFPILOT_INFERENCE_MAX_RETRIES: '2' });
   const before = stateOfRealRepo();
-  assert.equal(await code(runProductionProposalAttempt({ runId: 'c3-live-meta-001', request })), 'ACTIVATION_NOT_PINNED');
+  assert.equal(await code(runProductionProposalAttempt({ runId: 'c3-live-meta-001', request })), await expectedGateCode(REAL_ROOT));
   assert.equal(keyReads, 0, 'the credential field was never read');
   assert.equal(fetchCalls.length, 0);
   assert.deepEqual(stateOfRealRepo(), before, 'nothing was created in the approvals, reservations or evidence directories');
@@ -100,7 +101,7 @@ test('caller-supplied trust is ignored: forged provider, transport, store, conte
     ctx: { kind: 'production', liveQuota: 5 }, store: {}, liveQuota: 5, quota: 5, repoRoot: '/tmp/forged', installRoot: '/tmp/forged', approvalsDir: '/tmp/forged', reservationsRoot: '/tmp/forged',
     git: { head: async () => 'f'.repeat(40), clean: async () => true, treeDigest: async () => 'e'.repeat(64) }, now: () => new Date(0), evidenceRoot: '/tmp/forged', consent: { granted: true }, approval: { approved: true }, synthetic: true, allowSynthetic: true,
   };
-  assert.equal(await code(runProductionProposalAttempt(forged as never)), 'ACTIVATION_NOT_PINNED');
+  assert.equal(await code(runProductionProposalAttempt(forged as never)), await expectedGateCode(REAL_ROOT));
   assert.equal(keyReads, 0);
   assert.equal(fetchCalls.length, 0);
   assert.equal(existsSync('/tmp/forged'), false);

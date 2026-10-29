@@ -25,10 +25,35 @@ jobs:
       contents: read
     timeout-minutes: 15
     steps:
-      - name: Check out repository
+      # The production activation gate validates the pinned revision relationship (the pinned commit must be an ancestor of HEAD and every
+      # commit in between must change only config/live-activation.json). That is meaningless on GitHub's synthetic PR merge commit with a
+      # depth-1 fetch, so Stack validation checks out the exact PR head SHA (or the dispatched SHA) with full history.
+      - name: Check out the exact revision with full history
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
           persist-credentials: false
+
+      - name: Verify the checked-out revision
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          echo "expected=${EXPECTED_SHA}"
+          echo "actual=${actual}"
+          test "${actual}" = "${EXPECTED_SHA}" || { echo "::error::checked-out HEAD is not the expected revision"; exit 1; }
+          test "$(git rev-parse --is-shallow-repository)" = "false" || { echo "::error::the checkout is shallow"; exit 1; }
+          parents="$(git rev-list --parents -n 1 HEAD | wc -w)"
+          echo "commit has $((parents - 1)) parent(s)"
+          if [[ -n "${BASE_SHA:-}" ]]; then
+            git cat-file -e "${BASE_SHA}^{commit}" || { echo "::error::the base commit is not available"; exit 1; }
+          fi
+          test -z "$(git status --porcelain)" || { echo "::error::the working tree is not clean"; exit 1; }
+          echo "Verified: exact revision, full history, clean tree."
 
       - name: Set up Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -42,6 +67,24 @@ jobs:
           corepack enable
           corepack prepare pnpm@12.6.0 --activate
           pnpm install --frozen-lockfile
+
+      # Informational for ordinary changes. A change that touches the pin file must leave a VALID lineage (pinned tree, linear pin-file-only
+      # descent from the pinned commit): that is exactly what the production gate will demand.
+      - name: Activation pin lineage (read-only)
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          require=""
+          if [[ -n "${BASE_SHA:-}" ]]; then
+            changed="$(git diff --name-only "$(git merge-base "${BASE_SHA}" HEAD)" HEAD)"
+            if grep -qx 'config/live-activation.json' <<<"${changed}"; then
+              echo "This change touches the activation pin: the lineage must be valid."
+              require="--require-valid"
+            fi
+          fi
+          node scripts/c3-pin-check.ts ${require}
 
       - name: Lint, typecheck, unit and security tests
         shell: bash

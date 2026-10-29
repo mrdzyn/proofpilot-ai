@@ -2,7 +2,7 @@
 
 > **Owner decision (authoritative):** https://github.com/mrdzyn/proofpilot-ai/pull/6#issuecomment-6496850990 — posted by the repository owner (`mrdzyn`) on October 29, 2026, 12:36:38 UTC. The values in section 1 are the approved values; nothing is added to them.
 >
-> **What this approval is NOT:** it is not authorization to make a provider request now. The activation implementation is pending independent review; the activation revision pin is NOT RECORDED; the real provider invocation is NOT AUTHORIZED YET. A real attempt may occur only after the activation implementation passes an independent exact-head audit, receives a separate merge approval, is merged and revision-pinned in a separate reviewed pin-only commit, and the owner completes the operator preflight and the per-run confirmation. **A credit balance is not permission to spend.** The token and attempt limits do not guarantee a monetary cost ceiling (acknowledged by the owner).
+> **What this approval is NOT:** it is not authorization to make a provider request now. The activation implementation is pending independent review; the activation revision pin lives only in `config/live-activation.json` and is recorded by a separate pin-only commit (`activation: null` means not recorded; that file, not this document, is authoritative); the real provider invocation is NOT AUTHORIZED YET. A real attempt may occur only after the activation implementation passes an independent exact-head audit, receives a separate merge approval, is merged and revision-pinned in a separate reviewed pin-only commit, and the owner completes the operator preflight and the per-run confirmation. **A credit balance is not permission to spend.** The token and attempt limits do not guarantee a monetary cost ceiling (acknowledged by the owner).
 >
 > **Not approved (unchanged):** Baseten or Modal calls, additional attempts, automated retries, staging or execution of model-generated CSS, C3-B2B verification, the report UI (UI-C3-01), hosting or deployment (HOST-C3-01).
 
@@ -12,7 +12,7 @@
 |---|---|
 | LIVE-C3-01 owner decision | **APPROVED** for activation preparation (see the linked comment) |
 | Activation implementation (C3-LIVE-01B) | pending independent review |
-| Activation revision pin (`config/live-activation.json`) | **NOT RECORDED** (`activation: null`) |
+| Activation revision pin | Authoritative only in `config/live-activation.json`, recorded by a separate pin-only commit (`activation: null` = NOT RECORDED); this document deliberately does not track it |
 | Real provider invocation | **NOT AUTHORIZED YET** |
 | C3-B2B, UI-C3-01, HOST-C3-01 | NOT APPROVED |
 
@@ -86,14 +86,14 @@ After any stop the run id and slot stay spent and a **new** decision is needed f
 
 ## 4. Approval register (owner-only)
 
-Two machine-read owner files exist. `config/live-authorization.json` (the decision) holds exactly one non-synthetic LIVE-C3-01 entry recorded from the owner comment below. `config/live-activation.json` (the pinned activation revision, a tree digest excluding itself; sequence in `tasks/PP-META-I2-C3-LIVE-01A.md`) is **EMPTY (`activation: null`)** and stays empty until a separate reviewed pin-only commit after the activation PR is merged. A live attempt needs both, plus a per-run operator approval made at the pinned revision, a clean tree and a credential. No operator approval has been recorded.
+Two machine-read owner files exist. `config/live-authorization.json` (the decision) holds exactly one non-synthetic LIVE-C3-01 entry recorded from the owner comment below. `config/live-activation.json` (the pinned activation revision, a tree digest excluding itself; sequence in `tasks/PP-META-I2-C3-LIVE-01A.md`) is `activation: null` until a separate reviewed pin-only commit records the activation commit and its digest after the activation PR is merged; that file, not this document, is authoritative for the pin. A live attempt needs both, plus a per-run operator approval made at the pinned revision, a clean tree and a credential. No operator approval has been recorded.
 
 | Decision | Approved by / date / link | Exact values approved |
 |---|---|---|
 | LIVE-C3-01 (Meta, `muse-spark-1.3`) | APPROVED by the repository owner, October 29, 2026 — https://github.com/mrdzyn/proofpilot-ai/pull/6#issuecomment-6496850990 | Meta Model API only (`api.meta.ai`); exact model `muse-spark-1.3`; **1** billable attempt in total; input <= 12,000 characters; output <= 3,072 tokens including reasoning; text only, strict JSON schema, low reasoning effort; no retries, no fallback; timeout, failure or uncertain completion permanently consumes the attempt; mandatory single-use operator authorization bound to the exact run ID, request hash and approved repository revision; credential injected securely for the single owner-operated invocation, never exposed to AI agents or committed |
 | Per-run operator approval design (C3-LIVE-01A implementation) | _none recorded_ (the design is implemented as code and covered by the decision above only as a requirement) | _none_ |
 | Evaluation of accepted proposals (C3-B2B) | _none recorded_ — NOT APPROVED | _none_ |
-| Activation revision pin | NOT RECORDED | `activation: null` |
+| Activation revision pin | see `config/live-activation.json` (separate pin-only commit; `activation: null` = NOT RECORDED) | the file is authoritative |
 
 ## 5. What this record does not do
 

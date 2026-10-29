@@ -7,6 +7,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { APPROVED_LIVE_QUOTA } from '../../packages/inference/src/index.ts';
 
+import { readPinState } from '../support/real-gate.ts';
 const root = path.resolve(import.meta.dirname, '../..');
 const read = (rel: string) => readFileSync(path.join(root, rel), 'utf8');
 const code = (rel: string) => read(rel).split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
@@ -26,15 +27,15 @@ const TRANSPORT = 'packages/inference/src/meta-proposal-transport.ts';
 const exportsOf = (text: string) => [...text.matchAll(/^export (?:async )?(?:function|class|const|type) (\w+)/gm)].map((m) => m[1]).sort();
 const body = (text: string, start: string, end: string) => text.slice(text.indexOf(start), text.indexOf(end, text.indexOf(start) + 1));
 
-test('the activation locks that remain: quota is the approved constant, the activation pin is EMPTY, no operator approval exists, no unreviewed CLI', () => {
+test('the activation locks that remain: quota is the approved constant, the pin file is empty or a valid LIVE-C3-01 record, no operator approval exists, no unreviewed CLI', () => {
   assert.deepEqual({ ...APPROVED_LIVE_QUOTA }, { meta: 1, baseten: 0 });
   assert.match(code('packages/inference/src/reservations.ts'), /APPROVED_LIVE_QUOTA[^=]*= Object\.freeze\(\{ meta: 1, baseten: 0 \}\)/);
-  assert.equal(JSON.parse(read('config/live-activation.json')).activation, null);
+  readPinState(root);
   const tracked = execFileSync('git', ['ls-files'], { cwd: root, encoding: 'utf8' }).split('\n');
   assert.deepEqual(tracked.filter((f) => /(^|\/)\.proofpilot\/|\.consumed$|(^|\/)approvals\//.test(f)), []);
   // the only scripts in this area; c3-live-proposal.ts is the single owner-operated call and is covered by live01b-activation-boundary.test.ts
   const scripts = readdirSync(path.join(root, 'scripts')).filter((f) => /^c3-/.test(f)).sort();
-  assert.deepEqual(scripts, ['c3-activation-digest.ts', 'c3-approve-live-run.ts', 'c3-live-proposal.ts', 'c3-live-rehearsal.ts', 'c3-offline-verification.ts', 'c3-proposal-preflight.ts', 'c3-stage-spike.ts']);
+  assert.deepEqual(scripts, ['c3-activation-digest.ts', 'c3-approve-live-run.ts', 'c3-live-proposal.ts', 'c3-live-rehearsal.ts', 'c3-offline-verification.ts', 'c3-pin-check.ts', 'c3-proposal-preflight.ts', 'c3-stage-spike.ts']);
 });
 
 test('the production runner is reachable only through the gated entry point (and the owner CLI through it): the index, the staging runner and the approval CLI cannot reach it', () => {

@@ -100,3 +100,30 @@ test('model-generated CSS cannot reach the staging runner, the offline coordinat
   }
 });
 
+
+test('hosted CI validates the exact revision with full history, keeps every required gate, and the pin-lineage check is read-only', () => {
+  const ci = read('.github/workflows/ci.yml');
+  const stack = ci.slice(ci.indexOf('stack-validation:'));
+  // exact PR head (or the dispatched SHA), full history, no synthetic merge commit
+  assert.match(stack, /ref: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
+  assert.match(stack, /fetch-depth: 0/);
+  assert.match(stack, /persist-credentials: false/);
+  assert.match(stack, /EXPECTED_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
+  assert.match(stack, /test "\$\{actual\}" = "\$\{EXPECTED_SHA\}"/);
+  assert.match(stack, /git rev-parse --is-shallow-repository/);
+  assert.match(stack, /git status --porcelain/);
+  assert.ok(stack.indexOf('Verify the checked-out revision') < stack.indexOf('Install pnpm and dependencies'), 'verified before anything runs');
+  // the pin file may only change together with a valid lineage
+  assert.match(stack, /grep -qx 'config\/live-activation\.json'/);
+  assert.match(stack, /require="--require-valid"/);
+  // the existing required gates are all still there, in order, and the triggers are unchanged
+  assert.match(ci, /on:\n  pull_request:\n  workflow_dispatch:/);
+  assert.match(ci, /uses: \.\/\.github\/workflows\/common-validation\.yml/);
+  const steps = ['pnpm install --frozen-lockfile', 'pnpm lint', 'pnpm typecheck', 'pnpm test:unit', 'pnpm test:security', 'playwright install --with-deps chromium', 'pnpm f01:baseline'].map((n) => stack.indexOf(n));
+  assert.ok(steps.every((i) => i > 0) && [...steps].sort((a, b) => a - b).join() === steps.join(), 'required gates present and ordered');
+  // actions stay pinned by commit SHA
+  for (const m of ci.matchAll(/uses: ([^\s]+)/g)) assert.ok(m[1]!.startsWith('./') || /@[0-9a-f]{40}$/.test(m[1]!), `unpinned action ${m[1]}`);
+  const check = code('scripts/c3-pin-check.ts');
+  assert.deepEqual([...check.matchAll(/from '([^']+)'/g)].map((m) => m[1]).sort(), ['../packages/inference/src/index.ts', 'node:fs', 'node:path']);
+  assert.doesNotMatch(check, /process\.env|\bfetch\b|createProvider|structuredResponse|child_process|writeFile|appendFile|rm\(|unlink|rename|MODEL_API_KEY|prepareProductionAttempt|proposeCandidate/);
+});

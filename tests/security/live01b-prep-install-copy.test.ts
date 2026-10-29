@@ -25,14 +25,16 @@ const git = (cwd: string, ...args: string[]) => execFileSync('git', ['-C', cwd, 
 
 type Install = { dir: string; root: string; A: string; Aprime: string; digest: string; approve: (runId: string, over?: Record<string, unknown>) => Promise<void> };
 
-async function makeInstall(o: { quota?: number; noPin?: boolean; registerOverride?: (d: Record<string, unknown>) => Record<string, unknown> } = {}): Promise<Install> {
+async function makeInstall(o: { quota?: number; noPin?: boolean; pinOverride?: (pin: Record<string, any>) => Record<string, any>; registerOverride?: (d: Record<string, unknown>) => Record<string, unknown> } = {}): Promise<Install> {
   const dir = tempDir('pp-install-');
   const root = path.join(dir, 'install');
   mkdirSync(root);
   for (const d of ['packages', 'config', 'fixtures']) cpSync(path.join(REAL_ROOT, d), path.join(root, d), { recursive: true, filter: (s) => !s.includes('node_modules') });
   cpSync(path.join(REAL_ROOT, '.gitignore'), path.join(root, '.gitignore'));
-  // the copy carries the REAL shipped quota constant and the REAL owner decision; only the activation pin (which the real repository leaves empty
-  // until a separate reviewed pin-only commit) and an optional override are fixture-specific
+  // the copy carries the REAL shipped quota constant and the REAL owner decision; only the activation pin and an optional override are
+  // fixture-specific. The copy's pin starts EMPTY whatever the real file says (the real file is null before the separate pin-only commit and a
+  // LIVE-C3-01 record after it), so every state below is built deterministically here.
+  writeFileSync(path.join(root, ACTIVATION_PIN_PATH), JSON.stringify({ schemaVersion: 1, activation: null }, null, 2) + '\n');
   const res = path.join(root, 'packages/inference/src/reservations.ts');
   if (o.quota !== undefined) {
     const text = readFileSync(res, 'utf8');
@@ -52,7 +54,8 @@ async function makeInstall(o: { quota?: number; noPin?: boolean; registerOverrid
   const digest = await createGitProbe(root).treeDigest(A, ACTIVATION_PIN_PATH);
   const decisionRef = (JSON.parse(readFileSync(path.join(root, 'config/live-authorization.json'), 'utf8')).decisions[0] as { reference: string }).reference;
   if (o.noPin) return { dir, root, A, Aprime: A, digest, approve: async (runId, over = {}) => { const register = await loadDecisionRegister(root); await writeApprovalRecord(path.join(root, '.proofpilot/approvals'), buildApprovalRecord({ runId, repoSha: A, activation: { commit: A, digest }, inputSha256: request.inputSha256, inputChars: request.prompt.length, register, declaredBy: 'fixture-operator', now: new Date(), ...over } as never)); } };
-  writeFileSync(path.join(root, ACTIVATION_PIN_PATH), JSON.stringify({ schemaVersion: 1, activation: { decisionId: DECISION_ID, decisionReference: decisionRef, activationCommit: A, activationDigest: digest, recordedBy: 'FIXTURE', recordedAt: '2026-10-30T00:00:00.000Z', reference: 'fixture pin' } }, null, 2) + '\n');
+  const pinDoc = { schemaVersion: 1, activation: { decisionId: DECISION_ID, decisionReference: decisionRef, activationCommit: A, activationDigest: digest, recordedBy: 'FIXTURE', recordedAt: '2026-10-30T00:00:00.000Z', reference: 'fixture pin' } };
+  writeFileSync(path.join(root, ACTIVATION_PIN_PATH), JSON.stringify(o.pinOverride ? o.pinOverride(pinDoc) : pinDoc, null, 2) + '\n');
   git(root, 'add', '-A');
   git(root, 'commit', '-q', '-m', "A'");
   const Aprime = git(root, 'rev-parse', 'HEAD');
@@ -358,19 +361,128 @@ test('a synthetic register decision is rejected by the production gate even with
   assert.equal(out.events.length, 0);
 });
 
-test('the real repository carries exactly the owner decision, quota 1 for Meta only, and an EMPTY activation pin; no approval or fixture state exists', () => {
+test('the real repository carries exactly the owner decision, quota 1 for Meta only, a pin file that is empty or a valid LIVE-C3-01 record, and no approval or fixture state', () => {
   assert.match(readFileSync(path.join(REAL_ROOT, 'packages/inference/src/reservations.ts'), 'utf8'), /Object\.freeze\(\{ meta: 1, baseten: 0 \}\)/);
-  assert.equal(JSON.parse(readFileSync(path.join(REAL_ROOT, 'config/live-activation.json'), 'utf8')).activation, null);
+  readPinState(REAL_ROOT);
   const reg = JSON.parse(readFileSync(path.join(REAL_ROOT, 'config/live-authorization.json'), 'utf8'));
   assert.equal(reg.decisions.length, 1);
   assert.equal('synthetic' in reg.decisions[0], false);
   assert.equal(execFileSync('git', ['-C', REAL_ROOT, 'ls-files', '.proofpilot'], { encoding: 'utf8' }).trim(), '');
 });
 
+// ---------------------------------------------------------------- the activation-state matrix (isolated, deterministic fixtures)
+// Every state the real checkout can be in is built here from scratch and run through the REAL production gate of the copy. The test-side oracle
+// (tests/support/real-gate.ts) must agree with the gate on each, and in every refusal nothing is read, consumed, reserved or sent.
+
+const noApprovalRun = (inst: Install, id: string) => {
+  const out = runChild(inst, 'ok', id);
+  assert.equal(out.result.ok, false, out.stdout);
+  assert.equal(out.events.length, 0, 'no provider request');
+  assert.equal(out.keyReads, 0, 'the credential field was never read');
+  assert.equal(existsSync(markerOf(inst, id)), false, 'no approval consumed');
+  assert.equal(existsSync(runFileOf(inst, id)), false, 'no reservation');
+  assert.equal(existsSync(path.join(inst.root, '.proofpilot/evidence')), false, 'no artifact');
+  return out.result.code as string;
+};
+const STATE_MATRIX: Array<[string, Parameters<typeof makeInstall>[0], string]> = [
+  ['unpinned', { noPin: true }, 'ACTIVATION_NOT_PINNED'],
+  ['validly pinned, no operator approval', {}, 'APPROVAL_MISSING'],
+  ['pinned digest does not match the pinned commit', { pinOverride: (p) => ({ ...p, activation: { ...p.activation, activationDigest: 'a'.repeat(64) } }) }, 'ACTIVATION_MISMATCH'],
+  ['pinned commit does not exist', { pinOverride: (p) => ({ ...p, activation: { ...p.activation, activationCommit: 'b'.repeat(40) } }) }, 'ACTIVATION_MISMATCH'],
+  ['pin names a different decision reference', { pinOverride: (p) => ({ ...p, activation: { ...p.activation, decisionReference: 'https://example.invalid/other-decision' } }) }, 'ACTIVATION_MISMATCH'],
+  ['synthetic pin marker', { pinOverride: (p) => ({ ...p, activation: { ...p.activation, synthetic: true } }) }, 'SYNTHETIC_NOT_ALLOWED'],
+];
+for (const [name, opts, expected] of STATE_MATRIX) {
+  test(`activation state "${name}": the production gate says ${expected}; the oracle agrees; nothing is read, consumed, reserved or sent`, async () => {
+    const inst = await makeInstall(opts);
+    assert.equal(noApprovalRun(inst, 'c3-live-meta-001'), expected);
+    if (expected !== 'SYNTHETIC_NOT_ALLOWED') assert.equal(await expectedGateCode(inst.root), expected, 'the test oracle agrees with the gate');
+  });
+}
+
+function pinCheck(inst: Install, args: string[] = []) {
+  mkdirSync(path.join(inst.root, 'scripts'), { recursive: true });
+  cpSync(path.join(REAL_ROOT, 'scripts/c3-pin-check.ts'), path.join(inst.root, 'scripts/c3-pin-check.ts'));
+  const r = spawnSync(process.execPath, [path.join(inst.root, 'scripts/c3-pin-check.ts'), ...args], { cwd: inst.root, env: { PATH: process.env.PATH ?? '', HOME: inst.dir }, encoding: 'utf8', timeout: 60_000 });
+  return { code: r.status, text: r.stdout + r.stderr };
+}
+
+test('the CI pin-lineage check: informational by default, strict with --require-valid, and read-only', async () => {
+  const empty = await makeInstall({ noPin: true });
+  // informational mode reports EMPTY and succeeds; strict mode (used when a change touches the pin file) refuses an empty pin
+  const info = pinCheck(empty);
+  assert.equal(info.code, 0, info.text);
+  assert.match(info.text, /EMPTY/);
+  assert.doesNotMatch(info.text, /FAILED/);
+  const strictEmpty = pinCheck(empty, ['--require-valid']);
+  assert.equal(strictEmpty.code, 1, strictEmpty.text);
+  assert.match(strictEmpty.text, /EMPTY/);
+  assert.match(strictEmpty.text, /FAILED \(--require-valid\): the pin file is empty/);
+  const valid = await makeInstall();
+  const v = pinCheck(valid, ['--require-valid']);
+  assert.equal(v.code, 0, v.text);
+  assert.match(v.text, /lineage:\s+VALID/);
+  // a later non-pin-only commit: reported by default (informational), refused when the change touches the pin
+  const later = await makeInstall();
+  writeFileSync(path.join(later.root, 'packages/inference/src/extra.ts'), '// later\n');
+  git(later.root, 'add', '-A');
+  git(later.root, 'commit', '-q', '-m', 'later');
+  assert.equal(pinCheck(later).code, 0);
+  assert.match(pinCheck(later).text, /NOT VALID/);
+  assert.equal(pinCheck(later, ['--require-valid']).code, 1);
+  // a depth-1 clone (the hosted-CI failure mode) is NOT VALID, and strict mode fails
+  const c = await makeInstall();
+  const shallow = path.join(c.dir, 'shallow');
+  execFileSync('git', ['clone', '-q', '--depth', '1', `file://${c.root}`, shallow]);
+  const sh = pinCheck({ ...c, root: shallow }, ['--require-valid']);
+  assert.equal(sh.code, 1, sh.text);
+  assert.match(sh.text, /not available in this checkout/);
+  assert.equal(pinCheck(valid, ['--bogus']).code, 2);
+  assert.equal(git(valid.root, 'status', '--porcelain').replace(/\?\? scripts\/\n?/, ''), '', 'the check changed nothing tracked');
+});
+
+test('activation lineage: a commit after the pin that is not pin-only, a merge commit and a shallow clone (the hosted-CI failure mode) are each refused with the exact revision/activation code', async () => {
+  // extra non-pin-only commit after the pin
+  const a = await makeInstall();
+  writeFileSync(path.join(a.root, 'packages/inference/src/extra.ts'), '// after the pin\n');
+  git(a.root, 'add', '-A');
+  git(a.root, 'commit', '-q', '-m', 'later change');
+  assert.equal(noApprovalRun(a, 'c3-live-meta-001'), 'REVISION_NOT_APPROVED');
+  assert.equal(await expectedGateCode(a.root), 'REVISION_NOT_APPROVED');
+  // an EMPTY commit after the pin has the identical tree but is not a pin-file-only commit: the relationship, not the contents, is enforced
+  const e = await makeInstall();
+  git(e.root, 'commit', '-q', '--allow-empty', '-m', 'empty descendant');
+  assert.equal(noApprovalRun(e, 'c3-live-meta-001'), 'REVISION_NOT_APPROVED');
+  assert.equal(await expectedGateCode(e.root), 'REVISION_NOT_APPROVED');
+  // a synthetic merge commit (what a pull-request checkout without ref creates): A' merged into an unrelated tip
+  const b = await makeInstall();
+  git(b.root, 'checkout', '-q', '-b', 'pr', b.Aprime);
+  git(b.root, 'checkout', '-q', '-b', 'merge-tip', b.A);
+  writeFileSync(path.join(b.root, 'unrelated.txt'), 'main moved\n');
+  git(b.root, 'add', '-A');
+  git(b.root, 'commit', '-q', '-m', 'main moved');
+  git(b.root, 'merge', '-q', '--no-ff', '-m', 'Merge pull request', 'pr');
+  assert.equal(noApprovalRun(b, 'c3-live-meta-001'), 'REVISION_NOT_APPROVED');
+  assert.equal(await expectedGateCode(b.root), 'REVISION_NOT_APPROVED');
+  // a depth-1 clone of the pinned head does not contain the pinned commit A at all
+  const c = await makeInstall();
+  const shallow = path.join(c.dir, 'shallow');
+  execFileSync('git', ['clone', '-q', '--depth', '1', `file://${c.root}`, shallow]);
+  assert.equal(git(shallow, 'rev-parse', '--is-shallow-repository'), 'true');
+  const shallowInstall = { ...c, root: shallow };
+  assert.equal(noApprovalRun(shallowInstall, 'c3-live-meta-001'), 'ACTIVATION_MISMATCH');
+  assert.equal(await expectedGateCode(shallow), 'ACTIVATION_MISMATCH');
+  // ... and the same pinned head fully cloned is valid again
+  const full = path.join(c.dir, 'full');
+  execFileSync('git', ['clone', '-q', `file://${c.root}`, full]);
+  assert.equal(noApprovalRun({ ...c, root: full }, 'c3-live-meta-001'), 'APPROVAL_MISSING');
+});
+
 // ================================================================ the owner CLI end to end (C3-LIVE-01B)
 // Real evidence verification, real gate, real entry point, real runner from the copy; scripted terminal I/O and a mock Meta endpoint.
 import { readFixtureTree, loadCertifiedProposalInput } from '../../packages/inference/src/index.ts';
 import { edit, writeEvidence } from '../support/live-evidence.ts';
+import { expectedGateCode, readPinState } from '../support/real-gate.ts';
 
 const CLI_CHILD = `
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
