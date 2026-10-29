@@ -324,17 +324,20 @@ export async function persistProposalArtifact(artifact: ProposalArtifact, eviden
   }
 }
 
-// ---------------------------------------------------------------- production entry point (disabled)
+// ---------------------------------------------------------------- production entry point (gated)
+
+export type ProposeCandidateInput = { runId: string; request: BuiltProposalRequest };
 
 /**
- * Production proposal entry point. HARD-DISABLED: LIVE-C3-01 is NOT approved, so this rejects before
- * touching its argument, any provider callback, any reservation or any file, whatever the caller passes
- * (an injected or forged provider, a positive quota, credentials, billable flags or consent). A provider's
- * transport cannot be proven to be a mock from the outside, so no caller-supplied label can enable it.
- * Enabling live proposals requires a separately approved, reviewed commit that changes this function.
- * Human consent for live operation must then be captured and audited separately: `createProposalConsent`
- * only builds a consent-shaped record and does not prove that a person approved anything.
+ * Production proposal entry point (LIVE-C3-01, owner-approved October 29, 2026). It delegates to exactly one thing,
+ * `runProductionProposalAttempt`, and reads exactly two fields of its argument. It has no other path: no caller-supplied root,
+ * provider, transport, Git probe, store, credential, quota, clock, evidence directory or consent is ever consulted. Whether anything
+ * happens is decided by the production gate (live-gate.ts), which refuses unless the register decision, the owner-pinned activation
+ * revision, a clean tree at that revision, a single-use operator approval for this run and input, and the quota all hold; the empty
+ * activation pin alone makes this reject before any credential is read, approval consumed, reservation made or request sent.
+ * The module is loaded lazily to keep the import graph acyclic.
  */
-export async function proposeCandidate(_input?: unknown): Promise<never> {
-  throw new ProposalError('LIVE_NOT_APPROVED', `live proposal calls are disabled (LIVE-C3-01 is not approved; approved live quota: meta ${APPROVED_LIVE_QUOTA.meta}, baseten ${APPROVED_LIVE_QUOTA.baseten})`);
+export async function proposeCandidate(input: ProposeCandidateInput): Promise<ProposalOutcome & { synthetic: boolean; settled: boolean }> {
+  const { runProductionProposalAttempt } = await import('./proposal-orchestrator.ts');
+  return runProductionProposalAttempt({ runId: input?.runId, request: input?.request });
 }

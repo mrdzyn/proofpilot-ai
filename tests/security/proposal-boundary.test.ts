@@ -62,16 +62,16 @@ test('no model-verdict path: VERIFIED is never a value the proposal modules can 
   }
 });
 
-test('nothing outside tests calls the proposal adapter: there is no CLI, script or runner path to it in C3-A', () => {
+test('nothing outside tests calls the gated proposal entry point except the single owner-operated script', () => {
   const callers = walk(path.join(root, 'packages')).concat(walk(path.join(root, 'scripts'))).filter((f) => {
     const text = readFileSync(f, 'utf8');
-    // the readiness preflight calls it only to prove that it is hard-disabled (asserted below)
+    // the readiness preflight calls it only with a MALFORMED argument (it must be rejected before any gate); the owner script wires it once
     return /\bproposeCandidate\b/.test(text) && !PROPOSAL_FILES.some((p) => f.endsWith(p)) && !f.endsWith('/index.ts') && !f.endsWith('packages/inference/src/proposal-readiness.ts');
-  });
-  assert.deepEqual(callers, []);
+  }).map((f) => path.relative(root, f).split(path.sep).join('/'));
+  assert.deepEqual(callers, ['scripts/c3-live-proposal.ts']);
   // and no package script, workflow or script imports it
   assert.doesNotMatch(src('package.json'), /patch-proposal|proposeCandidate/);
-  for (const f of walk(path.join(root, 'scripts'))) assert.doesNotMatch(readFileSync(f, 'utf8'), /patch-proposal|proposeCandidate/, f);
+  for (const f of walk(path.join(root, 'scripts')).filter((f) => !f.endsWith('scripts/c3-live-proposal.ts'))) assert.doesNotMatch(readFileSync(f, 'utf8'), /patch-proposal|proposeCandidate/, f);
 });
 
 test('the staging runner and the verifier never import the proposal pipeline (proposals cannot reach them)', () => {
@@ -79,8 +79,8 @@ test('the staging runner and the verifier never import the proposal pipeline (pr
   for (const f of walk(path.join(root, 'verifier'))) assert.doesNotMatch(readFileSync(f, 'utf8'), /patch-proposal|inference/, f);
 });
 
-test('LIVE-C3-01 is not approved: the live quota is a frozen code constant of zero that no environment variable can raise', () => {
-  assert.deepEqual({ ...APPROVED_LIVE_QUOTA }, { meta: 0, baseten: 0 });
+test('LIVE-C3-01 is approved for exactly one Meta attempt: the live quota is a frozen code constant ({ meta: 1, baseten: 0 }) that no environment variable can raise', () => {
+  assert.deepEqual({ ...APPROVED_LIVE_QUOTA }, { meta: 1, baseten: 0 });
   assert.equal(Object.isFrozen(APPROVED_LIVE_QUOTA), true);
   assert.doesNotMatch(src('packages/inference/src/reservations.ts'), /process\.env/);
   assert.doesNotMatch(src('packages/inference/src/patch-proposal.ts'), /process\.env/);
@@ -96,7 +96,9 @@ test('exactly one production call site of provider.structuredResponse exists (th
   const body = src('packages/inference/src/patch-proposal.ts');
   const fn = body.slice(body.indexOf('export async function proposeCandidate'));
   const entry = fn.slice(fn.indexOf('{\n'));
-  assert.doesNotMatch(entry, /_input|provider|store|claim|fetch|writeFile|await/, 'the entry point does nothing but throw');
+  // the whole body: one lazy import and one delegation that forwards exactly two fields of the argument
+  assert.equal(entry, "{\n  const { runProductionProposalAttempt } = await import('./proposal-orchestrator.ts');\n  return runProductionProposalAttempt({ runId: input?.runId, request: input?.request });\n}\n", 'the entry point does nothing but delegate to the production runner');
+  assert.doesNotMatch(entry, /provider|store|claim|fetch|writeFile|process\.env|quota|root|probe|clock|transport/i);
 });
 
 // ---------------------------------------------------------------- MAJOR-2: adversarial entry-point tests
@@ -108,7 +110,7 @@ const request = () =>
   });
 
 for (const id of ['meta', 'baseten'] as const) {
-  test(`MAJOR-2 (${id}): a purported injected transport that would forward to the real network is never invoked; nothing is reserved or written`, async () => {
+  test(`MAJOR-2 (${id}): a purported injected transport or provider is never invoked and the real gate (empty activation pin) stops the call; nothing is reserved or written`, async () => {
     const req = request();
     const evidence = tempDir('pp-sec-');
     let forwarded = 0;
@@ -128,24 +130,33 @@ for (const id of ['meta', 'baseten'] as const) {
       },
     });
     const hand = { id, models: provider.models, billableCallsAllowed: true, transport: 'injected', structuredResponse: async () => { providerCallbacks++; return realFetch('https://api.meta.ai/v1/responses'); } };
-    for (const candidate of [provider, forged, hand]) {
-      for (const injectedTransportQuota of [undefined, 0, 1, 5, 1000]) {
-        await assert.rejects(
-          proposeCandidate({
-            provider: candidate,
-            store: createReservationStore(path.join(evidence, 'reservations')),
-            runId: `run-${id}`,
-            consent: createProposalConsent({ runId: `run-${id}`, providerId: id, inputSha256: req.inputSha256 }),
-            request: req,
-            evidenceRoot: evidence,
-            injectedTransportQuota,
-            mockQuota: injectedTransportQuota,
-          } as never),
-          (e: unknown) => e instanceof ProposalError && e.code === 'LIVE_NOT_APPROVED',
-          `${id} quota ${String(injectedTransportQuota)}`,
-        );
+    // the process environment would let a real call through every credential-free check; only the production gate can stop it
+    const savedEnv = process.env;
+    let keyReads = 0;
+    process.env = new Proxy({ ...savedEnv, MODEL_API_KEY: SENTINEL_KEY, BASETEN_API_KEY: SENTINEL_KEY, PROOFPILOT_ALLOW_BILLABLE_CALLS: '1' }, { get(t, k) { if (k === 'MODEL_API_KEY' || k === 'BASETEN_API_KEY') keyReads++; return (t as Record<string, string | undefined>)[k as string]; } }) as NodeJS.ProcessEnv;
+    try {
+      for (const candidate of [provider, forged, hand]) {
+        for (const injectedTransportQuota of [undefined, 0, 1, 5, 1000]) {
+          await assert.rejects(
+            proposeCandidate({
+              provider: candidate,
+              store: createReservationStore(path.join(evidence, 'reservations')),
+              runId: `run-${id}`,
+              consent: createProposalConsent({ runId: `run-${id}`, providerId: id, inputSha256: req.inputSha256 }),
+              request: req,
+              evidenceRoot: evidence,
+              injectedTransportQuota,
+              mockQuota: injectedTransportQuota,
+            } as never),
+            (e: unknown) => (e as { code?: string })?.code === 'ACTIVATION_NOT_PINNED',
+            `${id} quota ${String(injectedTransportQuota)}`,
+          );
+        }
       }
+    } finally {
+      process.env = savedEnv;
     }
+    assert.equal(keyReads, 0, 'the credential field was never read');
     assert.equal(forwarded, 0, 'the purported injected transport was never invoked');
     assert.equal(providerCallbacks, 0, 'no provider method was called');
     assert.equal(fetchCalls, 0, 'global fetch (the real network) was never invoked');
@@ -154,12 +165,11 @@ for (const id of ['meta', 'baseten'] as const) {
   });
 }
 
-test('MAJOR-2: the entry point rejects whatever it is given (garbage, nothing, hostile getters) without reading it', async () => {
-  let touched = 0;
-  const trap = new Proxy({}, { get() { touched++; throw new Error('input must not be read'); }, has() { touched++; return true; }, ownKeys() { touched++; return []; } });
-  for (const arg of [undefined, null, 0, 'x', [], {}, trap]) {
-    await assert.rejects(proposeCandidate(arg as never), (e: unknown) => e instanceof ProposalError && e.code === 'LIVE_NOT_APPROVED');
+test('MAJOR-2: the entry point reads only runId and request from its argument and rejects every malformed call before the gate', async () => {
+  const reads: string[] = [];
+  const spy = new Proxy({}, { get(_t, k) { reads.push(String(k)); return undefined; }, has() { reads.push('has'); return false; }, ownKeys() { reads.push('ownKeys'); return []; } });
+  for (const arg of [undefined, null, 0, 'x', [], {}, spy]) {
+    await assert.rejects(proposeCandidate(arg as never), (e: unknown) => e instanceof ProposalError && e.code === 'INVALID_INPUT');
   }
-  assert.equal(touched, 0);
-  await assert.rejects(proposeCandidate(), (e: unknown) => e instanceof ProposalError && e.code === 'LIVE_NOT_APPROVED');
+  assert.deepEqual([...new Set(reads)].sort(), ['request', 'runId'], 'only the two attempt facts are ever read');
 });

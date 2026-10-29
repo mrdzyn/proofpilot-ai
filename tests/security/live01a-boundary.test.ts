@@ -21,15 +21,21 @@ function walk(dir: string, out: string[] = []): string[] {
 const rel = (f: string) => path.relative(root, f).split(path.sep).join('/');
 const APPROVAL_FILES = ['packages/inference/src/live-approval.ts', 'packages/inference/src/live-gate-core.ts', 'packages/inference/src/live-gate.ts', 'packages/inference/src/approval-cli.ts', 'packages/inference/src/live-rehearsal.ts'];
 
-test('nothing is approved: empty register, quota 0, disabled entry point, LIVE-C3-01 NOT APPROVED in every document', async () => {
+test('the owner decision is recorded but powerless: exactly one non-synthetic LIVE-C3-01 decision, Meta quota 1, EMPTY activation pin, malformed calls rejected', async () => {
   const reg = JSON.parse(read('config/live-authorization.json'));
-  assert.deepEqual(reg.decisions, []);
-  assert.deepEqual({ ...APPROVED_LIVE_QUOTA }, { meta: 0, baseten: 0 });
-  await assert.rejects(proposeCandidate({ provider: 'forged', quota: 5 }), (e: unknown) => e instanceof ProposalError && e.code === 'LIVE_NOT_APPROVED');
+  assert.deepEqual(reg.decisions, [{
+    decisionId: 'LIVE-C3-01', status: 'APPROVED', provider: 'meta', model: 'muse-spark-1.3', maxBillableAttempts: 1, maxInputChars: 12000, maxOutputTokens: 3072,
+    approvedBy: 'mrdzyn (repository owner)', approvedAt: '2026-10-29T12:36:38.000Z', reference: 'https://github.com/mrdzyn/proofpilot-ai/pull/6#issuecomment-6496850990',
+  }]);
+  assert.equal('synthetic' in reg.decisions[0], false);
+  assert.deepEqual({ ...APPROVED_LIVE_QUOTA }, { meta: 1, baseten: 0 });
+  assert.equal(JSON.parse(read('config/live-activation.json')).activation, null, 'the activation revision is NOT pinned');
+  await assert.rejects(proposeCandidate({ provider: 'forged', quota: 5 } as never), (e: unknown) => e instanceof ProposalError && e.code === 'INVALID_INPUT');
   const record = read('docs/LIVE-C3-01-DECISION-RECORD.md');
-  assert.match(record, /NOT APPROVED/);
-  assert.match(record, /\| LIVE-C3-01 \(Meta, `muse-spark-1\.3`\) \| _none recorded_ \| _none_ \|/);
-  assert.doesNotMatch(read('docs/STATUS.md'), /LIVE-C3-01[^\n]*\bAPPROVED\b(?<!NOT APPROVED)[^\n]*quota [1-9]/);
+  assert.match(record, /\| LIVE-C3-01 \(Meta, `muse-spark-1\.3`\) \| APPROVED by the repository owner, October 29, 2026 — https:/);
+  assert.match(record, /issuecomment-6496850990/);
+  assert.match(record, /Activation revision pin[^\n]*NOT RECORDED/);
+  assert.match(record, /Real provider invocation[^\n]*NOT AUTHORIZED YET/);
 });
 
 test('the approval modules cannot reach a provider, the environment, credentials or an execution path', () => {
@@ -91,7 +97,7 @@ test('MAJOR-1: the production gate derives every trusted input internally and ac
   assert.doesNotMatch(core, /process\.env|process\.cwd/);
 });
 
-test('MAJOR-2: authorization requires the owner-pinned activation revision, checked before any approval is read, and both owner files are empty', () => {
+test('MAJOR-2: authorization requires the owner-pinned activation revision, checked before any approval is read, and the activation pin is empty', () => {
   const core = code('packages/inference/src/live-gate-core.ts');
   assert.ok(core.indexOf('checkActivation(ctx, decision)') > 0 && core.indexOf('checkActivation(ctx, decision)') < core.indexOf('readApprovalRecord('), 'the revision check precedes reading an approval');
   assert.match(core, /REVISION_NOT_APPROVED/);
@@ -102,7 +108,7 @@ test('MAJOR-2: authorization requires the owner-pinned activation revision, chec
   assert.match(code('packages/inference/src/approval-cli.ts'), /checkActivation\(ctx, decision\)/);
   assert.match(code('packages/inference/src/approval-cli.ts'), /QUOTA_ZERO/);
   assert.equal(JSON.parse(read('config/live-activation.json')).activation, null);
-  assert.deepEqual(JSON.parse(read('config/live-authorization.json')).decisions, []);
+  assert.equal(JSON.parse(read('config/live-authorization.json')).decisions.length, 1);
 });
 
 test('approval records are gitignored and no approval, marker, credential or raw model output is tracked', () => {

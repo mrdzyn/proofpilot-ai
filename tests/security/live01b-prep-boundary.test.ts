@@ -2,6 +2,7 @@
 // activation locks are untouched. (Runtime behaviour: tests/unit/proposal-production.test.ts and live01b-prep-install-copy.test.ts.)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { APPROVED_LIVE_QUOTA } from '../../packages/inference/src/index.ts';
@@ -25,27 +26,25 @@ const TRANSPORT = 'packages/inference/src/meta-proposal-transport.ts';
 const exportsOf = (text: string) => [...text.matchAll(/^export (?:async )?(?:function|class|const|type) (\w+)/gm)].map((m) => m[1]).sort();
 const body = (text: string, start: string, end: string) => text.slice(text.indexOf(start), text.indexOf(end, text.indexOf(start) + 1));
 
-test('every activation lock is unchanged: quota 0, empty register, empty pin, proposeCandidate unconditionally rejects, no approval or CLI', () => {
-  assert.deepEqual({ ...APPROVED_LIVE_QUOTA }, { meta: 0, baseten: 0 });
-  assert.match(code('packages/inference/src/reservations.ts'), /APPROVED_LIVE_QUOTA[^=]*= Object\.freeze\(\{ meta: 0, baseten: 0 \}\)/);
-  assert.deepEqual(JSON.parse(read('config/live-authorization.json')).decisions, []);
+test('the activation locks that remain: quota is the approved constant, the activation pin is EMPTY, no operator approval exists, no unreviewed CLI', () => {
+  assert.deepEqual({ ...APPROVED_LIVE_QUOTA }, { meta: 1, baseten: 0 });
+  assert.match(code('packages/inference/src/reservations.ts'), /APPROVED_LIVE_QUOTA[^=]*= Object\.freeze\(\{ meta: 1, baseten: 0 \}\)/);
   assert.equal(JSON.parse(read('config/live-activation.json')).activation, null);
-  const fn = code('packages/inference/src/patch-proposal.ts');
-  assert.match(fn.slice(fn.indexOf('export async function proposeCandidate')), /^export async function proposeCandidate\(_input\?: unknown\): Promise<never> \{\n  throw new ProposalError\('LIVE_NOT_APPROVED'/);
-  // there is no executable live CLI: the only scripts that touch this area are the existing zero-network or interactive-approval ones
+  const tracked = execFileSync('git', ['ls-files'], { cwd: root, encoding: 'utf8' }).split('\n');
+  assert.deepEqual(tracked.filter((f) => /(^|\/)\.proofpilot\/|\.consumed$|(^|\/)approvals\//.test(f)), []);
+  // the only scripts in this area; c3-live-proposal.ts is the single owner-operated call and is covered by live01b-activation-boundary.test.ts
   const scripts = readdirSync(path.join(root, 'scripts')).filter((f) => /^c3-/.test(f)).sort();
-  assert.deepEqual(scripts, ['c3-activation-digest.ts', 'c3-approve-live-run.ts', 'c3-live-rehearsal.ts', 'c3-offline-verification.ts', 'c3-proposal-preflight.ts', 'c3-stage-spike.ts']);
-  for (const f of walk(path.join(root, 'scripts'))) assert.doesNotMatch(readFileSync(f, 'utf8'), /runProductionProposalAttempt|meta-proposal-transport|openMetaProposalCall/, rel(f));
+  assert.deepEqual(scripts, ['c3-activation-digest.ts', 'c3-approve-live-run.ts', 'c3-live-proposal.ts', 'c3-live-rehearsal.ts', 'c3-offline-verification.ts', 'c3-proposal-preflight.ts', 'c3-stage-spike.ts']);
 });
 
-test('the production runner is dormant: nothing but its definition mentions it, and the index, the disabled entry point and the CLIs cannot reach it', () => {
+test('the production runner is reachable only through the gated entry point (and the owner CLI through it): the index, the staging runner and the approval CLI cannot reach it', () => {
   const mentions = prod().filter((f) => /runProductionProposalAttempt/.test(readFileSync(f, 'utf8'))).map(rel);
-  assert.deepEqual(mentions, [ORCH]);
+  assert.deepEqual([...mentions].sort(), [ORCH, 'packages/inference/src/patch-proposal.ts'].sort());
   const index = code('packages/inference/src/index.ts');
   assert.doesNotMatch(index, /proposal-orchestrator|meta-proposal-transport|runProductionProposalAttempt|productionEvidenceRoot|settleProductionAttempt|openMetaProposalCall/);
-  assert.doesNotMatch(code('packages/inference/src/patch-proposal.ts'), /proposal-orchestrator|meta-proposal-transport|live-gate|runProductionProposalAttempt/);
-  assert.doesNotMatch(code('packages/inference/src/approval-cli.ts'), /proposal-orchestrator|meta-proposal-transport|runProductionProposalAttempt/);
+  assert.doesNotMatch(code('packages/inference/src/approval-cli.ts'), /proposal-orchestrator|meta-proposal-transport|runProductionProposalAttempt|proposeCandidate/);
   for (const f of ['packages/core/src/candidate-stage.ts', 'packages/core/src/candidate-coordinator.ts']) assert.doesNotMatch(code(f), /proposal-orchestrator|meta-proposal-transport|inference\/src/, f);
+  for (const f of walk(path.join(root, 'scripts'))) assert.doesNotMatch(readFileSync(f, 'utf8'), /runProductionProposalAttempt|meta-proposal-transport|openMetaProposalCall|proposal-orchestrator/, rel(f));
 });
 
 test('the production runner takes only a run id and the bounded request, and derives every trusted input inside the production gate', () => {

@@ -12,7 +12,7 @@
 | ID | Decision | Status | Who must act |
 |---|---|---|---|
 | SEC-C3-01 | Execute model *proposals* only as trusted-host-rendered, closed-grammar CSS adjustments for F01 ("Execution boundary" below) | **APPROVED, strictly bounded** (record below); approves the design, not any unimplemented validator, and no model-generated candidate may execute until C3-A tests, this spike's audit and any further required approval | Done 2026-10-28 |
-| LIVE-C3-01 | Live-call quantities: at most 12 `muse-spark-1.3` proposal calls, at most 4 Baseten `muse-spark-open-1026` calls | **NOT APPROVED** (proposed maximums, not targets) | Owner records exact numbers |
+| LIVE-C3-01 | Live-call quantities: the owner **narrowed** the proposal to **one** Meta `muse-spark-1.3` attempt in total and no Baseten call (original proposal: at most 12 / 4) | **APPROVED for activation preparation, 2026-10-29** (record below; the real invocation is NOT AUTHORIZED YET: it needs the independently audited and merged C3-LIVE-01B implementation, the pinned activation revision and the per-run operator confirmation) | Owner (done); operator gates remain |
 | UI-C3-01 | One-page static report layout (`design/screens/PP-C3-REPORT-CONTRACT.md`) | **PENDING owner design approval** | Owner |
 | MODEL-C3-01 | Muse Spark patches; Muse Wonder is not a dependency | Proposed; Wonder's role UNVERIFIED | Owner may ask in `#office-hours` |
 
@@ -23,7 +23,7 @@
 | Decision | Approved by / date / link | Exact values approved |
 |---|---|---|
 | SEC-C3-01 | `mrdzyn`, 2026-10-28, https://github.com/mrdzyn/proofpilot-ai/pull/6#issuecomment-6460953906 (owner answered "yes" to approving SEC-C3-01 for F01-only closed-grammar CSS adjustments and authorizing the zero-model staging spike) | F01 only; candidate data as validated JSON selector/property/value, rendered exclusively by trusted host constants into `styles.css` of a disposable hash-verified stage; no model-authored HTML/JS, free CSS, file paths or trust-root changes; **only hand-authored control inputs (PV-1/PC-1, PV-2/NC-1) may execute until implementation tests, the staging proof and an independent exact-head audit pass**; no OS/container sandbox verified, broader executable patches stay prohibited; no Meta or Baseten call, no credentials or media transmitted |
-| LIVE-C3-01 | _none recorded_ | _none_ |
+| LIVE-C3-01 | `mrdzyn`, 2026-10-29, https://github.com/mrdzyn/proofpilot-ai/pull/6#issuecomment-6496850990 ("Owner Decision — LIVE-C3-01 … Decision: APPROVED"; quoted verbatim in `docs/LIVE-C3-01-DECISION-RECORD.md`) | Meta Model API only (`api.meta.ai`); exact model `muse-spark-1.3`; maximum billable attempts **1 total**; input <= 12,000 characters; output <= 3,072 tokens including reasoning; text-only, strict JSON schema, low reasoning effort; no retries and no fallback; timeout, failure or uncertain completion permanently consumes the attempt; mandatory single-use operator authorization bound to run ID, request hash and approved repository revision; credential securely injected for the single owner-operated invocation. NOT approved: Baseten or Modal calls, additional attempts, automated retries, staging or execution of model-generated CSS, C3-B2B verification, report UI, hosting or deployment. |
 | UI-C3-01 | _none recorded_ | _none_ |
 
 ## Objective

@@ -797,4 +797,29 @@ See the Draft PR. Production path exercised from a throwaway install copy (fixtu
 ### Next action
 GPT-6 review; owner decides merge and whether to record LIVE-C3-01 (then the activation PR).
 
+## Handoff: PP-META-I2-C3-LIVE-01B-A1
+
+- **Task / phase:** `tasks/PP-META-I2-C3-LIVE-01B.md` (owner-approved activation implementation)
+- **From:** Implementation agent (Claude Code, Claude Sonnet 5.5)
+- **To:** GPT-6 independent exact-head review, then project owner
+- **Branch:** `phase/pp-meta-i2-c3-live01b-activation` from `main` `c7e18d318c29ed60014b1f48b6375c29a5640a69` (audit the branch head)
+- **State:** READY FOR REVIEW. Not merged. No provider request made, no credential read, no operator approval, activation pin NOT RECORDED.
+
+### Completed
+- Owner decision (comment 6496850990) recorded in the decision record (verbatim) and as exactly one non-synthetic register entry; `tasks/PP-META-I2-C3.md` links it. `config/live-activation.json` untouched (`activation: null`).
+- `APPROVED_LIVE_QUOTA` -> `{ meta: 1, baseten: 0 }` (lifetime total). `proposeCandidate({ runId, request })` delegates only to `runProductionProposalAttempt`.
+- `live-input.ts` provenance gate; `live-proposal-cli.ts` + `scripts/c3-live-proposal.ts` owner command; `git-probe.ts` allow-listed environment (hardening); readiness preflight retargeted so it never invokes the production entry point with a well-formed request.
+- Tests: install-copy end to end with the shipped constants (empty pin alone stops everything; CLI end to end), provenance gate, CLI logic, static boundary; ten existing suites retargeted with stronger claims.
+
+### Validation
+See the Draft PR for exact counts, hosted CI and guard-removal results. No real network request or credential access during validation.
+
+### Open questions for the reviewer
+- Is a file-based provenance gate (re-hash + verdict re-derivation + SHA binding to a certified recording) an acceptable meaning of "independently trusted, certified F01 baseline evidence", given local disk write access defeats any file-based provenance and the operator separately approves the exact input hash?
+- The Git probe's environment is now allow-listed; is anything else in the production path inheriting the credential-bearing environment?
+- Is the lazy `import()` in `proposeCandidate` acceptable to keep the import graph acyclic, given the static tests that pin its exact body?
+
+### Next action
+GPT-6 review; the owner separately decides merge, then the pin-only commit and the operator steps in the task file.
+
 <!-- HANDOFF_ENTRIES_END -->

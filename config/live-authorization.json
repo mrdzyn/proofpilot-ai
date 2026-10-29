@@ -1,5 +1,18 @@
 {
   "schemaVersion": 1,
-  "note": "Owner-only register of APPROVED live decisions. EMPTY: LIVE-C3-01 is NOT APPROVED. Adding an entry here is part of a reviewed owner-approved commit; it never enables anything by itself (the code quota constant and the proposal entry point are separate).",
-  "decisions": []
+  "note": "Owner-only register of APPROVED live decisions. LIVE-C3-01 was approved by the repository owner on October 29, 2026 (see reference). The entry authorizes nothing by itself: a real attempt also needs the owner-pinned activation revision in config/live-activation.json (EMPTY until a separate reviewed pin-only commit), a clean tree at that revision, a single-use per-run operator approval and the credential.",
+  "decisions": [
+    {
+      "decisionId": "LIVE-C3-01",
+      "status": "APPROVED",
+      "provider": "meta",
+      "model": "muse-spark-1.3",
+      "maxBillableAttempts": 1,
+      "maxInputChars": 12000,
+      "maxOutputTokens": 3072,
+      "approvedBy": "mrdzyn (repository owner)",
+      "approvedAt": "2026-10-29T12:36:38.000Z",
+      "reference": "https://github.com/mrdzyn/proofpilot-ai/pull/6#issuecomment-6496850990"
+    }
+  ]
 }

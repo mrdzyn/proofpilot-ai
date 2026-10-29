@@ -8,7 +8,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { parseSymptom } from '../../packages/core/src/index.ts';
 import { ACTIVATION_PIN_PATH, buildProposalRequest, createGitProbe, DECISION_ID, META_PROPOSAL_MODEL, trustedFactsFromBaseline } from '../../packages/inference/src/index.ts';
@@ -25,25 +25,34 @@ const git = (cwd: string, ...args: string[]) => execFileSync('git', ['-C', cwd, 
 
 type Install = { dir: string; root: string; A: string; Aprime: string; digest: string; approve: (runId: string, over?: Record<string, unknown>) => Promise<void> };
 
-async function makeInstall(o: { quota?: number; registerOverride?: (d: Record<string, unknown>) => Record<string, unknown> } = {}): Promise<Install> {
+async function makeInstall(o: { quota?: number; noPin?: boolean; registerOverride?: (d: Record<string, unknown>) => Record<string, unknown> } = {}): Promise<Install> {
   const dir = tempDir('pp-install-');
   const root = path.join(dir, 'install');
   mkdirSync(root);
-  for (const d of ['packages', 'config']) cpSync(path.join(REAL_ROOT, d), path.join(root, d), { recursive: true, filter: (s) => !s.includes('node_modules') });
+  for (const d of ['packages', 'config', 'fixtures']) cpSync(path.join(REAL_ROOT, d), path.join(root, d), { recursive: true, filter: (s) => !s.includes('node_modules') });
   cpSync(path.join(REAL_ROOT, '.gitignore'), path.join(root, '.gitignore'));
-  // the quota constant exists only in this copy
+  // the copy carries the REAL shipped quota constant and the REAL owner decision; only the activation pin (which the real repository leaves empty
+  // until a separate reviewed pin-only commit) and an optional override are fixture-specific
   const res = path.join(root, 'packages/inference/src/reservations.ts');
-  const text = readFileSync(res, 'utf8');
-  assert.ok(text.includes('Object.freeze({ meta: 0, baseten: 0 })'));
-  writeFileSync(res, text.replace('Object.freeze({ meta: 0, baseten: 0 })', `Object.freeze({ meta: ${o.quota ?? 1}, baseten: 0 })`));
-  const decision = { decisionId: DECISION_ID, status: 'APPROVED', provider: 'meta', model: META_PROPOSAL_MODEL, maxBillableAttempts: 1, maxInputChars: 12000, maxOutputTokens: 3072, approvedBy: 'FIXTURE (temp copy only)', approvedAt: '2026-10-30T00:00:00.000Z', reference: 'fixture decision in a throwaway copy' };
-  writeFileSync(path.join(root, 'config/live-authorization.json'), JSON.stringify({ schemaVersion: 1, decisions: [o.registerOverride ? o.registerOverride(decision) : decision] }, null, 2) + '\n');
+  if (o.quota !== undefined) {
+    const text = readFileSync(res, 'utf8');
+    assert.ok(text.includes('Object.freeze({ meta: 1, baseten: 0 })'));
+    writeFileSync(res, text.replace('Object.freeze({ meta: 1, baseten: 0 })', `Object.freeze({ meta: ${o.quota}, baseten: 0 })`));
+  }
+  if (o.registerOverride) {
+    const reg = JSON.parse(readFileSync(path.join(root, 'config/live-authorization.json'), 'utf8'));
+    assert.equal(reg.decisions.length, 1);
+    reg.decisions = [o.registerOverride(reg.decisions[0])];
+    writeFileSync(path.join(root, 'config/live-authorization.json'), JSON.stringify(reg, null, 2) + '\n');
+  }
   git(root, 'init', '-q', '-b', 'main');
   git(root, 'add', '-A');
   git(root, 'commit', '-q', '-m', 'A');
   const A = git(root, 'rev-parse', 'HEAD');
   const digest = await createGitProbe(root).treeDigest(A, ACTIVATION_PIN_PATH);
-  writeFileSync(path.join(root, ACTIVATION_PIN_PATH), JSON.stringify({ schemaVersion: 1, activation: { decisionId: DECISION_ID, decisionReference: 'fixture decision in a throwaway copy', activationCommit: A, activationDigest: digest, recordedBy: 'FIXTURE', recordedAt: '2026-10-30T00:00:00.000Z', reference: 'fixture pin' } }, null, 2) + '\n');
+  const decisionRef = (JSON.parse(readFileSync(path.join(root, 'config/live-authorization.json'), 'utf8')).decisions[0] as { reference: string }).reference;
+  if (o.noPin) return { dir, root, A, Aprime: A, digest, approve: async (runId, over = {}) => { const register = await loadDecisionRegister(root); await writeApprovalRecord(path.join(root, '.proofpilot/approvals'), buildApprovalRecord({ runId, repoSha: A, activation: { commit: A, digest }, inputSha256: request.inputSha256, inputChars: request.prompt.length, register, declaredBy: 'fixture-operator', now: new Date(), ...over } as never)); } };
+  writeFileSync(path.join(root, ACTIVATION_PIN_PATH), JSON.stringify({ schemaVersion: 1, activation: { decisionId: DECISION_ID, decisionReference: decisionRef, activationCommit: A, activationDigest: digest, recordedBy: 'FIXTURE', recordedAt: '2026-10-30T00:00:00.000Z', reference: 'fixture pin' } }, null, 2) + '\n');
   git(root, 'add', '-A');
   git(root, 'commit', '-q', '-m', "A'");
   const Aprime = git(root, 'rev-parse', 'HEAD');
@@ -61,6 +70,8 @@ import { chmodSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 const [root, scenario, runId, requestFile, outFile] = process.argv.slice(2);
+let keyReads = 0;
+process.env = new Proxy({ ...process.env }, { get(t, k) { if (k === 'MODEL_API_KEY' || k === 'BASETEN_API_KEY') keyReads++; return t[k]; } });
 const events = [];
 const marker = path.join(root, '.proofpilot/approvals', runId + '.consumed');
 const runFile = path.join(root, '.proofpilot/reservations/meta/runs', runId + '.json');
@@ -92,7 +103,7 @@ try {
 } catch (e) {
   result = { ok: false, name: e?.constructor?.name, code: e?.code ?? null };
 }
-writeFileSync(outFile, JSON.stringify({ result, events }));
+writeFileSync(outFile, JSON.stringify({ result, events, keyReads }));
 `;
 
 function runChild(inst: Install, scenario: string, runId: string, env: Record<string, string> = {}) {
@@ -105,7 +116,7 @@ function runChild(inst: Install, scenario: string, runId: string, env: Record<st
     env: { PATH: process.env.PATH ?? '', HOME: inst.dir, MODEL_API_KEY: FAKE_KEY, PROOFPILOT_ALLOW_BILLABLE_CALLS: '1', ...env }, encoding: 'utf8', timeout: 60_000,
   });
   assert.equal(r.status, 0, `child failed: ${r.stderr.slice(0, 600)}`);
-  const out = JSON.parse(readFileSync(outFile, 'utf8')) as { result: Record<string, any>; events: Array<Record<string, any>> };
+  const out = JSON.parse(readFileSync(outFile, 'utf8')) as { result: Record<string, any>; events: Array<Record<string, any>>; keyReads: number };
   return { ...out, stdout: r.stdout + r.stderr };
 }
 const approvalsDir = (i: Install) => path.join(i.root, '.proofpilot/approvals');
@@ -244,6 +255,7 @@ const refuse = (name: string, setup: (i: Install) => Promise<{ runId: string; en
     assert.equal(out.result.ok, false, out.stdout);
     assert.equal(out.result.code ?? out.result.name, plan.expect);
     assert.equal(out.events.length, 0, 'no provider request');
+    if (!name.startsWith('credential')) assert.equal(out.keyReads, 0, 'the credential field was never read');
     assert.equal(existsSync(markerOf(inst, plan.runId)), plan.consumed === true);
     assert.equal(existsSync(runFileOf(inst, plan.runId)), false, 'no reservation');
     assert.equal(existsSync(artifactOf(inst, plan.runId)), false);
@@ -296,6 +308,38 @@ refuse('model override', async (i) => {
   return { runId: 'c3-live-meta-model', env: { META_MODEL_VISUAL: 'other-model' }, expect: 'MODEL_NOT_ALLOWED' };
 });
 
+test('hostile Git environment variables cannot point the Git probe at another repository, and the provider key never reaches the git child process', async () => {
+  const inst = await makeInstall();
+  const decoy = path.join(inst.dir, 'decoy');
+  mkdirSync(decoy);
+  git(decoy, 'init', '-q', '-b', 'main');
+  writeFileSync(path.join(decoy, 'x'), 'x');
+  git(decoy, 'add', '-A');
+  git(decoy, 'commit', '-q', '-m', 'decoy');
+  await inst.approve('c3-live-meta-gitenv');
+  const out = runChild(inst, 'ok', 'c3-live-meta-gitenv', { GIT_DIR: path.join(decoy, '.git'), GIT_WORK_TREE: decoy, GIT_INDEX_FILE: path.join(decoy, '.git/index') });
+  assert.equal(out.result.ok, true, out.stdout);
+  assert.equal(out.result.status, 'PROPOSAL_ACCEPTED');
+  assert.equal(out.events.length, 1);
+  // the only reads of the key are the provider's own, after authorization (never via an inherited child environment)
+  assert.ok(out.keyReads >= 1 && out.keyReads <= 2, `unexpected number of credential reads: ${out.keyReads}`);
+});
+
+test('the EMPTY activation pin alone stops everything: shipped quota 1 and the owner decision registered, an approval present, a credential available, yet no credential read, consumption, reservation, artifact or request', async () => {
+  const inst = await makeInstall({ noPin: true });
+  assert.equal(JSON.parse(readFileSync(path.join(inst.root, 'config/live-activation.json'), 'utf8')).activation, null);
+  assert.match(readFileSync(path.join(inst.root, 'packages/inference/src/reservations.ts'), 'utf8'), /Object\.freeze\(\{ meta: 1, baseten: 0 \}\)/);
+  await inst.approve('c3-live-meta-nopin');
+  const out = runChild(inst, 'ok', 'c3-live-meta-nopin');
+  assert.equal(out.result.ok, false, out.stdout);
+  assert.equal(out.result.code, 'ACTIVATION_NOT_PINNED');
+  assert.equal(out.keyReads, 0, 'the credential field was never read');
+  assert.equal(out.events.length, 0);
+  assert.equal(existsSync(markerOf(inst, 'c3-live-meta-nopin')), false, 'approval not consumed');
+  assert.equal(existsSync(runFileOf(inst, 'c3-live-meta-nopin')), false, 'no reservation');
+  assert.equal(existsSync(path.join(inst.root, '.proofpilot/evidence')), false, 'no artifact');
+});
+
 test('quota 0 in the copy (the real constant) refuses before the approval is even read; the register decision alone authorizes nothing', async () => {
   const inst = await makeInstall({ quota: 0 });
   await inst.approve('c3-live-meta-q0');
@@ -314,9 +358,186 @@ test('a synthetic register decision is rejected by the production gate even with
   assert.equal(out.events.length, 0);
 });
 
-test('the real repository is untouched: quota 0, empty register and pin, no approvals, no fixture state', () => {
-  const quota = readFileSync(path.join(REAL_ROOT, 'packages/inference/src/reservations.ts'), 'utf8');
-  assert.match(quota, /Object\.freeze\(\{ meta: 0, baseten: 0 \}\)/);
-  assert.deepEqual(JSON.parse(readFileSync(path.join(REAL_ROOT, 'config/live-authorization.json'), 'utf8')).decisions, []);
+test('the real repository carries exactly the owner decision, quota 1 for Meta only, and an EMPTY activation pin; no approval or fixture state exists', () => {
+  assert.match(readFileSync(path.join(REAL_ROOT, 'packages/inference/src/reservations.ts'), 'utf8'), /Object\.freeze\(\{ meta: 1, baseten: 0 \}\)/);
   assert.equal(JSON.parse(readFileSync(path.join(REAL_ROOT, 'config/live-activation.json'), 'utf8')).activation, null);
+  const reg = JSON.parse(readFileSync(path.join(REAL_ROOT, 'config/live-authorization.json'), 'utf8'));
+  assert.equal(reg.decisions.length, 1);
+  assert.equal('synthetic' in reg.decisions[0], false);
+  assert.equal(execFileSync('git', ['-C', REAL_ROOT, 'ls-files', '.proofpilot'], { encoding: 'utf8' }).trim(), '');
+});
+
+// ================================================================ the owner CLI end to end (C3-LIVE-01B)
+// Real evidence verification, real gate, real entry point, real runner from the copy; scripted terminal I/O and a mock Meta endpoint.
+import { readFixtureTree, loadCertifiedProposalInput } from '../../packages/inference/src/index.ts';
+import { edit, writeEvidence } from '../support/live-evidence.ts';
+
+const CLI_CHILD = `
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+const [root, scenario, runId, analysisId, answersFile, outFile, extra] = process.argv.slice(2);
+let keyReads = 0;
+process.env = new Proxy({ ...process.env }, { get(t, k) { if (k === 'MODEL_API_KEY' || k === 'BASETEN_API_KEY') keyReads++; return t[k]; } });
+const events = [];
+const marker = path.join(root, '.proofpilot/approvals', runId + '.consumed');
+const runFile = path.join(root, '.proofpilot/reservations/meta/runs', runId + '.json');
+const ok = (text, e = {}) => new Response(JSON.stringify({ id: 'resp_fixture', model: 'muse-spark-1.3', status: 'completed', output: [{ type: 'message', content: [{ type: 'output_text', text }] }], usage: { input_tokens: 1200, output_tokens: 300, total_tokens: 1500 }, ...e }), { status: 200, headers: { 'content-type': 'application/json', 'x-request-id': 'req-fixture' } });
+globalThis.fetch = async (url, init) => {
+  events.push({ url: String(url), consumedAtCall: existsSync(marker), runStatusAtCall: existsSync(runFile) ? JSON.parse(readFileSync(runFile, 'utf8')).status : null });
+  if (scenario === 'http500') return new Response(JSON.stringify({ error: { message: ${JSON.stringify(RAW)} } }), { status: 500, headers: { 'content-type': 'application/json' } });
+  return ok(${JSON.stringify(PV1)});
+};
+const inf = await import(pathToFileURL(path.join(root, 'packages/inference/src/index.ts')).href);
+const cli = await import(pathToFileURL(path.join(root, 'packages/inference/src/live-proposal-cli.ts')).href);
+const answers = JSON.parse(readFileSync(answersFile, 'utf8'));
+const lines = [];
+const asked = [];
+const argv = ['--analysis', analysisId, '--run-id', runId, ...(extra ? extra.split(' ') : [])];
+const code = await cli.runLiveProposalCli(argv, {
+  io: { stdinIsTTY: true, stdoutIsTTY: true, ask: async (q) => { asked.push(q); return answers.shift() ?? ''; }, print: (l) => lines.push(l) },
+  repoRoot: root, propose: inf.proposeCandidate, authorize: inf.authorizeProductionAttempt,
+});
+writeFileSync(outFile, JSON.stringify({ code, lines, asked, events, keyReads }));
+`;
+
+async function cliSetup(o: Parameters<typeof makeInstall>[0] = {}) {
+  const inst = await makeInstall(o);
+  const head = git(inst.root, 'rev-parse', 'HEAD');
+  const fixtureTree = await readFixtureTree(inst.root);
+  const ev = writeEvidence(inst.root, { head, fixtureTree });
+  const input = await loadCertifiedProposalInput({ repoRoot: inst.root, head, fixtureTree, analysisId: ev.analysisId });
+  const req = buildProposalRequest({ symptom: input.symptom, facts: input.facts });
+  const approve = (runId: string, over: Record<string, unknown> = {}) => inst.approve(runId, { inputSha256: req.inputSha256, inputChars: req.chars, ...over });
+  const phrase = (runId: string) => `SEND ONE META REQUEST ${runId} ${req.inputSha256.slice(0, 12)}`;
+  const runCli = (runId: string, answers: string[], opts: { scenario?: string; env?: Record<string, string>; extra?: string } = {}) => {
+    const answersFile = path.join(inst.dir, `answers-${runId}.json`);
+    writeFileSync(answersFile, JSON.stringify(answers));
+    const outFile = path.join(inst.dir, `cli-${runId}-${Math.random().toString(36).slice(2)}.json`);
+    const script = path.join(inst.dir, 'cli-child.ts');
+    writeFileSync(script, CLI_CHILD);
+    const r = spawnSync(process.execPath, [script, inst.root, opts.scenario ?? 'ok', runId, ev.analysisId, answersFile, outFile, opts.extra ?? ''], {
+      env: { PATH: process.env.PATH ?? '', HOME: inst.dir, MODEL_API_KEY: FAKE_KEY, PROOFPILOT_ALLOW_BILLABLE_CALLS: '1', ...(opts.env ?? {}) }, encoding: 'utf8', timeout: 60_000,
+    });
+    assert.equal(r.status, 0, `cli child failed: ${r.stderr.slice(0, 600)}`);
+    const out = JSON.parse(readFileSync(outFile, 'utf8')) as { code: number; lines: string[]; asked: string[]; events: Array<Record<string, any>>; keyReads: number };
+    return { ...out, text: out.lines.join('\n'), stdout: r.stdout + r.stderr };
+  };
+  return { inst, ev, req, approve, phrase, runCli };
+}
+
+test('CLI end to end: verified evidence, hash shown, real gate open, confirmation, then approval consumed -> reservation claimed -> ONE request -> sanitized report -> STOP', async () => {
+  const c = await cliSetup();
+  const id = 'c3-live-meta-001';
+  await c.approve(id);
+  const out = c.runCli(id, [c.phrase(id)]);
+  assert.equal(out.code, 0, out.text);
+  assert.ok(out.text.includes(c.req.inputSha256));
+  assert.match(out.text, /production authorization \(read-only\): every gate passes/);
+  assert.match(out.text, /UNTRUSTED PROPOSAL — NOT VERIFIED/);
+  assert.equal(out.events.length, 1);
+  assert.equal(out.events[0]!.consumedAtCall, true);
+  assert.equal(out.events[0]!.runStatusAtCall, 'CLAIMED');
+  assert.ok(!out.text.includes(FAKE_KEY) && !out.stdout.includes(FAKE_KEY) && !out.text.includes(PV1));
+  assert.ok(existsSync(artifactOf(c.inst, id)));
+  const again = c.runCli(id, [c.phrase(id)]);
+  assert.equal(again.code, 3);
+  assert.match(again.text, /REFUSED \(APPROVAL_SPENT\)/);
+  assert.equal(again.events.length, 0);
+  assert.equal(again.asked.length, 0);
+});
+
+test('CLI: every provider outcome prints sanitized fields only, makes one request and spends the attempt; the command never retries', async () => {
+  const c = await cliSetup();
+  const id = 'c3-live-meta-002';
+  await c.approve(id);
+  const out = c.runCli(id, [c.phrase(id)], { scenario: 'http500', env: { PROOFPILOT_INFERENCE_MAX_RETRIES: '2' } });
+  assert.equal(out.code, 1, out.text);
+  assert.equal(out.events.length, 1, 'one request even with retries configured');
+  assert.ok(!out.text.includes(RAW) && !out.stdout.includes(RAW));
+  assert.match(out.text, /PROPOSAL_FAILED/);
+  assert.match(out.text, /attempt is spent/);
+  await c.approve('c3-live-meta-003');
+  const next = c.runCli('c3-live-meta-003', [c.phrase('c3-live-meta-003')]);
+  assert.equal(next.code, 3);
+  assert.match(next.text, /REFUSED \(QUOTA_EXHAUSTED\)/);
+  assert.equal(next.events.length, 0);
+});
+
+test('CLI: the empty activation pin stops it at the read-only gate: no confirmation prompt, no credential read, no consumption, no reservation, no request', async () => {
+  const c = await cliSetup({ noPin: true });
+  await c.approve('c3-live-meta-001');
+  const out = c.runCli('c3-live-meta-001', [c.phrase('c3-live-meta-001')]);
+  assert.equal(out.code, 3);
+  assert.match(out.text, /REFUSED \(ACTIVATION_NOT_PINNED\)/);
+  assert.equal(out.asked.length, 0);
+  assert.equal(out.keyReads, 0);
+  assert.equal(out.events.length, 0);
+  assert.equal(existsSync(markerOf(c.inst, 'c3-live-meta-001')), false);
+  assert.equal(existsSync(runFileOf(c.inst, 'c3-live-meta-001')), false);
+});
+
+test('CLI: missing, expired, synthetic, mismatched and other-input operator approvals each stop it before the prompt', async () => {
+  const cases: Array<[string, (c: Awaited<ReturnType<typeof cliSetup>>, id: string) => Promise<void>, string]> = [
+    ['missing', async () => undefined, 'APPROVAL_MISSING'],
+    ['expired', (c, id) => c.approve(id, { now: new Date(Date.now() - 20 * 60_000) }), 'APPROVAL_EXPIRED'],
+    ['synthetic', (c, id) => c.approve(id, { synthetic: true }), 'SYNTHETIC_NOT_ALLOWED'],
+    ['other input hash', (c, id) => c.approve(id, { inputSha256: 'a'.repeat(64) }), 'INPUT_MISMATCH'],
+    ['other revision', (c, id) => c.approve(id, { repoSha: 'c'.repeat(40) }), 'REPO_MISMATCH'],
+  ];
+  for (const [name, setup, code] of cases) {
+    const c = await cliSetup();
+    const id = 'c3-live-meta-001';
+    await setup(c, id);
+    const out = c.runCli(id, [c.phrase(id)]);
+    assert.equal(out.code, 3, name);
+    assert.match(out.text, new RegExp(`REFUSED \\(${code}\\)`), name);
+    assert.equal(out.asked.length, 0, name);
+    assert.equal(out.events.length, 0, name);
+    assert.equal(out.keyReads, 0, name);
+    assert.equal(existsSync(markerOf(c.inst, id)), false, name);
+  }
+});
+
+test('CLI: it cannot bypass trusted F01 provenance: an uncertified, tampered, mismatched or mock-sourced input is refused before the gate is even consulted', async () => {
+  const mutations: Array<[string, (c: Awaited<ReturnType<typeof cliSetup>>) => void, string]> = [
+    ['uncertified baseline', (c) => edit(path.join(c.ev.baselineDir, 'baseline-summary.json'), (d) => { d.certified = false; }), 'BASELINE_NOT_CERTIFIED'],
+    ['tampered baseline', (c) => appendFileSync(path.join(c.ev.baselineDir, 'oracle-report.json'), ' '), 'BASELINE_TAMPERED'],
+    ['baseline for another revision', (c) => edit(path.join(c.ev.baselineDir, 'baseline-summary.json'), (d) => { d.gitHead = 'e'.repeat(40); }), 'BASELINE_MISSING'],
+    ['mock analysis', (c) => edit(c.ev.analysisFile, (d) => { d.evidenceKind = 'mock'; }), 'ANALYSIS_NOT_LIVE'],
+    ['tampered recording', (c) => appendFileSync(c.ev.mp4, 'x'), 'RECORDING_TAMPERED'],
+  ];
+  for (const [name, mutate, code] of mutations) {
+    const c = await cliSetup();
+    await c.approve('c3-live-meta-001');
+    mutate(c);
+    const out = c.runCli('c3-live-meta-001', [c.phrase('c3-live-meta-001')]);
+    assert.equal(out.code, 2, name);
+    assert.match(out.text, new RegExp(code), name);
+    assert.ok(!out.text.includes('production authorization'), `${name}: the gate was never consulted`);
+    assert.equal(out.events.length, 0, name);
+    assert.equal(existsSync(markerOf(c.inst, 'c3-live-meta-001')), false, name);
+  }
+});
+
+test('CLI: a wrong confirmation phrase, extra options or a missing credential send nothing and consume nothing', async () => {
+  const c = await cliSetup();
+  const id = 'c3-live-meta-001';
+  await c.approve(id);
+  const wrong = c.runCli(id, ['yes']);
+  assert.equal(wrong.code, 1);
+  assert.equal(wrong.events.length, 0);
+  assert.equal(existsSync(markerOf(c.inst, id)), false);
+  const flag = c.runCli(id, [c.phrase(id)], { extra: '--provider baseten' });
+  assert.equal(flag.code, 2);
+  assert.equal(flag.events.length, 0);
+  const noKey = c.runCli(id, [c.phrase(id)], { env: { MODEL_API_KEY: '' } });
+  assert.equal(noKey.code, 3);
+  assert.match(noKey.text, /\(CONFIG\)/);
+  assert.equal(noKey.events.length, 0);
+  assert.equal(existsSync(markerOf(c.inst, id)), false, 'a missing credential consumed nothing');
+  assert.equal(existsSync(runFileOf(c.inst, id)), false);
+  // the same approval still works afterwards: nothing was spent
+  const ok = c.runCli(id, [c.phrase(id)]);
+  assert.equal(ok.code, 0, ok.text);
 });
