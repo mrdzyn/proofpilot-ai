@@ -619,4 +619,48 @@ Unit 242/242, security 41/41, integration 29/29, F01 baseline certified, C3-0 sp
 ### Next action
 GPT-6: re-audit the exact head. Owner: decisions after audit; no merge by the agent.
 
+## Handoff: PP-META-I2-C3-B2A-A1
+
+- **Task / phase:** `tasks/PP-META-I2-C3-B2A.md` (pre-live readiness; preparation only)
+- **From:** Implementation agent (Claude Code, Claude Sonnet 5.5)
+- **To:** GPT-6 independent exact-head review, then project owner
+- **Branch:** `phase/pp-meta-i2-c3-b2a-prelive-readiness` from `main` `4d4a26b2c5969f0330f6e75411e58f037f2b08ed`; code head `f87fef33791fcad9b56e2049fe59a713a7cbde07`; Draft PR (audit the branch head)
+- **State:** READY FOR REVIEW
+
+### Completed
+- STATUS corrected (PR #9 merged; `main` at `4d4a26b`).
+- `proposal-readiness.ts` + `scripts/c3-proposal-preflight.ts` (zero-network, deterministic, cannot authorize); coordinator guard `assertHandAuthoredControls`; `baseten-discovery.ts` + `scripts/baseten-model-discovery.ts` (owner-run, prepared, only ever dry-run here); `docs/LIVE-C3-01-DECISION-RECORD.md` (NOT APPROVED); `docs/META-ACTIVATION-CHECKLIST.md`; Baseten findings and Modal documentation updated; planned proposal-to-verdict pathway documented in the task file with the C3-B2B gate.
+- Evidence: preflight 28 checks per provider (24 PASS, 2 BLOCKED_BY_DESIGN, 1 INFO, 1 NOT_CHECKED), 0 provider requests; local gitignored reports under `.proofpilot/preflight/`.
+- Unchanged: `APPROVED_LIVE_QUOTA` (0), `proposeCandidate()` (hard-disabled), `patch-proposal.ts`, `reservations.ts`, `candidate-stage.ts`, `verifier/`, `fixtures/`, `config/`, `.github/`. No Meta/Baseten/Modal call, no credential read, no model-generated candidate, no report UI.
+
+### Validation
+Unit 259/259, security 49/49, integration 29/29, F01 baseline certified, C3-0 spike and the real C3-B1 run unchanged (PC-1 VERIFIED 3/3 under hand-authored controls), guard mutants 20/22 killed (2 cosmetic no-ops). Hosted CI: see the Draft PR.
+
+### Open questions for the reviewer
+- Is the coordinator guard (byte-for-byte equality with the in-code inventory) the right boundary, and is the C3-B2B gate described precisely enough?
+- Are the LIVE-C3-01 terms (one attempt, per-run operator approval, no automatic evaluation) a sound shape for the owner to approve or edit?
+- Baseten: the structured-output conflict is unresolved offline; the plan keeps the mock path unchanged.
+
+### Next action
+GPT-6 review; owner decides merge and any of LIVE-C3-01, the Baseten discovery, per-run approval design, C3-B2B, HOST-C3-01, UI-C3-01.
+
+## Handoff: PP-META-I2-C3-B2A-A2
+
+- **Task / phase:** `tasks/PP-META-I2-C3-B2A.md` (remediation of audit 1 on Draft PR #10)
+- **From:** Implementation agent (Claude Code, Claude Sonnet 5.5)
+- **To:** GPT-6 independent exact-head re-audit, then project owner
+- **Branch:** `phase/pp-meta-i2-c3-b2a-prelive-readiness`; code head `69d1e94aaa0046b68bef54dd37212bf51af2cef8` (audit the branch head)
+- **State:** READY FOR RE-AUDIT
+
+### Completed
+- MAJOR-1: identity-based provenance in `candidate-coordinator.ts` (frozen, registered controls; no production injection path); tests: PV-1-derived PC-1 clone, copied/deep-copied/prototype-derived PC-1, foreign `check` on PC-1 and NC-1, mutation attempts, no lock/stage/out dir created, runner never reached, legitimate controls still accepted.
+- MINOR-2: `readApiKey:false` config mode; default preflight never touches key fields; authorized run reads only the selected provider key and reports presence.
+- Unchanged: `VERIFIED` logic, `candidate-stage.ts`, verifier, fixtures, patch policy, quota (0), `proposeCandidate()` (disabled). No provider/Modal call, no model-generated candidate, no UI.
+
+### Validation
+Unit 262/262, security 50/50, integration 29/29, baseline certified, real C3-B1 run PC-1 VERIFIED 3/3. Hosted CI: see the Draft PR.
+
+### Next action
+GPT-6 re-audit; owner decides merge and later gates.
+
 <!-- HANDOFF_ENTRIES_END -->

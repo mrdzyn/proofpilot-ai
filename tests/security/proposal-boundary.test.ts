@@ -65,7 +65,8 @@ test('no model-verdict path: VERIFIED is never a value the proposal modules can 
 test('nothing outside tests calls the proposal adapter: there is no CLI, script or runner path to it in C3-A', () => {
   const callers = walk(path.join(root, 'packages')).concat(walk(path.join(root, 'scripts'))).filter((f) => {
     const text = readFileSync(f, 'utf8');
-    return /\bproposeCandidate\b/.test(text) && !PROPOSAL_FILES.some((p) => f.endsWith(p)) && !f.endsWith('/index.ts');
+    // the readiness preflight calls it only to prove that it is hard-disabled (asserted below)
+    return /\bproposeCandidate\b/.test(text) && !PROPOSAL_FILES.some((p) => f.endsWith(p)) && !f.endsWith('/index.ts') && !f.endsWith('packages/inference/src/proposal-readiness.ts');
   });
   assert.deepEqual(callers, []);
   // and no package script, workflow or script imports it

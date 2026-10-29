@@ -247,3 +247,9 @@ Before release:
 - confirm migration/rollback readiness;
 - complete platform/store-specific checks;
 - complete the applicable release QA/manual validation gate.
+
+## C3-B2A readiness checks (zero network)
+
+- `node scripts/c3-proposal-preflight.ts [--provider meta|baseten] [--write]` runs the deterministic offline preflight (mock literals only; `--check-credentials` reports a boolean and only when authorized). Exit 0 means the technical checks passed and says nothing about authorization.
+- `node scripts/baseten-model-discovery.ts` is a dry run; a real request is owner-run only (`--execute` with `PROOFPILOT_ALLOW_PROVIDER_DISCOVERY=1`) and is never part of validation.
+- Unit tests: `tests/unit/proposal-readiness.test.ts`, `tests/unit/baseten-discovery.test.ts`. Security: `tests/security/b2a-boundary.test.ts` (hard-disabled entry point, hand-authored-only coordinator, no secrets committed, decision record NOT APPROVED).
