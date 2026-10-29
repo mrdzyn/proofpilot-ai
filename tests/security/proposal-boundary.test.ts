@@ -87,10 +87,10 @@ test('LIVE-C3-01 is not approved: the live quota is a frozen code constant of ze
   assert.doesNotMatch(src('packages/inference/src/config.ts'), /QUOTA/i);
 });
 
-test('no production code calls a provider for proposals: structuredResponse is only defined in client.ts, and tests/support is never imported by production code', () => {
+test('exactly one production call site of provider.structuredResponse exists (the dormant Meta transport); tests/support is never imported by production code', () => {
   const prod = walk(path.join(root, 'packages')).concat(walk(path.join(root, 'scripts')));
-  const callers = prod.filter((f) => /\.structuredResponse\(/.test(readFileSync(f, 'utf8')));
-  assert.deepEqual(callers, [], 'no production file calls provider.structuredResponse');
+  const callers = prod.filter((f) => /\.structuredResponse\(/.test(readFileSync(f, 'utf8'))).map((f) => path.relative(root, f).split(path.sep).join('/'));
+  assert.deepEqual(callers, ['packages/inference/src/meta-proposal-transport.ts'], 'the single call site is the dormant, zero-argument Meta transport; see live01b-prep-boundary.test.ts');
   for (const f of prod) assert.doesNotMatch(readFileSync(f, 'utf8'), /tests\/support|proposal-harness/, f);
   // the disabled entry point must not even reference its argument
   const body = src('packages/inference/src/patch-proposal.ts');

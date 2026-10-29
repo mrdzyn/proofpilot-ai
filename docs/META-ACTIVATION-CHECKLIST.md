@@ -32,7 +32,8 @@ Run it yourself (no network, no secrets read): `node scripts/c3-proposal-preflig
 | A17 | Approval is consumed before the reservation is claimed, state re-checked in between, crashes never release anything | same file, concurrency/crash/TOCTOU tests |
 | A18 | Repository register and activation pin are EMPTY; production validator returns `LIVE_NOT_APPROVED` | `tests/security/live01a-boundary.test.ts`; `node scripts/c3-live-rehearsal.ts` |
 | A22 | The proposal orchestration (preflight, authorize/consume/claim, ONE scripted response, strict validation, sanitized artifact, settle, STOP) works end to end with synthetic trust and scripted responses only; every failure outcome is spent, never retried, stores no raw text | `tests/unit/proposal-orchestrator.test.ts` (C3-LIVE-01B0) |
-| A23 | The orchestrator refuses production contexts and non-scripted transports; there is no production runner; `proposeCandidate()` stays disabled | `tests/security/live01b0-boundary.test.ts` |
+| A23 | The orchestrator synthetic runner refuses production contexts and non-scripted transports; `proposeCandidate()` stays disabled | `tests/security/live01b0-boundary.test.ts` |
+| A24 | The dormant production proposal runner (pre-flight, read-only production authorization, provider/credential, consume + claim, one request, shared tail) works end to end from a throwaway install copy with a mock `fetch`; with the real repository it stops at authorization before any credential is read; no CLI, no importer | `tests/security/live01b-prep-install-copy.test.ts`, `tests/unit/proposal-production.test.ts`, `tests/security/live01b-prep-boundary.test.ts` (C3-LIVE-01B-PREP) |
 | A19 | Production API derives root, register, pin, Git state, directories and quota internally; fake roots, forged probes, synthetic approvals and simulated quotas cannot authorize | `tests/unit/live-approval.test.ts` (MAJOR-1), `tests/security/live01a-boundary.test.ts` |
 | A20 | HEAD must be the owner-pinned activation revision AND a pin-only linear descendant of the activation commit; unauthorized newer clean commits, including same-tree empty/revert-recommit commits, are rejected identically by the CLI and validator | same, real-Git tests (MAJOR-2, incl. residual) |
 | A21 | `.proofpilot` parent and repo directory must be self-owned, non-group/other-writable real directories | same (MINOR-3) |
@@ -51,7 +52,7 @@ Run it yourself (no network, no secrets read): `node scripts/c3-proposal-preflig
 
 ## C0. C3-LIVE-01B precise checklist (all unchecked; none started)
 
-The orchestration it needs is built and mock-tested in C3-LIVE-01B0; the exact activation diff (register entry, quota 0 → 1, `runProductionProposalAttempt` through `prepareProductionAttempt`, `proposeCandidate` delegating behind the gate, an owner-run single-call runner) is in `tasks/PP-META-I2-C3-LIVE-01B0.md` and is NOT applied.
+The orchestration it needs is built and mock-tested in C3-LIVE-01B0; the exact activation diff `runProductionProposalAttempt` already exists, dormant, from C3-LIVE-01B-PREP. What remains for 01B is only the register entry, quota 0 → 1, `proposeCandidate` delegating behind the gate and the owner-run single-call CLI; the plan is in `tasks/PP-META-I2-C3-LIVE-01B-PREP.md` and is NOT applied.
 
 - [ ] C3-LIVE-01A merged after an independent PASS.
 - [ ] Owner records the LIVE-C3-01 decision (provider Meta, model `muse-spark-1.3`, max 1 billable attempt, input ≤ 12,000 characters, output ≤ 3,072 tokens including reasoning, 0 retries, no fallback, text only, per-run approval mandatory, uncertain results spend the attempt).

@@ -59,7 +59,8 @@ test('MAJOR-1: the injectable core is unreachable from production code: only the
   // the synthetic proposal orchestrator (C3-LIVE-01B0) runs the core against a synthetic context only; it refuses production contexts at runtime
   assert.deepEqual(importing('live-gate-core'), ['packages/inference/src/approval-cli.ts', 'packages/inference/src/live-gate.ts', 'packages/inference/src/live-rehearsal.ts', 'packages/inference/src/proposal-orchestrator.ts']);
   assert.deepEqual(importing('approval-cli'), ['packages/inference/src/index.ts', 'packages/inference/src/live-gate.ts', 'packages/inference/src/live-rehearsal.ts']);
-  assert.deepEqual(importing('live-gate'), ['packages/inference/src/index.ts', 'packages/inference/src/live-rehearsal.ts']);
+  // the dormant production proposal runner (C3-LIVE-01B-PREP) is the only additional importer of the production gate
+  assert.deepEqual(importing('live-gate'), ['packages/inference/src/index.ts', 'packages/inference/src/live-rehearsal.ts', 'packages/inference/src/proposal-orchestrator.ts']);
   // the package index exports no injectable or low-level symbol
   const index = code('packages/inference/src/index.ts');
   assert.doesNotMatch(index, /live-gate-core|createSyntheticContext|createInstallContext|evaluateAuthorizationCore|prepareAttemptCore|runApprovalCli|consumeApproval|writeApprovalRecord|buildApprovalRecord|parseDecisionRegister|parseActivationPin|loadDecisionRegister/);
