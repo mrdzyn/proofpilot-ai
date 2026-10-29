@@ -10,7 +10,7 @@
 - **Primary branch:** protected `main` at `4d4a26b2c5969f0330f6e75411e58f037f2b08ed` (PR #9 squash merge)
 - **Working branch:** `phase/pp-meta-i2-c3-b2a-prelive-readiness` (Draft PR; code head `f87fef33791fcad9b56e2049fe59a713a7cbde07`, then a docs commit; the branch head is authoritative)
 - **Active task:** `tasks/PP-META-I2-C3-B2A.md`
-- **Active handoff:** PP-META-I2-C3-B2A-A1
+- **Active handoff:** PP-META-I2-C3-B2A-A2
 - **Authorization:** Both single-use live smokes are **spent**. **APPROVED:** SEC-C3-01 (F01-only closed-grammar CSS, hand-authored controls only). **NOT APPROVED:** LIVE-C3-01 (`docs/LIVE-C3-01-DECISION-RECORD.md` is a proposal; quota 0), C3-B2B (evaluating model proposals), UI-C3-01 (report UI), HOST-C3-01 (Modal or any hosted backend). A credit balance is not permission to spend. No Meta/Baseten/Modal call, no execution of model-generated code, no deployment or merge by the agent.
 
 ## Completed milestones
@@ -71,7 +71,7 @@
 | C3-0 staging spike (unmodified oracle run in a per-candidate stage) | **MERGED** (PR #7, independent audit PASS) |
 | C3-A proposal validator + adapter + reservations | **MERGED** (PR #8, independent audit PASS); production entry point hard-disabled |
 | C3-B1 offline coordinator, 3-replay VERIFIED logic, scoreboard, DID-1 (hand-authored controls) | **MERGED** (PR #9, independent PASS) |
-| C3-B2A pre-live readiness (preflight, coordinator guard, Baseten discovery procedure, LIVE-C3-01 record, Meta checklist, Modal update) | **IMPLEMENTED**; independent review PENDING |
+| C3-B2A pre-live readiness (preflight, coordinator guard, Baseten discovery procedure, LIVE-C3-01 record, Meta checklist, Modal update) | **IMPLEMENTED**; audit 1 FIX REQUIRED (MAJOR-1 control provenance, MINOR-2 key-field read) remediated in A2; independent re-audit PENDING |
 | LIVE-C3-01 first bounded Muse Spark proposal | **NOT APPROVED** (`docs/LIVE-C3-01-DECISION-RECORD.md`); needs owner approval, per-run operator approval, and a separately reviewed code change |
 | C3-B2B model proposals through staging and the coordinator | NOT STARTED and **gated in code** (`assertHandAuthoredControls`); needs its own owner authorization, a reviewed change and a new provenance label |
 | C3-C scoreboard report UI, C3-D report + replay + audit, C3-E demo, C3-F submission | NOT STARTED (UI-C3-01 not approved) |
@@ -79,6 +79,11 @@
 | Modal sandbox (`docs/MODAL-FEASIBILITY-PROPOSAL.md`) | PROPOSAL ONLY; the C3 contract forbids hosted backends; HOST-C3-01 not requested; not a verified boundary |
 | Muse Wonder as patcher | UNVERIFIED and not a dependency |
 | Baseten | NOT TESTED |
+
+## C3-B2A remediation (audit 1: MAJOR-1, MINOR-2)
+- MAJOR-1: controls are deep-frozen and trusted by identity (module-private WeakSet); clones, model-derived PC-1 equivalents, foreign `check` callbacks and mutation attempts are refused before any lock/stage/runner/browser. `VERIFIED` rule, runner and oracle unchanged.
+- MINOR-2: `loadProviderConfig(..., {readApiKey:false})`; default preflight performs zero access to provider key fields (proxy-instrumented tests); `--check-credentials` reads only the selected provider's key and reports presence.
+- Local at code head `69d1e94`: lint/typecheck clean; unit 262/262; security 50/50; integration 29/29; `f01:baseline` exit 0 certified; `test:e2e:f01` exit 1 (expected); real C3-B1 run: PC-1 VERIFIED 3/3, scoreboard re-verified; both fixes fail their tests when reverted. Quota 0, `proposeCandidate()` disabled, no provider/Modal call.
 
 ## C3-B2A result (local; code head `f87fef3`, clean tree, macOS arm64, Node 24.21.0)
 

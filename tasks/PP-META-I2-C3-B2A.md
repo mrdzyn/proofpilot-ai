@@ -49,7 +49,7 @@ validated Symptom + trusted F01 observations      (C2B Symptom parser; C1/C3-0 o
   -> evidence-backed verdict + verifyScoreboard     (C3-B1)
 ```
 
-The gate marked C3-B2B is enforced in code today: `runOfflineVerification` calls `assertHandAuthoredControls` first and refuses any control that is not byte-for-byte one of `HAND_AUTHORED_CONTROLS`. Moving a model proposal across that line needs (1) an owner-recorded authorization naming the exact scope, (2) a reviewed change to this guard and the control inventory, (3) a new provenance label so a model-derived candidate can never be recorded as `hand-authored-control`, and (4) an independent audit. `VERIFIED` semantics (reproduced baseline, exactly three fresh consistent replays) do not change.
+The gate marked C3-B2B is enforced in code today: `runOfflineVerification` calls `assertHandAuthoredControls` first and refuses any control that is not, by object identity, one of the frozen `HAND_AUTHORED_CONTROLS` (copies with identical fields and foreign `check` callbacks are refused; remediated after audit MAJOR-1). Moving a model proposal across that line needs (1) an owner-recorded authorization naming the exact scope, (2) a reviewed change to this guard and the control inventory, (3) a new provenance label so a model-derived candidate can never be recorded as `hand-authored-control`, and (4) an independent audit. `VERIFIED` semantics (reproduced baseline, exactly three fresh consistent replays) do not change.
 
 ## Validation
 

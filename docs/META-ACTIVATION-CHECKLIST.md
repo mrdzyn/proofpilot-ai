@@ -17,7 +17,7 @@
 | A9 | Single-use run ids and quota slots; spent slots never recycled; orphan slots listed read-only | reservation tests; preflight `duplicate-run-refused`, `exhausted-quota-refused`, `quota-zero-refused` |
 | A10 | Sanitized artifact, no raw provider response, label `UNTRUSTED PROPOSAL — NOT VERIFIED` | adapter tests; preflight report holds no model text |
 | A11 | Production entry point rejects before reading its argument; live quota frozen at 0 | security tests; preflight `entry-point-hard-disabled`, `live-quota-frozen-at-zero` |
-| A12 | Model-derived proposals cannot enter the C3-B1 execution path | `assertHandAuthoredControls` guard; static import checks |
+| A12 | Model-derived proposals cannot enter the C3-B1 execution path | `assertHandAuthoredControls` identity guard (frozen, registered controls only); static import checks |
 | A13 | Zero provider requests from the preflight, whatever the environment | global fetch trap; no fetch or provider code in the module |
 
 Run it yourself (no network, no secrets read): `node scripts/c3-proposal-preflight.ts --provider meta`. Add `--check-credentials` only when you authorize a presence check (prints present or NOT SET, never the value).

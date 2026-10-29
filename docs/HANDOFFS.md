@@ -644,4 +644,23 @@ Unit 259/259, security 49/49, integration 29/29, F01 baseline certified, C3-0 sp
 ### Next action
 GPT-6 review; owner decides merge and any of LIVE-C3-01, the Baseten discovery, per-run approval design, C3-B2B, HOST-C3-01, UI-C3-01.
 
+## Handoff: PP-META-I2-C3-B2A-A2
+
+- **Task / phase:** `tasks/PP-META-I2-C3-B2A.md` (remediation of audit 1 on Draft PR #10)
+- **From:** Implementation agent (Claude Code, Claude Sonnet 5.5)
+- **To:** GPT-6 independent exact-head re-audit, then project owner
+- **Branch:** `phase/pp-meta-i2-c3-b2a-prelive-readiness`; code head `69d1e94aaa0046b68bef54dd37212bf51af2cef8` (audit the branch head)
+- **State:** READY FOR RE-AUDIT
+
+### Completed
+- MAJOR-1: identity-based provenance in `candidate-coordinator.ts` (frozen, registered controls; no production injection path); tests: PV-1-derived PC-1 clone, copied/deep-copied/prototype-derived PC-1, foreign `check` on PC-1 and NC-1, mutation attempts, no lock/stage/out dir created, runner never reached, legitimate controls still accepted.
+- MINOR-2: `readApiKey:false` config mode; default preflight never touches key fields; authorized run reads only the selected provider key and reports presence.
+- Unchanged: `VERIFIED` logic, `candidate-stage.ts`, verifier, fixtures, patch policy, quota (0), `proposeCandidate()` (disabled). No provider/Modal call, no model-generated candidate, no UI.
+
+### Validation
+Unit 262/262, security 50/50, integration 29/29, baseline certified, real C3-B1 run PC-1 VERIFIED 3/3. Hosted CI: see the Draft PR.
+
+### Next action
+GPT-6 re-audit; owner decides merge and later gates.
+
 <!-- HANDOFF_ENTRIES_END -->
