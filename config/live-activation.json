@@ -1,5 +1,13 @@
 {
   "schemaVersion": 1,
-  "note": "Owner-pinned activation revision for LIVE-C3-01. EMPTY (null): nothing is pinned, so production authorization fails with ACTIVATION_NOT_PINNED. The digest covers every tracked file EXCEPT this one (see docs/META-ACTIVATION-CHECKLIST.md section C0 for the non-circular sequence). Filling it in is a separate, reviewed, owner-approved commit.",
-  "activation": null
+  "note": "Owner-pinned activation revision for LIVE-C3-01. The digest covers every tracked file EXCEPT this one (see docs/META-ACTIVATION-CHECKLIST.md section C0 for the non-circular sequence). A pin is not an operator approval: a real attempt still needs a single-use per-run operator approval, the credential and the owner's separate go-ahead.",
+  "activation": {
+    "decisionId": "LIVE-C3-01",
+    "decisionReference": "https://github.com/mrdzyn/proofpilot-ai/pull/6#issuecomment-6496850990",
+    "activationCommit": "f8f3e182212ec3f57b6502d98aacf8dee0e7df98",
+    "activationDigest": "07550f1d2a5f58298a92ab9666ba133413301ecb243b99acec3f4233b574f3e5",
+    "recordedBy": "mrdzyn",
+    "recordedAt": "2026-10-29T14:06:53.000Z",
+    "reference": "Owner decision https://github.com/mrdzyn/proofpilot-ai/pull/6#issuecomment-6496850990. Pin prepared at the repository owner's explicit instruction to pin activation commit A (PR #14 squash merge) with the owner-generated digest. Not an operator approval."
+  }
 }
