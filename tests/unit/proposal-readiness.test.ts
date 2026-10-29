@@ -84,7 +84,7 @@ test('bad configuration cannot advance: unapproved host, malformed key, nothing 
   assert.equal(status(bad, 'config-loads'), 'FAIL');
   assert.equal(bad.verdict, 'TECHNICAL_BLOCKERS');
   assert.equal(bad.checks.some((c) => c.id === 'missing-consent-refused'), false, 'the unsafe-path checks are not run on an invalid config');
-  const malformed = await run({ env: { MODEL_API_KEY: 'short' } });
+  const malformed = await run({ env: { MODEL_API_KEY: 'short' }, checkCredentialPresence: true });
   assert.equal(status(malformed, 'config-loads'), 'FAIL');
   assert.ok(!JSON.stringify(malformed).includes('short'.repeat(2)));
 });
@@ -142,4 +142,67 @@ test('a regressed repository is reported, not hidden: an enabled entry point or 
   assert.equal(raised.verdict, 'TECHNICAL_BLOCKERS');
   assert.equal(raised.liveAuthorization, 'NOT APPROVED (LIVE-C3-01)', 'the preflight never reports an authorization');
   assert.equal((await run({ providerId: 'baseten', inspect: { liveQuota: { meta: 1 } } })).technicalChecksPassed, true, 'another provider is judged on its own quota');
+});
+
+// ---- MINOR-2: provider key fields are read only on explicit credential-check authorization ----
+const SECRET_FIELDS = ['MODEL_API_KEY', 'BASETEN_API_KEY'];
+function instrumentedEnv(extra: Record<string, string> = {}): { env: Record<string, string | undefined>; reads: string[] } {
+  const reads: string[] = [];
+  const target: Record<string, string | undefined> = { MODEL_API_KEY: SENTINEL_KEY, BASETEN_API_KEY: SENTINEL_KEY, ...extra };
+  const env = new Proxy(target, {
+    get(t, k) {
+      if (typeof k === 'string') reads.push(k);
+      return t[k as string];
+    },
+    has(t, k) {
+      if (typeof k === 'string') reads.push(k);
+      return k in t;
+    },
+    ownKeys(t) {
+      reads.push('<ownKeys>');
+      return Reflect.ownKeys(t);
+    },
+    getOwnPropertyDescriptor(t, k) {
+      if (typeof k === 'string') reads.push(k);
+      return Reflect.getOwnPropertyDescriptor(t, k);
+    },
+  });
+  return { env, reads };
+}
+
+test('MINOR-2: the default preflight never accesses any provider API-key field, for either provider', async () => {
+  for (const providerId of ['meta', 'baseten'] as const) {
+    for (const checkCredentialPresence of [undefined, false]) {
+      const { env, reads } = instrumentedEnv();
+      const report = await run({ providerId, env, checkCredentialPresence });
+      assert.equal(report.verdict, 'NOT_AUTHORIZED_TECHNICALLY_READY');
+      assert.deepEqual(report.credential, { checked: false, present: null });
+      for (const f of SECRET_FIELDS) assert.equal(reads.includes(f), false, `${providerId}: ${f} was accessed without authorization`);
+      assert.equal(reads.includes('<ownKeys>'), false, 'the environment was enumerated');
+      assert.ok(!JSON.stringify(report).includes(SENTINEL_KEY));
+    }
+  }
+});
+
+test('MINOR-2: with explicit authorization only the selected provider key is read, and only presence is reported', async () => {
+  for (const [providerId, field, other] of [['meta', 'MODEL_API_KEY', 'BASETEN_API_KEY'], ['baseten', 'BASETEN_API_KEY', 'MODEL_API_KEY']] as const) {
+    const { env, reads } = instrumentedEnv();
+    const report = await run({ providerId, env, checkCredentialPresence: true });
+    assert.equal(reads.includes(field), true);
+    assert.equal(reads.includes(other), false, 'the other provider key was read');
+    assert.deepEqual(report.credential, { checked: true, present: true });
+    assert.ok(!JSON.stringify(report).includes(SENTINEL_KEY));
+    assert.ok(!/Bearer\s/i.test(JSON.stringify(report)));
+  }
+  const { env } = instrumentedEnv();
+  delete env.MODEL_API_KEY;
+  assert.deepEqual((await run({ env, checkCredentialPresence: true })).credential, { checked: true, present: false });
+});
+
+test('MINOR-2: a malformed key does not fail a default run (it is not read) and fails an authorized one without echoing it', async () => {
+  const env = { MODEL_API_KEY: 'bad key with spaces' };
+  assert.equal((await run({ env })).verdict, 'NOT_AUTHORIZED_TECHNICALLY_READY');
+  const on = await run({ env, checkCredentialPresence: true });
+  assert.equal(on.verdict, 'TECHNICAL_BLOCKERS');
+  assert.ok(!JSON.stringify(on).includes('bad key'));
 });

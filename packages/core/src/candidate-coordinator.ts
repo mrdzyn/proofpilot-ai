@@ -158,7 +158,7 @@ export type Control = {
 const add = (selector: string, property: string, value: string): CssAdjustment => ({ selector, property, value });
 
 /** Every control is hand-authored: no model, provider or user text produces any of these inputs. */
-export const HAND_AUTHORED_CONTROLS: readonly Control[] = [
+const DEFINED_CONTROLS: Control[] = [
   {
     id: 'NC-1', description: 'no-op: empty adjustments', adjustments: [], replays: 1, expect: 'PATCH_FAILED',
     check: (r) => (r[0]?.record.baselineIdentical ? [] : ['not baseline-identical']),
@@ -175,6 +175,21 @@ export const HAND_AUTHORED_CONTROLS: readonly Control[] = [
   { id: 'NC-7', description: 'port 4173 held by another listener', adjustments: [add('.promo-overlay', 'pointer-events', 'none')], replays: 1, expect: 'INCONCLUSIVE', fault: 'busy-port', check: (r) => (r[0]?.record.oracleRan === false && r[0]?.record.failure?.code === 'PORT_BUSY' ? [] : ['expected PORT_BUSY with the oracle never run']) },
   { id: 'PC-1', description: 'hand-written correct fix: .promo-overlay pointer-events none', adjustments: [add('.promo-overlay', 'pointer-events', 'none')], replays: REPLAYS_REQUIRED_FOR_VERIFIED, expect: 'VERIFIED' },
 ];
+
+/**
+ * Provenance by construction (C3-B2A MAJOR-1): the only controls the coordinator will run are these exact objects. They are
+ * deep-frozen (adjustments, the control itself and the list) and registered by identity in a module-private set, so a copy
+ * with identical fields, a model-derived clone, or a control carrying a foreign `check` callback is not one of them, whatever
+ * its CSS says. There is deliberately no production way to add to the set.
+ */
+const TRUSTED_CONTROLS = new WeakSet<object>();
+for (const c of DEFINED_CONTROLS) {
+  for (const a of c.adjustments) Object.freeze(a);
+  Object.freeze(c.adjustments);
+  Object.freeze(c);
+  TRUSTED_CONTROLS.add(c);
+}
+export const HAND_AUTHORED_CONTROLS: readonly Control[] = Object.freeze(DEFINED_CONTROLS);
 
 
 export const NC5_DESCRIPTION = 'verdict logic applied to a real staged tree whose oracle passes (the PC-1 stage) as if it were the baseline';
@@ -261,17 +276,14 @@ export class UntrustedControlError extends Error {
   }
 }
 
-/** Every control handed to the coordinator must be exactly one of the trusted in-code controls (id, CSS, replays, expectation, fault). */
+/** Every control handed to the coordinator must BE one of the trusted in-code control objects (identity, not field equality), once each. */
 export function assertHandAuthoredControls(controls: readonly Control[]): void {
-  const seen = new Set<string>();
+  if (!Array.isArray(controls)) throw new UntrustedControlError('controls is not a list');
+  const seen = new Set<object>();
   for (const c of controls) {
-    const trusted = HAND_AUTHORED_CONTROLS.find((t) => t.id === c?.id);
-    if (!trusted) throw new UntrustedControlError(`control ${JSON.stringify(c?.id)} is not a hand-authored control`);
-    if (seen.has(c.id)) throw new UntrustedControlError(`control ${c.id} is duplicated`);
-    seen.add(c.id);
-    if (JSON.stringify(c.adjustments) !== JSON.stringify(trusted.adjustments) || c.replays !== trusted.replays || c.expect !== trusted.expect || (c.fault ?? null) !== (trusted.fault ?? null) || c.description !== trusted.description) {
-      throw new UntrustedControlError(`control ${c.id} differs from its hand-authored definition`);
-    }
+    if (typeof c !== 'object' || c === null || !TRUSTED_CONTROLS.has(c)) throw new UntrustedControlError(`control ${JSON.stringify((c as Control | undefined)?.id)} is not one of the in-code hand-authored controls (copies are refused even when every field matches)`);
+    if (seen.has(c)) throw new UntrustedControlError(`control ${c.id} is duplicated`);
+    seen.add(c);
   }
 }
 

@@ -104,11 +104,14 @@ function intInRange(id: string, name: string, raw: string | undefined, min: numb
   return value;
 }
 
-export function loadProviderConfig(id: ProviderId, env: Env): ProviderConfig {
+/**
+ * `readApiKey: false` never touches the provider's key field (used by the zero-credential preflight); `apiKey` is then undefined.
+ */
+export function loadProviderConfig(id: ProviderId, env: Env, opts: { readApiKey?: boolean } = {}): ProviderConfig {
   const def = PROVIDERS[id];
   if (!def) throw configError(String(id), 'unknown provider');
 
-  const apiKeyRaw = env[def.apiKeyEnv];
+  const apiKeyRaw = opts.readApiKey === false ? undefined : env[def.apiKeyEnv];
   const apiKey = apiKeyRaw === undefined || apiKeyRaw === '' ? undefined : apiKeyRaw;
   if (apiKey !== undefined && (/\s/.test(apiKey) || apiKey.length < 8 || apiKey.length > 1024)) {
     // Never echo the value.

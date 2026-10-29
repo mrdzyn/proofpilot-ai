@@ -3,7 +3,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import {
   assertHandAuthoredControls,
@@ -89,6 +89,67 @@ test('model-derived proposals cannot enter the C3-B1 execution path: the coordin
   assert.equal(runnerCalls, 0, 'the runner (and therefore any stage or browser) was never reached');
   assert.doesNotThrow(() => assertHandAuthoredControls(HAND_AUTHORED_CONTROLS));
   assert.doesNotThrow(() => assertHandAuthoredControls([trusted]));
+});
+
+test('MAJOR-1: provenance is identity, not field equality; clones, foreign check callbacks and mutation attempts are refused before any lock, stage or runner', async () => {
+  const parsed = parseProposal('{"adjustments":[{"selector":".promo-overlay","property":"pointer-events","value":"none"}]}');
+  assert.equal(parsed.ok, true);
+  const pc1 = HAND_AUTHORED_CONTROLS.find((c) => c.id === 'PC-1')!;
+  const nc1 = HAND_AUTHORED_CONTROLS.find((c) => c.id === 'NC-1')!;
+  let runnerCalls = 0;
+  let foreignChecks = 0;
+  const runner: Runner = async () => {
+    runnerCalls++;
+    throw new Error('runner must not be reached');
+  };
+  const dir = tempDir();
+  const base = { repoRoot: root, approvedSha: 'a'.repeat(40), outDir: path.join(dir, 'out'), lockPath: path.join(dir, 's.lock'), coordinatorLockPath: path.join(dir, 'locks', 'c.lock'), stageRoot: path.join(dir, 'stages'), runner };
+  const foreign = () => {
+    foreignChecks++;
+    return [] as string[];
+  };
+  const variants: Control[][] = [
+    // model-derived adjustments identical to trusted PC-1, wearing PC-1's metadata
+    [{ id: pc1.id, description: pc1.description, adjustments: acceptedAdjustments(parsed), replays: pc1.replays, expect: pc1.expect }],
+    // a plain structural copy of PC-1, and a deep copy
+    [{ ...pc1 }],
+    [structuredClone({ id: pc1.id, description: pc1.description, adjustments: pc1.adjustments, replays: pc1.replays, expect: pc1.expect })],
+    // foreign check callbacks on PC-1 and NC-1
+    [{ ...pc1, check: foreign }],
+    [{ ...nc1, check: foreign }],
+    [Object.create(pc1) as Control],
+  ];
+  for (const controls of variants) {
+    assert.throws(() => assertHandAuthoredControls(controls), UntrustedControlError);
+    await assert.rejects(runOfflineVerification({ ...base, controls }), UntrustedControlError);
+  }
+  assert.equal(runnerCalls, 0, 'the runner was never reached');
+  assert.equal(foreignChecks, 0, 'no caller-supplied check callback ran');
+  for (const p of [base.coordinatorLockPath, path.dirname(base.coordinatorLockPath), base.lockPath, base.outDir, base.stageRoot]) assert.equal(existsSync(p), false, `${path.basename(p)} was created before the refusal`);
+
+  // the trusted definitions cannot be mutated, so a reference taken earlier cannot be altered into a model control
+  assert.equal(Object.isFrozen(HAND_AUTHORED_CONTROLS), true);
+  for (const c of HAND_AUTHORED_CONTROLS) {
+    assert.equal(Object.isFrozen(c), true, c.id);
+    assert.equal(Object.isFrozen(c.adjustments), true, c.id);
+    for (const a of c.adjustments) assert.equal(Object.isFrozen(a), true, c.id);
+  }
+  const css = JSON.stringify(pc1.adjustments);
+  const check = nc1.check;
+  assert.throws(() => { (pc1.adjustments[0] as { value: string }).value = 'auto'; }, TypeError);
+  assert.throws(() => { (pc1.adjustments as unknown[]).push({ selector: 'a', property: 'color', value: 'red' }); }, TypeError);
+  assert.throws(() => { (nc1 as { check?: unknown }).check = foreign; }, TypeError);
+  assert.throws(() => { (pc1 as { id: string }).id = 'X'; }, TypeError);
+  assert.throws(() => { (HAND_AUTHORED_CONTROLS as Control[]).push({ ...pc1 }); }, TypeError);
+  assert.throws(() => { (HAND_AUTHORED_CONTROLS as Control[])[5] = { ...pc1 }; }, TypeError);
+  assert.equal(JSON.stringify(pc1.adjustments), css);
+  assert.equal(nc1.check, check);
+  assert.equal(HAND_AUTHORED_CONTROLS.length, 6);
+
+  // the legitimate controls, whole or as a subset, are still accepted
+  assert.doesNotThrow(() => assertHandAuthoredControls(HAND_AUTHORED_CONTROLS));
+  assert.doesNotThrow(() => assertHandAuthoredControls([pc1]));
+  assert.doesNotThrow(() => assertHandAuthoredControls([nc1, pc1]));
 });
 
 test('no production file connects an accepted proposal to execution: acceptedAdjustments is defined once and used nowhere in production', () => {

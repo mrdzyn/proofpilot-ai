@@ -93,7 +93,7 @@ export async function runProposalPreflight(input: PreflightInput): Promise<Prefl
   // ---- configuration (never echoes the key; loadProviderConfig errors do not contain it) ----
   let config: ReturnType<typeof loadProviderConfig> | null = null;
   try {
-    config = loadProviderConfig(providerId, input.env);
+    config = loadProviderConfig(providerId, input.env, { readApiKey: input.checkCredentialPresence === true }); // the key field is read only on explicit opt-in
     add('config-loads', true, `base URL ${config.baseUrl}; host allowlisted; timeout ${config.timeoutMs} ms; maxRetries ${config.maxRetries} (ignored by the proposal path, which always uses 0)`);
   } catch (e) {
     add('config-loads', false, `configuration is invalid: ${e instanceof InferenceError ? e.code : 'error'}`);
