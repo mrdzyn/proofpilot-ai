@@ -13,12 +13,10 @@ import os from 'node:os';
 import path from 'node:path';
 import type { Symptom } from '../../core/src/index.ts';
 import type { ResponseLifecycle, StructuredResponse } from './client.ts';
-import {
-  buildProposalRequest, failureReason, PROPOSAL_LABEL, PROPOSAL_LIMITS, persistProposalArtifact, processProposalResponse, META_PROPOSAL_MODEL,
-  type ProposalArtifact, type TrustedReproductionFacts,
-} from './patch-proposal.ts';
+import { buildProposalRequest, createProposalConsent, PROPOSAL_LABEL, PROPOSAL_LIMITS, META_PROPOSAL_MODEL, type TrustedReproductionFacts } from './patch-proposal.ts';
 import { AuthorizationError, DECISION_ID, parseActivationPin, parseDecisionRegister, type GitProbe } from './live-approval.ts';
-import { createSyntheticContext, prepareAttemptCore } from './live-gate-core.ts';
+import { createSyntheticContext } from './live-gate-core.ts';
+import { runSyntheticProposalAttempt, scriptedTransport } from './proposal-orchestrator.ts';
 import { authorizeProductionAttempt } from './live-gate.ts';
 import { confirmationPhrase, runApprovalCli, type ApprovalIo } from './approval-cli.ts';
 
@@ -91,37 +89,20 @@ export async function runActivationRehearsal(input: { symptom: Symptom; facts: T
     step('simulated-approval-recorded', code === 0, 'a synthetic, self-declared record in a disposable directory (scripted terminal, synthetic decision)');
 
     const provider = { id: 'meta' as const, models: { visual: META_PROPOSAL_MODEL } };
-    const attempt = { runId, request, provider, maxOutputTokens: PROPOSAL_LIMITS.maxOutputTokens, now };
     const store = ctx.store;
     if (scenario === 'duplicate-run') await store.claim({ providerId: 'meta', runId, quota: 1 });
-    let prepared;
+    // the whole attempt runs through the synthetic orchestrator (preflight -> authorize/consume/claim -> ONE scripted response -> strict validation -> artifact -> settle)
+    const transport = scriptedTransport([mockFor(scenario, META_PROPOSAL_MODEL)]);
     try {
-      prepared = await prepareAttemptCore(ctx, attempt);
-      step('authorized-and-reserved', true, `approval consumed, reservation slot ${prepared.claim.slot} claimed (synthetic)`);
+      const out = await runSyntheticProposalAttempt({
+        ctx, transport, provider: { ...provider, billableCallsAllowed: true }, runId, consent: createProposalConsent({ runId, providerId: 'meta', inputSha256: request.inputSha256, now }), request, evidenceRoot, now,
+      });
+      step('authorized-and-reserved', true, `approval consumed, reservation slot ${out.artifact.slot} claimed (synthetic)`);
+      proposal = { label: PROPOSAL_LABEL, status: out.status, reason: out.reason, renderedCss: out.artifact.renderedCss, forbiddenClass: out.artifact.forbiddenClass };
+      step('mock-response-processed', transport.calls.length === 1, `injected mock (${scenario}) -> ${out.status}; one attempt spent, ${transport.calls.length} scripted request, no retry, no fallback`);
     } catch (e) {
-      const expected = scenario === 'duplicate-run' && e instanceof AuthorizationError && e.code === 'RESERVATION_SPENT';
+      const expected = scenario === 'duplicate-run' && e instanceof AuthorizationError && e.code === 'RESERVATION_SPENT' && transport.calls.length === 0;
       step('authorized-and-reserved', expected, e instanceof AuthorizationError ? `refused ${e.code}${expected ? ' (expected: a spent run id is never reused; the approval stays unspent)' : ''}` : 'refused');
-    }
-
-    if (prepared) {
-      const mock = mockFor(scenario, META_PROPOSAL_MODEL);
-      const artifact: ProposalArtifact = {
-        schemaVersion: 1, label: PROPOSAL_LABEL, provenance: 'model-hypothesis', runId, providerId: 'meta', requestedModel: META_PROPOSAL_MODEL, respondedModel: null,
-        inputSha256: request.inputSha256, outputSha256: null, outputBytes: null, status: 'PROPOSAL_FAILED', reason: null, forbiddenClass: null, adjustments: null, renderedCss: null,
-        requestId: null, usage: null, lifecycle: null, limits: PROPOSAL_LIMITS, slot: prepared.claim.slot, createdAt: now().toISOString(),
-      };
-      if (mock instanceof Error) artifact.reason = failureReason(mock);
-      else Object.assign(artifact, processProposalResponse(mock, META_PROPOSAL_MODEL));
-      const written = await persistProposalArtifact(artifact, evidenceRoot);
-      if (!written) {
-        artifact.status = 'PROPOSAL_FAILED';
-        artifact.reason = 'ARTIFACT_WRITE_FAILED';
-        artifact.adjustments = null;
-        artifact.renderedCss = null;
-      }
-      await store.settle(prepared.claim, { status: artifact.status, reason: artifact.reason });
-      proposal = { label: PROPOSAL_LABEL, status: artifact.status, reason: artifact.reason, renderedCss: artifact.renderedCss, forbiddenClass: artifact.forbiddenClass };
-      step('mock-response-processed', true, `injected mock (${scenario}) -> ${artifact.status}; one attempt spent, no retry, no fallback`);
     }
 
     // the production path, against the repository's real register, must refuse: nothing is approved

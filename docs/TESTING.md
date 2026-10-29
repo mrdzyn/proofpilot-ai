@@ -248,6 +248,14 @@ Before release:
 - complete platform/store-specific checks;
 - complete the applicable release QA/manual validation gate.
 
+## C3-LIVE-01B0 proposal-orchestration checks (zero network, synthetic)
+
+- `tests/unit/proposal-orchestrator.test.ts`: happy path and exact request contract; the full response/failure matrix (incomplete, refusal, missing status, wrong model, empty, malformed, forbidden, out-of-grammar, timeout, transport error, unexpected exception) with no raw text or exception text stored and exactly one request; the Meta adapter contract against a mock `fetch` (strict json_schema, low reasoning, 3072 tokens, no tools, one call even with retries configured); persistence and settlement failures; crashes at every boundary; authorization-order and pre-flight-first refusals; production contexts and look-alike transports refused.
+- `tests/security/live01b0-boundary.test.ts`: kill switch intact (quota 0, empty register and pin, `proposeCandidate` rejects before touching a trap argument under hostile environment flags); the orchestrator has no network/env/credential/spawn/retry capability and exactly one transport call site; it is isolated (synthetic-only, private tail, exact export list, no production runner anywhere, single importer); the documentation no longer refers to the removed injectable authorization entry point.
+- Guard removal around the request, approval, reservation, persistence and no-network boundaries: see the PR.
+
+- **Nested metadata sanitization (audit MAJOR-1):** `tests/unit/proposal-orchestrator.test.ts` injects marker- and secret-bearing unknown keys and malformed values under `usage`/`lifecycle` for completed and failed responses and asserts neither the persisted JSON nor the returned artifact contains them, valid values are intact, bad codes/statuses fail closed, and the attempt stays one request and spent. A static test forbids passing `res.usage`/`res.lifecycle` through. 13 targeted guard-removal mutants are all killed.
+
 ## C3-LIVE-01A approval-gate checks (zero network, synthetic)
 
 - `tests/unit/live-approval.test.ts`: single use, every mismatch/expiry/replay/forgery refusal, file attacks (symlink, hard link, traversal, loose modes), concurrent use, crash points, TOCTOU re-checks, the interactive CLI (non-TTY, wrong/replayed confirmation, dirty tree, no approved decision) and the 11-scenario rehearsal under a global `fetch` trap.

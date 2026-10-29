@@ -56,7 +56,8 @@ test('the staging runner and the coordinator never import the approval modules (
 test('MAJOR-1: the injectable core is unreachable from production code: only the production gate, the CLI logic and the synthetic rehearsal import it, and the index never exports it', () => {
   const all = walk(path.join(root, 'packages')).concat(walk(path.join(root, 'scripts')));
   const importing = (name: string) => all.filter((f) => new RegExp(`from '[^']*\\/${name}\\.ts'`).test(readFileSync(f, 'utf8'))).map(rel).sort();
-  assert.deepEqual(importing('live-gate-core'), ['packages/inference/src/approval-cli.ts', 'packages/inference/src/live-gate.ts', 'packages/inference/src/live-rehearsal.ts']);
+  // the synthetic proposal orchestrator (C3-LIVE-01B0) runs the core against a synthetic context only; it refuses production contexts at runtime
+  assert.deepEqual(importing('live-gate-core'), ['packages/inference/src/approval-cli.ts', 'packages/inference/src/live-gate.ts', 'packages/inference/src/live-rehearsal.ts', 'packages/inference/src/proposal-orchestrator.ts']);
   assert.deepEqual(importing('approval-cli'), ['packages/inference/src/index.ts', 'packages/inference/src/live-gate.ts', 'packages/inference/src/live-rehearsal.ts']);
   assert.deepEqual(importing('live-gate'), ['packages/inference/src/index.ts', 'packages/inference/src/live-rehearsal.ts']);
   // the package index exports no injectable or low-level symbol
