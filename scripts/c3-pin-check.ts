@@ -1,7 +1,8 @@
 // Read-only hygiene check of the activation-pin LINEAGE for the checked-out revision (used by hosted CI; also runnable by the owner).
 // It changes nothing, reads no credential, makes no request and approves nothing. It reports whether `config/live-activation.json` is empty
 // or pinned and, when pinned, whether this checkout is the pinned tree and a linear, pin-file-only descendant of the pinned commit (the
-// exact relationship the production gate enforces). Exit 0 unless --require-valid is given and the pin is present but the lineage is not valid.
+// exact relationship the production gate enforces. Informational mode always exits 0. --require-valid exits 1 unless the pin is PRESENT and the
+// lineage is valid, so an empty pin fails it too (CI uses it when a change touches the pin file: such a change must leave a valid pin).
 //
 //   node scripts/c3-pin-check.ts [--require-valid]
 import { readFileSync } from 'node:fs';
@@ -20,7 +21,8 @@ const doc = JSON.parse(readFileSync(path.join(root, ACTIVATION_PIN_PATH), 'utf8'
 console.log(`head:        ${head}`);
 if (doc.activation === null) {
   console.log('pin:         EMPTY (activation: null) — the production gate refuses with ACTIVATION_NOT_PINNED');
-  process.exit(0);
+  if (requireValid) console.log('result:      FAILED (--require-valid): the pin file is empty, so the pinned lineage cannot be valid');
+  process.exit(requireValid ? 1 : 0);
 }
 const commit = doc.activation?.activationCommit ?? '';
 const digest = doc.activation?.activationDigest ?? '';

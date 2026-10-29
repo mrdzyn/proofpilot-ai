@@ -409,8 +409,15 @@ function pinCheck(inst: Install, args: string[] = []) {
 
 test('the CI pin-lineage check: informational by default, strict with --require-valid, and read-only', async () => {
   const empty = await makeInstall({ noPin: true });
-  assert.equal(pinCheck(empty, ['--require-valid']).code, 0);
-  assert.match(pinCheck(empty).text, /EMPTY/);
+  // informational mode reports EMPTY and succeeds; strict mode (used when a change touches the pin file) refuses an empty pin
+  const info = pinCheck(empty);
+  assert.equal(info.code, 0, info.text);
+  assert.match(info.text, /EMPTY/);
+  assert.doesNotMatch(info.text, /FAILED/);
+  const strictEmpty = pinCheck(empty, ['--require-valid']);
+  assert.equal(strictEmpty.code, 1, strictEmpty.text);
+  assert.match(strictEmpty.text, /EMPTY/);
+  assert.match(strictEmpty.text, /FAILED \(--require-valid\): the pin file is empty/);
   const valid = await makeInstall();
   const v = pinCheck(valid, ['--require-valid']);
   assert.equal(v.code, 0, v.text);

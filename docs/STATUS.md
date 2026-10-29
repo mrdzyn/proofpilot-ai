@@ -75,7 +75,7 @@
 | C3-LIVE-01A human approval and live-activation safety gate (operator approval CLI, private single-use records, fail-closed validator, empty register, synthetic rehearsal) | **MERGED** (PR #11, independent PASS after two remediation rounds) |
 | C3-LIVE-01B0 Meta proposal integration (synthetic orchestration, scripted transport, no production runner) | **IMPLEMENTED** (mock only); independent review PENDING |
 | C3-LIVE-01B-PREP dormant production proposal runner and Meta transport | **MERGED** (PR #13) |
-| C3-LIVE-01B activation implementation (decision recorded, quota 1, gated entry point, owner CLI, provenance gate) | **IMPLEMENTED** (Draft PR); independent review PENDING; activation pin: see `config/live-activation.json` |
+| C3-LIVE-01B activation implementation (decision recorded, quota 1, gated entry point, owner CLI, provenance gate) | **MERGED** (PR #14, independent audit; activation commit A `f8f3e18…`, superseded as the activation commit by A2 once the CI-compatibility PR #16 is merged); activation pin: see `config/live-activation.json` |
 | Real Meta invocation of the first proposal | **NOT AUTHORIZED YET** (operator gates in `tasks/PP-META-I2-C3-LIVE-01B.md`) |
 | LIVE-C3-01 first bounded Muse Spark proposal | Owner decision **APPROVED for activation preparation** (`docs/LIVE-C3-01-DECISION-RECORD.md`). **The real invocation is NOT AUTHORIZED YET**: it still needs the independently audited and separately merged activation implementation (C3-LIVE-01B, Draft PR #14), the pinned activation revision (separate pin-only commit; see `config/live-activation.json`), a real single-use operator approval, a securely injected credential and the owner's separate go-ahead |
 | C3-B2B model proposals through staging and the coordinator | NOT STARTED and **gated in code** (`assertHandAuthoredControls`); needs its own owner authorization, a reviewed change and a new provenance label |
@@ -204,7 +204,7 @@
 
 ## Next action
 
-1. Independent exact-head review of the C3-LIVE-01B Draft PR (hosted CI plus the evidence above).
-2. Owner decisions still open (LIVE-C3-01 itself is already APPROVED for activation preparation and recorded): approve the squash merge of the C3-LIVE-01B Draft PR after its audit; then the pin-only activation commit and the operator steps in `tasks/PP-META-I2-C3-LIVE-01B.md`, and a separate go-ahead for the one real request; run the Baseten discovery yourself; decide separately on C3-B2B, HOST-C3-01 (Modal) and UI-C3-01 (report), which are NOT APPROVED.
+1. Independent exact-head review of the C3-LIVE-01B-CI Draft PR #16 (hosted CI plus the evidence above).
+2. Owner decisions still open (LIVE-C3-01 itself is already APPROVED for activation preparation and recorded): approve the squash merge of the C3-LIVE-01B-CI Draft PR #16 after its audit (the squash commit becomes the NEW activation commit A2; PR #15's pin for the old A is retired); then the pin-only activation commit and the operator steps in `tasks/PP-META-I2-C3-LIVE-01B.md`, and a separate go-ahead for the one real request; run the Baseten discovery yourself; decide separately on C3-B2B, HOST-C3-01 (Modal) and UI-C3-01 (report), which are NOT APPROVED.
 
 Submission deadline: Nov 4, 9:00 PM EST = **Nov 5, 10:00 AM PHT**; internal target is Nov 4 PHT.
