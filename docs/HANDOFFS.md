@@ -733,4 +733,28 @@ Lint and typecheck clean; unit 294/294; security 58/58; integration 29/29; `f01:
 ### Next action
 GPT-6 re-audit; owner decides merge and whether to record LIVE-C3-01 (then C3-LIVE-01B as a separate PR).
 
+## Handoff: PP-META-I2-C3-LIVE-01B0-A1
+
+- **Task / phase:** `tasks/PP-META-I2-C3-LIVE-01B0.md` (Meta proposal integration, mock-only)
+- **From:** Implementation agent (Claude Code, Claude Sonnet 5.5)
+- **To:** GPT-6 independent exact-head review, then project owner
+- **Branch:** `phase/pp-meta-i2-c3-live01b0-proposal-integration` from `main` `5e9b73c0a412c9546bfd8026f63224af75f5afc3`; code head `e5963ce88dbd8d0dbffe4086ce69a916a6160a44` (audit the branch head)
+- **State:** READY FOR REVIEW
+
+### Completed
+- STATUS corrected (PR #11 merged; `main` at `5e9b73c`); SECURITY no longer mentions the removed `authorizeLiveAttempt`.
+- `proposal-orchestrator.ts`: `runSyntheticProposalAttempt` = preflight -> `prepareAttemptCore` on a synthetic context -> ONE scripted response (exact contract: `muse-spark-1.3`, 3072 tokens, strict schema, <= 12,000 chars) -> `processProposalResponse` -> sanitized private artifact (`UNTRUSTED PROPOSAL — NOT VERIFIED`, allow-listed fields only) -> best-effort settle -> STOP. It refuses production contexts and non-`scriptedTransport` transports; the post-claim tail is module-private; it is not exported from the index and is imported only by the rehearsal (now refactored to use it). No production runner exists; a static test fails if `prepareProductionAttempt` is combined with a model call.
+- Exact later activation diff documented in the task file; NOT applied. No decision, pin, approval, quota change, provider/Modal call or credential read.
+- Unchanged: `proposeCandidate()` (still rejects before reading its argument, now also tested under hostile environment flags), quota 0, empty register and pin, the 01A gates, oracle, staging, `VERIFIED` rules.
+
+### Validation (local)
+Lint and typecheck clean; unit 304/304; security 63/63; integration 29/29; `f01:baseline` exit 0 certified; `test:e2e:f01` exit 1 (expected); real C3-B1 run PC-1 `VERIFIED` 3/3, scoreboard re-verified; rehearsal 0 provider requests; piped approval CLI exit 2. Failure matrix with scripted outcomes (incomplete, refusal, missing status, wrong model, empty, malformed, forbidden, out-of-grammar, unknown key, timeout, transport error, unexpected exception, persistence failure, settlement failure false/thrown, duplicate run, expired/missing/mismatched/consumed approval, quota exhausted/zero, pre-flight refusals, production context, look-alike transports) plus crashes at six boundaries. Adapter contract checked against a mock `fetch` (strict json_schema, low reasoning, 3072, no tools, one call even with retries configured). Guard removal: 16 of 16 orchestration mutants killed (request, approval/reservation, persistence, settlement, crash, no-retry; two initial survivors killed after adding an allow-listed-fields assertion and an in-memory artifact assertion) and 3 of 3 static no-network mutants (`fetch`, `process.env`, `createProvider`). One planned mutant that embedded a real provider URL was blocked by the tool-permission classifier and was not run; the equivalent static guard was exercised with neutral identifiers. Hosted CI: see the Draft PR.
+
+### Open questions for the reviewer
+- Is a module-private tail plus a synthetic-only public runner the right isolation until the approved activation PR adds the production runner beside it?
+- Does the proposed activation diff (items 1 to 9 in the task file) cover everything the approved C3-LIVE-01B must change?
+
+### Next action
+GPT-6 review; owner decides merge and whether to record LIVE-C3-01 (then C3-LIVE-01B as a separate PR).
+
 <!-- HANDOFF_ENTRIES_END -->
