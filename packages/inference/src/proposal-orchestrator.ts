@@ -12,7 +12,7 @@
 // is not a `scriptedTransport` (a closure over canned data: it has no fetch, no credential and no provider). A future, separately
 // approved C3-LIVE-01B adds a sibling production runner here that calls `prepareProductionAttempt` from live-gate.ts (never the
 // injectable core) and then the same private tail below; see tasks/PP-META-I2-C3-LIVE-01B0.md for the exact wiring. Nothing exported
-// here is reachable from the hard-disabled `proposeCandidate`, and the tail is module-private so it cannot be driven with an
+// here is reachable from the hard-disabled production proposal entry point, and the tail is module-private so it cannot be driven with an
 // arbitrary caller-supplied function and an unchecked reservation.
 import { proposalJsonSchema, type CssAdjustment } from '../../core/src/index.ts';
 import { InferenceError } from './errors.ts';
