@@ -15,6 +15,7 @@ import { confirmationPhrase, runApprovalCli, type ApprovalIo } from '../../packa
 import { createInstallContext, createSyntheticContext, evaluateAuthorizationCore, prepareAttemptCore, type AuthorizeRequest, type TrustContext } from '../../packages/inference/src/live-gate-core.ts';
 import { activationDigestOf } from '../../packages/inference/src/git-probe.ts';
 import { tempDir, validSymptom } from '../helpers.ts';
+import { expectedGateCode, readPinState } from '../support/real-gate.ts';
 
 const realFetch = globalThis.fetch;
 let trapped = 0;
@@ -475,7 +476,7 @@ test('rehearsal: every scenario is zero-network, synthetic, never VERIFIED, and 
     assert.equal(r.realAuthorization, 'NONE');
     assert.equal(r.label, 'SYNTHETIC REHEARSAL — NOT A GENUINE AUTHORIZATION');
     assert.equal(r.proposal?.status ?? null, expected[scenario], scenario);
-    assert.equal(r.productionValidatorRefusal, 'ACTIVATION_NOT_PINNED', 'the empty activation pin refuses the production validator');
+    assert.equal(r.productionValidatorRefusal, await expectedGateCode(REAL_ROOT), 'the production validator refuses with the exact code of this checkout\'s pin state');
     const text = JSON.stringify(r);
     assert.doesNotMatch(text, /(?<!NOT )VERIFIED/, 'no VERIFIED value exists in a rehearsal report');
     assert.doesNotMatch(text, /verifier\/x|mock transport failure|"text"/, 'no raw model text or error text');
@@ -538,8 +539,9 @@ test('MAJOR-1: the production API takes no trust from its caller: fake roots, fo
   };
   const realApprovals = path.join(REAL_ROOT, '.proofpilot/approvals');
   const before = existsSync(realApprovals);
-  assert.equal(await codeOf(authorizeProductionAttempt(forged)), 'ACTIVATION_NOT_PINNED');
-  assert.equal(await codeOf(prepareProductionAttempt(forged)), 'ACTIVATION_NOT_PINNED');
+  const realCode = await expectedGateCode(REAL_ROOT);
+  assert.equal(await codeOf(authorizeProductionAttempt(forged)), realCode);
+  assert.equal(await codeOf(prepareProductionAttempt(forged)), realCode);
   assert.equal(existsSync(path.join(fake.root, '.proofpilot/approvals/run-1.consumed')), false, 'the fake repository approval was not consumed');
   assert.equal(existsSync(path.join(fake.root, '.proofpilot/reservations')), false, 'nothing was reserved in the fake tree');
   assert.equal(existsSync(realApprovals), before, 'the real approvals directory was not touched');
@@ -550,21 +552,23 @@ test('MAJOR-1: the production API takes no trust from its caller: fake roots, fo
   }
 });
 
-test('MAJOR-1: the real repository (owner decision registered, quota 1) still authorizes nothing while the activation pin is empty', async () => {
+test('MAJOR-1: the real repository (owner decision registered, quota 1) authorizes nothing: the exact refusal of its pin state (unpinned: ACTIVATION_NOT_PINNED; validly pinned without an operator approval: APPROVAL_MISSING)', async () => {
   const before = existsSync(path.join(REAL_ROOT, '.proofpilot/approvals'));
   const ctx = await createInstallContext(REAL_ROOT, 1);
   assert.equal(ctx.kind, 'production');
   const w = world();
-  assert.equal(await codeOf(evaluateAuthorizationCore(ctx, w.input)), 'ACTIVATION_NOT_PINNED');
-  assert.equal(await codeOf(prepareAttemptCore(ctx, w.input)), 'ACTIVATION_NOT_PINNED');
+  const realCode = await expectedGateCode(REAL_ROOT);
+  assert.equal(await codeOf(evaluateAuthorizationCore(ctx, w.input)), realCode);
+  assert.equal(await codeOf(prepareAttemptCore(ctx, w.input)), realCode);
   assert.equal(existsSync(path.join(REAL_ROOT, '.proofpilot/approvals')), before);
+  assert.equal(existsSync(path.join(REAL_ROOT, '.proofpilot/reservations/meta/runs', `${w.input.runId}.json`)), false, 'nothing reserved');
   // even with the register approved, an empty pin stops it
   const approvedNoPin = await repoWorld({ skipPin: true });
   assert.equal(await codeOf(evaluateAuthorizationCore(await approvedNoPin.ctx(1), approvedNoPin.attempt)), 'ACTIVATION_NOT_PINNED');
   assert.equal(await codeOf(evaluateAuthorizationCore(await approvedNoPin.ctx(0), approvedNoPin.attempt)), 'QUOTA_ZERO');
-  // the real pin is empty today; the register holds exactly the owner's decision
+  // the register holds exactly the owner's decision; the pin file is empty or a valid LIVE-C3-01 record (never synthetic)
   assert.equal(JSON.parse(readFileSync(path.join(REAL_ROOT, 'config/live-authorization.json'), 'utf8')).decisions.length, 1);
-  assert.equal(JSON.parse(readFileSync(path.join(REAL_ROOT, PIN_PATH), 'utf8')).activation, null);
+  assert.equal(typeof readPinState(REAL_ROOT).pinned, 'boolean');
 });
 
 test('MAJOR-1: forged Git state and synthetic material only ever yield a synthetic authorization, never a production one', async () => {

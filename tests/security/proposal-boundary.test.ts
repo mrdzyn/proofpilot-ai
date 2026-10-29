@@ -17,6 +17,7 @@ import {
   trustedFactsFromBaseline,
 } from '../../packages/inference/src/index.ts';
 import { liveEnv, SENTINEL_KEY, tempDir, validSymptom } from '../helpers.ts';
+import { expectedGateCode } from '../support/real-gate.ts';
 
 const root = path.resolve(import.meta.dirname, '../..');
 const src = (rel: string) => readFileSync(path.join(root, rel), 'utf8');
@@ -110,7 +111,8 @@ const request = () =>
   });
 
 for (const id of ['meta', 'baseten'] as const) {
-  test(`MAJOR-2 (${id}): a purported injected transport or provider is never invoked and the real gate (empty activation pin) stops the call; nothing is reserved or written`, async () => {
+  test(`MAJOR-2 (${id}): a purported injected transport or provider is never invoked and the real gate (no pin, or no operator approval) stops the call; nothing is reserved or written`, async () => {
+    const gateCode = await expectedGateCode(root);
     const req = request();
     const evidence = tempDir('pp-sec-');
     let forwarded = 0;
@@ -148,7 +150,7 @@ for (const id of ['meta', 'baseten'] as const) {
               injectedTransportQuota,
               mockQuota: injectedTransportQuota,
             } as never),
-            (e: unknown) => (e as { code?: string })?.code === 'ACTIVATION_NOT_PINNED',
+            (e: unknown) => (e as { code?: string })?.code === gateCode,
             `${id} quota ${String(injectedTransportQuota)}`,
           );
         }

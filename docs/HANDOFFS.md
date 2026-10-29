@@ -837,4 +837,20 @@ GPT-6 review; the owner separately decides merge, then the pin-only commit and t
 ### Next action
 GPT-6 re-audit; the owner separately decides merge and the later operational steps.
 
+## Handoff: PP-META-I2-C3-LIVE-01B-CI-A1
+
+- **Task / phase:** `tasks/PP-META-I2-C3-LIVE-01B-CI.md` (CI execution context and activation-state-aware tests)
+- **From:** Implementation agent (Claude Code, Claude Sonnet 5.5)
+- **To:** GPT-6 independent exact-head review, then project owner
+- **Branch:** `phase/pp-meta-i2-c3-live01b-ci-compat` from `main` `f8f3e182212ec3f57b6502d98aacf8dee0e7df98` (audit the branch head)
+- **State:** READY FOR REVIEW. Not merged. `config/live-activation.json` is `activation: null`. No operator approval, credential read or provider request.
+
+### Completed
+- Stack CI checks out the exact PR head SHA with full history, verifies it, and runs a read-only pin-lineage check that is strict when a change touches the pin.
+- Real-checkout tests assert the exact code of the checkout's pin state; an isolated activation-state matrix (incl. a depth-1 clone and a synthetic merge commit) proves each refusal code with no credential read, consumption, reservation or request; docs made pin-state-neutral.
+- No production authorization, activation-digest, provider, quota, reservation or approval code changed.
+
+### Next action
+GPT-6 audit; owner decides merge (squash commit = NEW activation commit A2). Then recompute A2's digest and prepare a new pin-only Draft PR A2'. PR #15 (pin for the old A) must stay unmerged and be retired.
+
 <!-- HANDOFF_ENTRIES_END -->

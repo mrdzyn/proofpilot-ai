@@ -6,6 +6,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { APPROVED_LIVE_QUOTA, proposeCandidate, ProposalError } from '../../packages/inference/src/index.ts';
 
+import { readPinState } from '../support/real-gate.ts';
 const root = path.resolve(import.meta.dirname, '../..');
 const read = (rel: string) => readFileSync(path.join(root, rel), 'utf8');
 const code = (rel: string) => read(rel).split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
@@ -21,7 +22,7 @@ function walk(dir: string, out: string[] = []): string[] {
 const rel = (f: string) => path.relative(root, f).split(path.sep).join('/');
 const APPROVAL_FILES = ['packages/inference/src/live-approval.ts', 'packages/inference/src/live-gate-core.ts', 'packages/inference/src/live-gate.ts', 'packages/inference/src/approval-cli.ts', 'packages/inference/src/live-rehearsal.ts'];
 
-test('the owner decision is recorded but powerless: exactly one non-synthetic LIVE-C3-01 decision, Meta quota 1, EMPTY activation pin, malformed calls rejected', async () => {
+test('the owner decision is recorded but powerless: exactly one non-synthetic LIVE-C3-01 decision, Meta quota 1, a pin file that is empty or a valid LIVE-C3-01 record, malformed calls rejected', async () => {
   const reg = JSON.parse(read('config/live-authorization.json'));
   assert.deepEqual(reg.decisions, [{
     decisionId: 'LIVE-C3-01', status: 'APPROVED', provider: 'meta', model: 'muse-spark-1.3', maxBillableAttempts: 1, maxInputChars: 12000, maxOutputTokens: 3072,
@@ -29,12 +30,12 @@ test('the owner decision is recorded but powerless: exactly one non-synthetic LI
   }]);
   assert.equal('synthetic' in reg.decisions[0], false);
   assert.deepEqual({ ...APPROVED_LIVE_QUOTA }, { meta: 1, baseten: 0 });
-  assert.equal(JSON.parse(read('config/live-activation.json')).activation, null, 'the activation revision is NOT pinned');
+  readPinState(root); // empty, or a schema-valid non-synthetic LIVE-C3-01 pin (throws otherwise)
   await assert.rejects(proposeCandidate({ provider: 'forged', quota: 5 } as never), (e: unknown) => e instanceof ProposalError && e.code === 'INVALID_INPUT');
   const record = read('docs/LIVE-C3-01-DECISION-RECORD.md');
   assert.match(record, /\| LIVE-C3-01 \(Meta, `muse-spark-1\.3`\) \| APPROVED by the repository owner, October 29, 2026 — https:/);
   assert.match(record, /issuecomment-6496850990/);
-  assert.match(record, /Activation revision pin[^\n]*NOT RECORDED/);
+  assert.match(record, /Activation revision pin[^\n]*config\/live-activation\.json[^\n]*pin-only/);
   assert.match(record, /Real provider invocation[^\n]*NOT AUTHORIZED YET/);
 });
 
@@ -107,7 +108,7 @@ test('MAJOR-2: authorization requires the owner-pinned activation revision, chec
   for (const needle of ["'merge-base', '--is-ancestor'", "'rev-list', '--merges'", "'diff-tree'", 'commits.length === 0', 'MAX_PIN_CHAIN']) assert.ok(probe.includes(needle), needle);
   assert.match(code('packages/inference/src/approval-cli.ts'), /checkActivation\(ctx, decision\)/);
   assert.match(code('packages/inference/src/approval-cli.ts'), /QUOTA_ZERO/);
-  assert.equal(JSON.parse(read('config/live-activation.json')).activation, null);
+  readPinState(root);
   assert.equal(JSON.parse(read('config/live-authorization.json')).decisions.length, 1);
 });
 

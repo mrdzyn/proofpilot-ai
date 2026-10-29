@@ -5,12 +5,12 @@
 ## Project
 
 - **Name:** ProofPilot AI — Meta Global AI Developer Hackathon (Push the Frontier)
-- **Current phase:** PP-META-I2-C3-LIVE-01B — owner-approved activation implementation (one Meta proposal attempt); Draft PR awaiting independent exact-head review
-- **Status:** C3-LIVE-01B-PREP (PR #13) is **merged**; protected `main` is `c7e18d318c29ed60014b1f48b6375c29a5640a69`. The repository owner **approved LIVE-C3-01 for activation preparation on October 29, 2026** (https://github.com/mrdzyn/proofpilot-ai/pull/6#issuecomment-6496850990): one Meta `muse-spark-1.3` attempt in total. C3-LIVE-01B (this Draft PR) records that decision (one non-synthetic register entry), sets the lifetime Meta quota to 1, routes `proposeCandidate()` exclusively through the audited runner and adds the owner-operated single-call command with a certified-evidence provenance gate. **Activation implementation: pending independent review. Activation revision pin: NOT RECORDED (`activation: null`) and it alone prevents any request. Real provider invocation: NOT AUTHORIZED YET.** No operator approval exists and no provider, Modal or model call was made.
-- **Primary branch:** protected `main` at `c7e18d318c29ed60014b1f48b6375c29a5640a69` (PR #13 squash merge)
-- **Working branch:** `phase/pp-meta-i2-c3-live01b-activation` (Draft PR; the branch head is authoritative)
-- **Active task:** `tasks/PP-META-I2-C3-LIVE-01B.md`
-- **Active handoff:** PP-META-I2-C3-LIVE-01B-A2
+- **Current phase:** PP-META-I2-C3-LIVE-01B-CI — CI execution context and activation-state-aware tests (Draft PR awaiting independent exact-head review); it becomes the NEW activation commit A2 only after audit and the owner's separate merge approval
+- **Status:** C3-LIVE-01B (PR #14) is **merged** as activation commit A `f8f3e182212ec3f57b6502d98aacf8dee0e7df98`; the pin-only Draft PR #15 for A is **blocked** by the independent audit (hosted CI validated GitHub's synthetic merge commit with a depth-1 fetch, and legacy tests assumed an empty pin) and is superseded: this remediation PR fixes the CI execution context (exact PR head, full history, verified) and makes the real-checkout tests state-aware (unpinned → `ACTIVATION_NOT_PINNED`; validly pinned without an operator approval → `APPROVAL_MISSING`; broken lineage → `ACTIVATION_MISMATCH`/`REVISION_NOT_APPROVED`), without touching production authorization, activation-digest, provider, quota, reservation or approval code. After its audit and the owner's merge approval the squash commit is the NEW activation commit **A2**; its digest is recomputed and a new pin-only PR A2′ follows (the old A and its digest are not reused). LIVE-C3-01 is APPROVED for activation preparation (owner, October 29, 2026); the **real provider invocation is NOT AUTHORIZED**; the activation pin is authoritative only in `config/live-activation.json` (`null` = NOT RECORDED); no operator approval exists and no provider, Modal or model call was made.
+- **Primary branch:** protected `main` at `f8f3e182212ec3f57b6502d98aacf8dee0e7df98` (PR #14 squash merge = activation commit A)
+- **Working branch:** `phase/pp-meta-i2-c3-live01b-ci-compat` (Draft PR; the branch head is authoritative)
+- **Active task:** `tasks/PP-META-I2-C3-LIVE-01B-CI.md`
+- **Active handoff:** PP-META-I2-C3-LIVE-01B-CI-A1
 - **Authorization:** Both single-use live smokes are **spent**. **APPROVED:** SEC-C3-01 (F01-only closed-grammar CSS, hand-authored controls only); **LIVE-C3-01 APPROVED for activation preparation (owner, October 29, 2026, one Meta `muse-spark-1.3` attempt; see `docs/LIVE-C3-01-DECISION-RECORD.md`)**. **NOT AUTHORIZED YET:** the real provider invocation (needs the audited and merged implementation, the pinned activation revision, the real operator preflight and per-run confirmation, and the owner's separate go-ahead). **NOT APPROVED:** C3-B2B (evaluating model proposals), UI-C3-01 (report UI), HOST-C3-01 (Modal or any hosted backend), Baseten, additional attempts, automated retries. A credit balance is not permission to spend. No Meta/Baseten/Modal call, no execution of model-generated code, no deployment or merge by the agent.
 
 ## Completed milestones
@@ -75,9 +75,9 @@
 | C3-LIVE-01A human approval and live-activation safety gate (operator approval CLI, private single-use records, fail-closed validator, empty register, synthetic rehearsal) | **MERGED** (PR #11, independent PASS after two remediation rounds) |
 | C3-LIVE-01B0 Meta proposal integration (synthetic orchestration, scripted transport, no production runner) | **IMPLEMENTED** (mock only); independent review PENDING |
 | C3-LIVE-01B-PREP dormant production proposal runner and Meta transport | **MERGED** (PR #13) |
-| C3-LIVE-01B activation implementation (decision recorded, quota 1, gated entry point, owner CLI, provenance gate) | **IMPLEMENTED** (Draft PR); independent review PENDING; activation pin NOT RECORDED |
+| C3-LIVE-01B activation implementation (decision recorded, quota 1, gated entry point, owner CLI, provenance gate) | **IMPLEMENTED** (Draft PR); independent review PENDING; activation pin: see `config/live-activation.json` |
 | Real Meta invocation of the first proposal | **NOT AUTHORIZED YET** (operator gates in `tasks/PP-META-I2-C3-LIVE-01B.md`) |
-| LIVE-C3-01 first bounded Muse Spark proposal | Owner decision **APPROVED for activation preparation** (`docs/LIVE-C3-01-DECISION-RECORD.md`). **The real invocation is NOT AUTHORIZED YET**: it still needs the independently audited and separately merged activation implementation (C3-LIVE-01B, Draft PR #14), the pinned activation revision (NOT RECORDED), a real single-use operator approval, a securely injected credential and the owner's separate go-ahead |
+| LIVE-C3-01 first bounded Muse Spark proposal | Owner decision **APPROVED for activation preparation** (`docs/LIVE-C3-01-DECISION-RECORD.md`). **The real invocation is NOT AUTHORIZED YET**: it still needs the independently audited and separately merged activation implementation (C3-LIVE-01B, Draft PR #14), the pinned activation revision (separate pin-only commit; see `config/live-activation.json`), a real single-use operator approval, a securely injected credential and the owner's separate go-ahead |
 | C3-B2B model proposals through staging and the coordinator | NOT STARTED and **gated in code** (`assertHandAuthoredControls`); needs its own owner authorization, a reviewed change and a new provenance label |
 | C3-C scoreboard report UI, C3-D report + replay + audit, C3-E demo, C3-F submission | NOT STARTED (UI-C3-01 not approved) |
 | Baseten compatibility (`docs/BASETEN-COMPATIBILITY-PLAN.md`) | PLAN ONLY; pinned id vs public docs discrepancy and a structured-output doubt recorded; NOT TESTED |
@@ -85,7 +85,10 @@
 | Muse Wonder as patcher | UNVERIFIED and not a dependency |
 | Baseten | NOT TESTED |
 
-## C3-LIVE-01B result (local; branch `phase/pp-meta-i2-c3-live01b-activation`)
+## C3-LIVE-01B-CI result (local; branch `phase/pp-meta-i2-c3-live01b-ci-compat`)
+- CI execution context, the pin-lineage check, the state-aware tests and the activation-state matrix: `tasks/PP-META-I2-C3-LIVE-01B-CI.md`. Test and CI evidence: see the Draft PR and handoff `PP-META-I2-C3-LIVE-01B-CI-A1`.
+
+## C3-LIVE-01B result (merged PR #14, activation commit A; local; branch `phase/pp-meta-i2-c3-live01b-activation`)
 - Activation implementation, gates that remain and the evidence model: `tasks/PP-META-I2-C3-LIVE-01B.md`. The empty activation pin is an independent lock: with the decision registered and quota 1 the real repository still refuses every request. Tests exercise the shipped constants through a disposable install copy with a mock Meta endpoint; no network, no credential, no operator approval.
 - Test and CI evidence: see the Draft PR and handoff `PP-META-I2-C3-LIVE-01B-A1`.
 
@@ -93,7 +96,7 @@
 - Dormant production wiring and activation plan: `tasks/PP-META-I2-C3-LIVE-01B-PREP.md`. The production path is tested by running the unmodified production code from a throwaway copy with its own register, pin and quota (fixtures exist only in the copy), with a mock `fetch`; no network, no real credential.
 - Test and CI evidence: see the Draft PR and handoff `PP-META-I2-C3-LIVE-01B-PREP-A1`.
 
-> **Historical records.** The milestone sections below describe each milestone as it stood when it was written. Where they say quota 0, "hard-disabled", or "LIVE-C3-01 NOT APPROVED", that was true then. The current state is the Project block at the top and the Open gates table: LIVE-C3-01 is APPROVED for activation preparation (owner, October 29, 2026), the real provider invocation is NOT AUTHORIZED YET, and the activation revision pin is NOT RECORDED.
+> **Historical records.** The milestone sections below describe each milestone as it stood when it was written. Where they say quota 0, "hard-disabled", or "LIVE-C3-01 NOT APPROVED", that was true then. The current state is the Project block at the top and the Open gates table: LIVE-C3-01 is APPROVED for activation preparation (owner, October 29, 2026), the real provider invocation is NOT AUTHORIZED YET, and the activation revision pin is whatever `config/live-activation.json` says (`null` = NOT RECORDED).
 
 ## C3-LIVE-01B0 result (merged PR #12; branch `phase/pp-meta-i2-c3-live01b0-proposal-integration`;  branch `phase/pp-meta-i2-c3-live01b0-proposal-integration`)
 - Orchestration, isolation and failure matrix: `tasks/PP-META-I2-C3-LIVE-01B0.md`. Synthetic and scripted only; a synthetic result is **not** an authorization and an accepted proposal is **not** verified.

@@ -186,7 +186,7 @@ test('the LIVE-C3-01 decision record states the owner-approved limits, the remai
   const text = src('docs/LIVE-C3-01-DECISION-RECORD.md');
   assert.match(text, /issuecomment-6496850990/);
   assert.match(text, /not authorization to make a provider request now/i);
-  assert.match(text, /Activation revision pin[^\n]*NOT RECORDED/);
+  assert.match(text, /Activation revision pin[^\n]*config\/live-activation\.json[^\n]*pin-only/);
   assert.match(text, /Real provider invocation[^\n]*NOT AUTHORIZED YET/);
   for (const needle of ['muse-spark-1.3', 'Maximum number of billable attempts', 'per-run', 'No retries', 'No fallback', 'Stop conditions', 'credit balance', 'Baseten', 'api.meta.ai', '12,000', '3,072']) {
     assert.match(text, new RegExp(needle, 'i'), needle);

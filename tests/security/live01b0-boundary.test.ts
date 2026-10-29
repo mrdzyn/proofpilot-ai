@@ -8,6 +8,7 @@ import { APPROVED_LIVE_QUOTA, authorizeProductionAttempt, proposeCandidate, Prop
 import { parseSymptom } from '../../packages/core/src/index.ts';
 import { validSymptom } from '../helpers.ts';
 
+import { expectedGateCode, readPinState } from '../support/real-gate.ts';
 const root = path.resolve(import.meta.dirname, '../..');
 const read = (rel: string) => readFileSync(path.join(root, rel), 'utf8');
 const code = (rel: string) => read(rel).split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
@@ -37,11 +38,11 @@ after(() => {
   assert.equal(trapped, 0);
 });
 
-test('the gate is closed by the EMPTY activation pin: positive quota and the registered owner decision authorize nothing, and the entry point reads only runId and request', async () => {
+test('positive quota and the registered owner decision authorize nothing without every gate: the real checkout refuses with the exact code of its pin state, and the entry point reads only runId and request', async () => {
   assert.deepEqual({ ...APPROVED_LIVE_QUOTA }, { meta: 1, baseten: 0 });
   assert.equal(Object.isFrozen(APPROVED_LIVE_QUOTA), true);
   assert.equal(JSON.parse(read('config/live-authorization.json')).decisions.length, 1);
-  assert.equal(JSON.parse(read('config/live-activation.json')).activation, null);
+  readPinState(root);
   const reads: string[] = [];
   const spy = new Proxy({}, { get(_t, k) { reads.push(String(k)); return undefined; }, has() { reads.push('has'); return false; }, ownKeys() { reads.push('ownKeys'); return []; }, getOwnPropertyDescriptor() { reads.push('gopd'); return undefined; } });
   const saved = { ...process.env };
@@ -52,9 +53,10 @@ test('the gate is closed by the EMPTY activation pin: positive quota and the reg
     }
     assert.deepEqual([...new Set(reads)].sort(), ['request', 'runId'], 'the entry point reads exactly the two attempt facts');
     const request = buildProposalRequest({ symptom: parseSymptom(validSymptom(), { videoDurationSec: 10 }), facts: trustedFactsFromBaseline({ viewport: { width: 390, height: 844 }, tapPoint: { x: 1, y: 1 }, hitTestTarget: 'promo-overlay', cartCountBefore: '0', cartCountAfter: '0' }, true) });
-    // a perfectly formed call, with every credential-free flag on, is stopped by the empty pin before anything else
-    await assert.rejects(proposeCandidate({ runId: 'c3-live-meta-001', request }), (e: unknown) => (e as { code?: string }).code === 'ACTIVATION_NOT_PINNED');
-    await assert.rejects(authorizeProductionAttempt({ runId: 'c3-live-meta-001', request, provider: { id: 'meta', models: { visual: META_PROPOSAL_MODEL } }, maxOutputTokens: 3072 }), (e: unknown) => (e as { code?: string }).code === 'ACTIVATION_NOT_PINNED');
+    // a perfectly formed call, with every credential-free flag on, is stopped by the gate (no pin, or no operator approval) before anything else
+    const gateCode = await expectedGateCode(root);
+    await assert.rejects(proposeCandidate({ runId: 'c3-live-meta-001', request }), (e: unknown) => (e as { code?: string }).code === gateCode);
+    await assert.rejects(authorizeProductionAttempt({ runId: 'c3-live-meta-001', request, provider: { id: 'meta', models: { visual: META_PROPOSAL_MODEL } }, maxOutputTokens: 3072 }), (e: unknown) => (e as { code?: string }).code === gateCode);
   } finally {
     for (const k of Object.keys(process.env)) if (!(k in saved)) delete process.env[k];
     Object.assign(process.env, saved);
@@ -105,7 +107,7 @@ test('nothing outside the synthetic rehearsal imports the orchestrator; the inde
 
 test('documentation no longer mentions the removed authorizeLiveAttempt, and no operator approval or activation pin is recorded anywhere', () => {
   for (const d of ['docs/SECURITY.md', 'docs/TESTING.md', 'docs/META-ACTIVATION-CHECKLIST.md', 'tasks/PP-META-I2-C3-LIVE-01B0.md']) assert.doesNotMatch(read(d), /authorizeLiveAttempt/, d);
-  assert.match(read('docs/LIVE-C3-01-DECISION-RECORD.md'), /Activation revision pin[^\n]*NOT RECORDED/);
+  assert.match(read('docs/LIVE-C3-01-DECISION-RECORD.md'), /Activation revision pin[^\n]*config\/live-activation\.json[^\n]*pin-only/);
   const tracked = execFileSync('git', ['ls-files'], { cwd: root, encoding: 'utf8' }).split('\n');
   assert.deepEqual(tracked.filter((f) => /(^|\/)\.proofpilot\/|\.consumed$|(^|\/)approvals\//.test(f)), []);
 });
