@@ -275,6 +275,17 @@ test('a crash between approval validation and quota reservation spends the appro
   assert.equal((await prepareAttempt(w2.input, w.injected, w.store)).claim.slot, 1);
 });
 
+test('consumption is itself exclusive, and a consumed run id can never be re-approved even if its record is gone', async () => {
+  const w = world();
+  await w.approve();
+  const a = await evaluateAuthorization(w.input, w.injected);
+  const results = await Promise.allSettled([consumeApproval(w.approvalsDir, a, () => T0), consumeApproval(w.approvalsDir, a, () => T0), consumeApproval(w.approvalsDir, a, () => T0)]);
+  assert.equal(results.filter((r) => r.status === 'fulfilled').length, 1, 'exactly one consume wins');
+  for (const r of results) if (r.status === 'rejected') assert.equal((r.reason as AuthorizationError).code, 'APPROVAL_SPENT');
+  (await import('node:fs')).unlinkSync(path.join(w.approvalsDir, 'run-1.json'));
+  assert.equal(await codeOf(w.approve()), 'APPROVAL_DUPLICATE');
+});
+
 test('a crash after the claim leaves a spent slot and a CLAIMED run; nothing can be replayed or recycled', async () => {
   const w = world();
   await w.approve();

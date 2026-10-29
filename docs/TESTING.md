@@ -248,6 +248,13 @@ Before release:
 - complete platform/store-specific checks;
 - complete the applicable release QA/manual validation gate.
 
+## C3-LIVE-01A approval-gate checks (zero network, synthetic)
+
+- `tests/unit/live-approval.test.ts`: single use, every mismatch/expiry/replay/forgery refusal, file attacks (symlink, hard link, traversal, loose modes), concurrent use, crash points, TOCTOU re-checks, the interactive CLI (non-TTY, wrong/replayed confirmation, dirty tree, no approved decision) and the 11-scenario rehearsal under a global `fetch` trap.
+- `tests/security/live01a-boundary.test.ts`: empty register, quota 0, entry point disabled, no provider/env/credential/execution code in the approval modules, staging runner and coordinator never import them, test-only injection is unreachable from production, records gitignored and untracked, fixed fail-closed order.
+- `node scripts/c3-live-rehearsal.ts` is the zero-network rehearsal (synthetic; not an authorization). `scripts/c3-approve-live-run.ts` needs a real terminal and refuses today because no decision is approved; do not run it to create a real record in this milestone.
+- Guard-removal testing: each check on the authorization boundary was removed one at a time and the two test files re-run; see the PR for the result.
+
 ## C3-B2A readiness checks (zero network)
 
 - `node scripts/c3-proposal-preflight.ts [--provider meta|baseten] [--write]` runs the deterministic offline preflight (mock literals only; `--check-credentials` reports a boolean and only when authorized). Exit 0 means the technical checks passed and says nothing about authorization.

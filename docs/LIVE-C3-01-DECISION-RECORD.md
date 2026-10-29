@@ -12,7 +12,7 @@
 | Maximum number of billable attempts | **1** for the first run; any higher number needs a new record naming the exact number | The quota is a total across all runs, never per day or "as needed". Failed or uncertain attempts are spent. |
 | Input bound | at most **12,000** characters (`PROPOSAL_LIMITS.maxInputChars`) | Built only by `buildProposalRequest` from a validated `Symptom` and trusted F01 observations. |
 | Output bound | at most **3,072** output tokens including reasoning (`PROPOSAL_LIMITS.maxOutputTokens`) | A token cap is not a currency cap. |
-| Per-run operator approval | **Required for every attempt**: a person approves this run id, provider, model and input SHA-256 in an audit record before the claim | Design: a gitignored `.proofpilot/approvals/<runId>.json` written by an interactive owner command, containing operator, timestamp and the bound hashes. Not implemented in C3-B2A. `createProposalConsent` only has the shape of consent and proves nothing about a person. |
+| Per-run operator approval | **Required for every attempt**: a person approves this run id, provider, model and input SHA-256 in an audit record before the claim | Implemented in C3-LIVE-01A as mock-tested code only: a gitignored `.proofpilot/approvals/<runId>.json` written by an interactive TTY command (`scripts/c3-approve-live-run.ts`), recording a **self-declared** name, timestamp, run id, provider, model, input hash, repository SHA, bounds and a 10-minute expiry; single use. It is not authenticated identity and cannot replace the register below. `createProposalConsent` only has the shape of consent and proves nothing about a person. |
 | Credential handling | The key comes from the owner's secure store (for example 1Password) injected into the process environment **for that one invocation**; it is never written to a file, a log, an artifact, chat or Git, and agents do not read it | Only a boolean presence check is allowed, and only when the owner authorizes it. |
 | Unique reservation ids | One run id per attempt, validated by `isValidRunId`, claimed under the lock together with one quota slot **before** the call; never reused or recycled | Proposed naming: `c3-live-meta-001`. Orphan slots are reported, never recycled. |
 | Retries and fallback | **No retries. No fallback model. No second attempt after a failure.** | `retries: 0` is hardcoded in the proposal path. |
@@ -37,7 +37,8 @@ After any stop the run id and slot stay spent and a **new** decision is needed f
 
 - [ ] C3-B2A merged after an independent exact-head audit PASS.
 - [ ] `docs/META-ACTIVATION-CHECKLIST.md` completed, with the zero-network preflight output attached.
-- [ ] A reviewed code change that (a) implements the per-run operator approval capture, (b) enables the proposal entry point only behind that approval and the quota in this record, and (c) leaves model-derived proposals disconnected from execution. That change and the quota constant are a separate PR with its own audit.
+- [x] (C3-LIVE-01A, pending its audit) The per-run operator approval capture, fail-closed validator and `config/live-authorization.json` register exist as mock-tested code; the register is EMPTY.
+- [ ] A reviewed code change (C3-LIVE-01B, see `tasks/PP-META-I2-C3-LIVE-01A.md`) that (a) is based on the approval capture, (b) enables the proposal entry point only behind that approval and the quota in this record, and (c) leaves model-derived proposals disconnected from execution. That change and the quota constant are a separate PR with its own audit.
 - [ ] The owner records the approval below with exact values.
 
 ## 4. Approval register (owner-only; empty)
@@ -45,7 +46,7 @@ After any stop the run id and slot stay spent and a **new** decision is needed f
 | Decision | Approved by / date / link | Exact values approved |
 |---|---|---|
 | LIVE-C3-01 (Meta, `muse-spark-1.3`) | _none recorded_ | _none_ |
-| Per-run operator approval design | _none recorded_ | _none_ |
+| Per-run operator approval design (C3-LIVE-01A implementation) | _none recorded_ | _none_ |
 | Evaluation of accepted proposals (C3-B2B) | _none recorded_ | _none_ |
 
 ## 5. What this record does not do
