@@ -663,4 +663,28 @@ Unit 262/262, security 50/50, integration 29/29, baseline certified, real C3-B1 
 ### Next action
 GPT-6 re-audit; owner decides merge and later gates.
 
+## Handoff: PP-META-I2-C3-LIVE-01A-A1
+
+- **Task / phase:** `tasks/PP-META-I2-C3-LIVE-01A.md` (human approval and live-activation safety gate; implementation and mock tests only)
+- **From:** Implementation agent (Claude Code, Claude Sonnet 5.5)
+- **To:** GPT-6 independent exact-head review, then project owner
+- **Branch:** `phase/pp-meta-i2-c3-live01a-approval-gate` from `main` `e2e0216e922ef72b8310b3ec81e5afc4e6208fab`; code head `7079aadc3f98b323bc35338bf5a4b9313259df75` (audit the branch head)
+- **State:** READY FOR REVIEW
+
+### Completed
+- STATUS corrected (PR #10 merged; `main` at `e2e0216`); task contract written.
+- `live-approval.ts` (records, private file handling, decision register, fail-closed validator, `consumeApproval`, `prepareAttempt`, `listStrandedApprovals`), `approval-cli.ts` + `scripts/c3-approve-live-run.ts` (TTY-only, exact phrase, self-declared, refuses without an approved register decision), `git-probe.ts`, `live-rehearsal.ts` + `scripts/c3-live-rehearsal.ts` (zero-network, synthetic), `inspectReservation` (read-only), EMPTY `config/live-authorization.json`.
+- Docs: STATUS, SECURITY, TESTING, decision record, activation checklist (incl. the C3-LIVE-01B checklist), this handoff. All approval registers stay unapproved.
+- Unchanged: `APPROVED_LIVE_QUOTA` (0), `proposeCandidate()` (disabled), `verifier/`, fixtures, patch policy and grammar, `candidate-stage.ts`, the coordinator. No Meta/Baseten/Modal call, no credential read, no genuine approval (`.proofpilot/approvals` does not exist), no model-derived CSS executed, no UI.
+
+### Validation (local, code head)
+Lint and typecheck clean; unit 283/283; security 56/56; integration 29/29; `f01:baseline` exit 0 certified; `test:e2e:f01` exit 1 (expected); real C3-B1 run PC-1 `VERIFIED` 3/3 and scoreboard re-verified; rehearsal 11 scenarios, 0 provider requests, never `VERIFIED`, production validator `LIVE_NOT_APPROVED`; piped invocation of the approval CLI exits 2. Guard-removal: 37 mutants on the validator/CLI, 34 killed (2 after adding tests for exclusive consume and re-approval of a consumed run id); 3 survivors are redundant defence in depth (provider/model re-compare after the model is already pinned, `isSymbolicLink` next to `lstat`+`isDirectory`, synthetic-record check next to the decision check). Hosted CI: see the Draft PR.
+
+### Open questions for the reviewer
+- Is the self-declared record plus empty register the right trust split, and is the consume-then-reserve order with fail-closed recovery sound?
+- Is the 01B diff and authorization sequence in the task file precise enough?
+
+### Next action
+GPT-6 review; owner decides merge and whether/how to record LIVE-C3-01 (then C3-LIVE-01B as a separate PR).
+
 <!-- HANDOFF_ENTRIES_END -->
