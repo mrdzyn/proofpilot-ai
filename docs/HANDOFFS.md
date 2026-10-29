@@ -757,4 +757,20 @@ Lint and typecheck clean; unit 304/304; security 63/63; integration 29/29; `f01:
 ### Next action
 GPT-6 review; owner decides merge and whether to record LIVE-C3-01 (then C3-LIVE-01B as a separate PR).
 
+## Handoff: PP-META-I2-C3-LIVE-01B0-A2
+
+- **Task / phase:** `tasks/PP-META-I2-C3-LIVE-01B0.md` (remediation of audit MAJOR-1)
+- **From:** Implementation agent (Claude Code, Claude Sonnet 5.5)
+- **To:** GPT-6 independent exact-head re-audit, then project owner
+- **Branch:** `phase/pp-meta-i2-c3-live01b0-proposal-integration` (Draft PR #12); audit the branch head
+- **State:** READY FOR RE-REVIEW
+
+### Completed
+- MAJOR-1: `processProposalResponse` now builds fresh `usage` and `lifecycle` objects through `sanitizeUsage`/`sanitizeLifecycle` (explicit allow-lists; counters = non-negative safe integers <= 1e9 else null; status in the documented set else null; error/incomplete codes = short non-secret machine codes else `INVALID_CODE`; refusal/completed literal booleans, anything else fails closed). `requestId` and `respondedModel` also reject secret-shaped values. The orchestrator's artifact and outcome use only these objects. Strict completed-only acceptance, model check and grammar are unchanged.
+- Tests: marker/secret-bearing nested keys on completed and failed responses (persisted file and returned artifact), malformed numbers/codes/statuses, non-object metadata, valid values intact, one request, attempt spent; static no-passthrough test. Guard removal: 13/13 targeted mutants killed.
+- Unchanged: quota 0, empty register and pin, `proposeCandidate()` disabled, no provider/Modal call, no credential read, no approval, no merge.
+
+### Next action
+GPT-6 re-audit; owner decides merge.
+
 <!-- HANDOFF_ENTRIES_END -->

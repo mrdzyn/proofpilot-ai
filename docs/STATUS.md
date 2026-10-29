@@ -5,12 +5,12 @@
 ## Project
 
 - **Name:** ProofPilot AI — Meta Global AI Developer Hackathon (Push the Frontier)
-- **Current phase:** PP-META-I2-C3-LIVE-01B0 — Meta proposal integration, mock-only (awaiting independent exact-head review)
+- **Current phase:** PP-META-I2-C3-LIVE-01B0 — Meta proposal integration, mock-only (MAJOR-1 nested-metadata sanitization remediated; awaiting independent exact-head re-audit)
 - **Status:** C3-LIVE-01A (PR #11) is **merged** after an independent PASS; protected `main` is `5e9b73c0a412c9546bfd8026f63224af75f5afc3`. C3-LIVE-01B0 adds the proposal orchestration (preflight → authorize/consume/claim → one scripted response → strict validation → sanitized `UNTRUSTED PROPOSAL — NOT VERIFIED` artifact → settle → stop), runnable only against a synthetic context and a data-only scripted transport. **Nothing is enabled:** LIVE-C3-01 is **NOT APPROVED**, the live quota is a frozen code constant of 0, `proposeCandidate()` is hard-disabled, the register and activation pin are empty, no genuine approval exists, and no provider, Modal or model call was made.
 - **Primary branch:** protected `main` at `5e9b73c0a412c9546bfd8026f63224af75f5afc3` (PR #11 squash merge)
 - **Working branch:** `phase/pp-meta-i2-c3-live01b0-proposal-integration` (Draft PR; the branch head is authoritative)
 - **Active task:** `tasks/PP-META-I2-C3-LIVE-01B0.md`
-- **Active handoff:** PP-META-I2-C3-LIVE-01B0-A1
+- **Active handoff:** PP-META-I2-C3-LIVE-01B0-A2
 - **Authorization:** Both single-use live smokes are **spent**. **APPROVED:** SEC-C3-01 (F01-only closed-grammar CSS, hand-authored controls only). **NOT APPROVED:** LIVE-C3-01 (`docs/LIVE-C3-01-DECISION-RECORD.md` is a proposal; quota 0), C3-B2B (evaluating model proposals), UI-C3-01 (report UI), HOST-C3-01 (Modal or any hosted backend). A credit balance is not permission to spend. No Meta/Baseten/Modal call, no execution of model-generated code, no deployment or merge by the agent.
 
 ## Completed milestones

@@ -371,3 +371,102 @@ test('a private-permission regression: the artifact directory and file are not w
   assert.equal(statSync(path.dirname(w.artifactFile())).mode & 0o077, 0);
   assert.equal(statSync(w.artifactFile()).mode & 0o077, 0);
 });
+
+// ------------------------------------------------------------ MAJOR-1: nested provider metadata is rebuilt, never copied
+
+const NESTED_MARKER = 'NESTED-RAW-TEXT-MARKER-5c2e';
+const NESTED_SECRET = 'sk-NESTED-LEAK-9912ffee';
+const NESTED_KEYS = ['debugMessage', 'rawProviderText', 'rawResponse', 'authorization', 'extraNested'];
+const dirty = (over: { usage?: Record<string, unknown> | null; lifecycle?: Record<string, unknown>; extra?: Partial<StructuredResponse> } = {}): StructuredResponse => {
+  const base = okResponse();
+  const taint = { debugMessage: `${NESTED_MARKER} ${NESTED_SECRET}`, rawProviderText: NESTED_MARKER, rawResponse: { deep: NESTED_SECRET }, authorization: `Bearer ${NESTED_SECRET}`, extraNested: [NESTED_MARKER] };
+  return { ...base, usage: over.usage === null ? null : ({ ...base.usage, ...taint, ...over.usage } as never), lifecycle: { ...base.lifecycle, ...taint, ...over.lifecycle } as never, ...over.extra };
+};
+const assertClean = (w: ReturnType<typeof setup>, out: { artifact: unknown }) => {
+  for (const text of [JSON.stringify(out.artifact), readFileSync(w.artifactFile(), 'utf8')]) {
+    assert.ok(!text.includes(NESTED_MARKER) && !text.includes(NESTED_SECRET) && !/Bearer/.test(text), 'no marker or secret survives');
+    for (const k of NESTED_KEYS) assert.ok(!text.includes(`"${k}"`), `unknown key ${k} must not survive`);
+  }
+};
+
+test('unexpected nested usage/lifecycle properties never reach the persisted artifact or the returned outcome; valid values stay intact', async () => {
+  const w = setup();
+  await w.approve();
+  const { transport, promise } = w.run([dirty()]);
+  const out = await promise;
+  assert.equal(out.status, 'PROPOSAL_ACCEPTED');
+  assertClean(w, out);
+  assert.deepEqual(out.artifact.usage, { inputTokens: 1200, outputTokens: 300, totalTokens: 1500, reasoningTokens: 100, videoFramesProcessed: null });
+  assert.deepEqual(out.artifact.lifecycle, { status: 'completed', errorCode: null, incompleteReason: null, refusal: false, completed: true });
+  assert.deepEqual(Object.keys(out.artifact.usage!).sort(), ['inputTokens', 'outputTokens', 'reasoningTokens', 'totalTokens', 'videoFramesProcessed']);
+  assert.deepEqual(Object.keys(out.artifact.lifecycle!).sort(), ['completed', 'errorCode', 'incompleteReason', 'refusal', 'status']);
+  assert.equal(transport.calls.length, 1);
+});
+
+test('the same holds for failed responses (not completed, wrong model, empty, rejected CSS) and the attempt stays spent after one request', async () => {
+  const cases: [string, StructuredResponse][] = [
+    ['incomplete', dirty({ lifecycle: { status: 'incomplete', completed: false, incompleteReason: 'max_output_tokens' } })],
+    ['refusal', dirty({ lifecycle: { refusal: true, completed: false } })],
+    ['error', dirty({ lifecycle: { status: 'failed', completed: false, errorCode: 'server_error' } })],
+    ['wrong model', dirty({ extra: { model: 'other-model' } })],
+    ['empty', dirty({ extra: { text: '' } })],
+    ['bad css', dirty({ extra: { text: JSON.stringify({ adjustments: [{ selector: 'body', property: 'position', value: 'fixed' }] }) } })],
+  ];
+  for (const [name, res] of cases) {
+    const w = setup({ runId: `nest-${name.replace(/\W/g, '')}` });
+    await w.approve();
+    const { transport, promise } = w.run([res, okResponse()]);
+    const out = await promise;
+    assert.notEqual(out.status, 'PROPOSAL_ACCEPTED', name);
+    assertClean(w, out);
+    assert.equal(transport.calls.length, 1, name);
+    assert.equal(status(w.runFile()), out.status, name);
+    assert.equal(await codeOf(w.run([okResponse()]).promise), 'APPROVAL_SPENT', name);
+  }
+});
+
+test('malformed numbers, codes and statuses are normalized or fail closed, never copied', async () => {
+  const cases: [string, Record<string, unknown>, Record<string, unknown>][] = [
+    ['negative/float/huge/string/NaN counts', { inputTokens: -5, outputTokens: 1.5, totalTokens: 1e12, reasoningTokens: '100', videoFramesProcessed: Number.NaN }, {}],
+    ['object counts', { inputTokens: { v: NESTED_MARKER }, outputTokens: [NESTED_MARKER] }, {}],
+    ['secret-shaped error code', {}, { status: 'failed', completed: false, errorCode: NESTED_SECRET }],
+    ['free-text incomplete reason', {}, { status: 'incomplete', completed: false, incompleteReason: `${NESTED_MARKER} with spaces` }],
+    ['oversized code', {}, { status: 'failed', completed: false, errorCode: 'a'.repeat(5000) }],
+    ['unknown status', {}, { status: `${NESTED_MARKER}-status` }],
+    ['non-boolean refusal', {}, { refusal: 'no' }],
+    ['non-boolean completed', {}, { completed: 'yes' }],
+    ['non-string code on a completed response', {}, { errorCode: { code: NESTED_MARKER } }],
+  ];
+  for (const [name, usage, lifecycle] of cases) {
+    const w = setup({ runId: `mal-${name.replace(/\W/g, '').slice(0, 20)}` });
+    await w.approve();
+    const out = await w.run([dirty({ usage, lifecycle })]).promise;
+    assertClean(w, out);
+    const u = out.artifact.usage!;
+    for (const v of Object.values(u)) assert.ok(v === null || (Number.isSafeInteger(v) && v >= 0 && v <= 1e9), `${name}: usage value ${String(v)}`);
+    const l = out.artifact.lifecycle!;
+    assert.ok(l.status === null || ['completed', 'failed', 'in_progress', 'cancelled', 'queued', 'incomplete'].includes(l.status), name);
+    for (const c of [l.errorCode, l.incompleteReason]) assert.ok(c === null || /^[A-Za-z][A-Za-z0-9_.:-]{0,63}$/.test(c), name);
+    if (name.includes('code') || name.includes('reason') || name.includes('status') || name.includes('refusal') || name.includes('completed')) assert.equal(out.status, 'PROPOSAL_FAILED', `${name} must fail closed`);
+    assert.equal(status(w.runFile()), out.status, name);
+  }
+  // malformed counts alone do not reject an otherwise valid completed proposal; they normalize to null
+  const w = setup({ runId: 'mal-counts-only' });
+  await w.approve();
+  const out = await w.run([dirty({ usage: { inputTokens: -5, outputTokens: 1.5, totalTokens: 1e12, reasoningTokens: '100', videoFramesProcessed: Number.NaN } })]).promise;
+  assert.equal(out.status, 'PROPOSAL_ACCEPTED');
+  assert.deepEqual(out.artifact.usage, { inputTokens: null, outputTokens: null, totalTokens: null, reasoningTokens: null, videoFramesProcessed: null });
+});
+
+test('a non-object usage/lifecycle or a secret-shaped request id/model is dropped; lifecycle missing fails closed', async () => {
+  const w = setup({ runId: 'shape-1' });
+  await w.approve();
+  const bad = { ...okResponse(), usage: 'x' as never, lifecycle: null as never, requestId: NESTED_SECRET, model: `${NESTED_SECRET}` };
+  const out = await w.run([bad]).promise;
+  assert.equal(out.status, 'PROPOSAL_FAILED');
+  assert.equal(out.artifact.usage, null);
+  assert.equal(out.artifact.lifecycle, null);
+  assert.equal(out.artifact.requestId, null);
+  assert.equal(out.artifact.respondedModel, null);
+  assertClean(w, out);
+});

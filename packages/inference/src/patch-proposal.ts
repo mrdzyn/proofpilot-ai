@@ -215,6 +215,52 @@ export function preflightProposal(input: { provider: Pick<InferenceProvider, 'id
   return { model, providerId: provider.id as 'meta' | 'baseten' };
 }
 
+const LIFECYCLE_STATUSES = new Set(['completed', 'failed', 'in_progress', 'cancelled', 'queued', 'incomplete']);
+const MACHINE_CODE = /^[A-Za-z][A-Za-z0-9_.:-]{0,63}$/;
+// a segment that names a credential-shaped value (sk-..., Bearer ..., key/secret/token/password) is never a machine code
+const SECRET_SHAPE = /(^|[^A-Za-z0-9])(sk|pk|key|secret|token|bearer|password|passwd|authorization)([^A-Za-z0-9]|$)/i;
+const MAX_TOKEN_COUNT = 1_000_000_000;
+const INVALID_CODE = 'INVALID_CODE';
+
+function safeCount(v: unknown): number | null {
+  return typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 && v <= MAX_TOKEN_COUNT ? v : null;
+}
+
+/** A short machine code or null. Anything else (free text, secret-shaped, oversized, non-string) becomes INVALID_CODE so a bad code can never read as "no error". */
+function safeCode(v: unknown): string | null {
+  if (v === null || v === undefined) return null;
+  return typeof v === 'string' && MACHINE_CODE.test(v) && !SECRET_SHAPE.test(v) ? v : INVALID_CODE;
+}
+
+/** Fresh usage object from the five documented counters only; unknown keys are dropped, malformed numbers become null. */
+export function sanitizeUsage(u: unknown): VideoUsage | null {
+  if (u === null || typeof u !== 'object' || Array.isArray(u)) return null;
+  const r = u as Record<string, unknown>;
+  return {
+    inputTokens: safeCount(r.inputTokens),
+    outputTokens: safeCount(r.outputTokens),
+    totalTokens: safeCount(r.totalTokens),
+    reasoningTokens: safeCount(r.reasoningTokens),
+    videoFramesProcessed: safeCount(r.videoFramesProcessed),
+  };
+}
+
+/**
+ * Fresh lifecycle object from the five documented fields only. Fails closed: an unknown status becomes null, a malformed error or
+ * incomplete code becomes INVALID_CODE, and a refusal or completed flag that is not a literal boolean reads as refusal / not completed.
+ */
+export function sanitizeLifecycle(l: unknown): ResponseLifecycle | null {
+  if (l === null || typeof l !== 'object' || Array.isArray(l)) return null;
+  const r = l as Record<string, unknown>;
+  return {
+    status: typeof r.status === 'string' && LIFECYCLE_STATUSES.has(r.status) ? r.status : null,
+    errorCode: safeCode(r.errorCode),
+    incompleteReason: safeCode(r.incompleteReason),
+    refusal: r.refusal !== false,
+    completed: r.completed === true,
+  };
+}
+
 export type ProcessedResponse = Pick<ProposalArtifact, 'respondedModel' | 'requestId' | 'usage' | 'lifecycle' | 'outputSha256' | 'outputBytes' | 'status' | 'reason' | 'forbiddenClass' | 'adjustments' | 'renderedCss'>;
 
 /**
@@ -223,11 +269,12 @@ export type ProcessedResponse = Pick<ProposalArtifact, 'respondedModel' | 'reque
  * strict parser. No I/O, no provider call.
  */
 export function processProposalResponse(res: StructuredResponse, model: string): ProcessedResponse {
+  const lifecycle = sanitizeLifecycle(res.lifecycle);
   const out: ProcessedResponse = {
-    respondedModel: typeof res.model === 'string' && /^[A-Za-z0-9._/-]{1,128}$/.test(res.model) ? res.model : null,
-    requestId: res.requestId && REQUEST_ID.test(res.requestId) ? res.requestId : null,
-    usage: res.usage,
-    lifecycle: res.lifecycle,
+    respondedModel: typeof res.model === 'string' && /^[A-Za-z0-9._/-]{1,128}$/.test(res.model) && !SECRET_SHAPE.test(res.model) ? res.model : null,
+    requestId: typeof res.requestId === 'string' && REQUEST_ID.test(res.requestId) && !SECRET_SHAPE.test(res.requestId) ? res.requestId : null,
+    usage: sanitizeUsage(res.usage),
+    lifecycle,
     outputSha256: null,
     outputBytes: null,
     status: 'PROPOSAL_FAILED',
@@ -236,7 +283,7 @@ export function processProposalResponse(res: StructuredResponse, model: string):
     adjustments: null,
     renderedCss: null,
   };
-  if (!res.lifecycle || res.lifecycle.completed !== true || res.lifecycle.status !== 'completed' || res.lifecycle.errorCode !== null || res.lifecycle.incompleteReason !== null || res.lifecycle.refusal) {
+  if (!lifecycle || lifecycle.completed !== true || lifecycle.status !== 'completed' || lifecycle.errorCode !== null || lifecycle.incompleteReason !== null || lifecycle.refusal) {
     out.reason = 'RESPONSE_NOT_COMPLETED';
   } else if (res.model !== model) {
     out.reason = 'MODEL_MISMATCH';

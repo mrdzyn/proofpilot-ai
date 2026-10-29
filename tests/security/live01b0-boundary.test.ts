@@ -105,3 +105,11 @@ test('documentation no longer mentions the removed authorizeLiveAttempt, and no 
   const tracked = execFileSync('git', ['ls-files'], { cwd: root, encoding: 'utf8' }).split('\n');
   assert.deepEqual(tracked.filter((f) => /(^|\/)\.proofpilot\/|\.consumed$|(^|\/)approvals\//.test(f)), []);
 });
+
+test('nested provider metadata is rebuilt by explicit allow-lists: processProposalResponse never copies res.usage or res.lifecycle', () => {
+  const src = code('packages/inference/src/patch-proposal.ts');
+  assert.match(src, /usage: sanitizeUsage\(res\.usage\)/);
+  assert.match(src, /sanitizeLifecycle\(res\.lifecycle\)/);
+  assert.doesNotMatch(src, /usage: res\.usage|lifecycle: res\.lifecycle|\.\.\.(r|res|u|l)\b[,\s]/);
+  assert.doesNotMatch(code(ORCH), /Object\.assign\(artifact, res\b|usage: res|lifecycle: res/);
+});
