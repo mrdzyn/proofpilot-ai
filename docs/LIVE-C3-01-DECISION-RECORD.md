@@ -43,6 +43,8 @@ After any stop the run id and slot stay spent and a **new** decision is needed f
 
 ## 4. Approval register (owner-only; empty)
 
+Two machine-read owner files exist and are both EMPTY: `config/live-authorization.json` (the decision) and `config/live-activation.json` (the pinned activation revision, a tree digest excluding itself; sequence in `tasks/PP-META-I2-C3-LIVE-01A.md`). A live attempt needs both, plus a per-run operator approval made at the pinned revision.
+
 | Decision | Approved by / date / link | Exact values approved |
 |---|---|---|
 | LIVE-C3-01 (Meta, `muse-spark-1.3`) | _none recorded_ | _none_ |

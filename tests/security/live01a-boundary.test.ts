@@ -76,6 +76,8 @@ test('MAJOR-1: the production gate derives every trusted input internally and ac
   assert.equal((gate.match(/createInstallContext\(/g) ?? []).length, 1, 'one derivation point');
   assert.doesNotMatch(gate, /createSyntheticContext|repoRoot|allowSynthetic|liveQuota|git:|register:|approvalsDir|reservationsRoot|process\.cwd|process\.argv|process\.env/);
   assert.match(gate, /export type ProductionAttempt = \{ runId: string; request: BuiltProposalRequest; provider: Pick<InferenceProvider, 'id' \| 'models'>; maxOutputTokens: number \};/, 'the argument type carries no trust parameter');
+  assert.match(gate, /const attemptOf = \(a: ProductionAttempt\): ProductionAttempt => \(\{ runId: a\?\.runId, request: a\?\.request, provider: a\?\.provider, maxOutputTokens: a\?\.maxOutputTokens \}\);/, 'only the four attempt facts are forwarded: no caller clock, store or context');
+  assert.doesNotMatch(gate, /\bnow\b/, 'the caller cannot supply a clock');
   assert.match(gate, /a\.synthetic/);
   assert.match(gate, /p\.authorized\.synthetic/);
   // no old injectable entry points remain anywhere

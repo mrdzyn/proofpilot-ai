@@ -572,6 +572,9 @@ test('MAJOR-1: forged Git state and synthetic material only ever yield a synthet
   // a production-kind context rejects synthetic decisions, pins and approvals even in a real repository
   const synthRepo = await repoWorld({ registerExtra: { synthetic: true } });
   assert.equal(await codeOf(evaluateAuthorizationCore(await synthRepo.ctx(), synthRepo.attempt)), 'SYNTHETIC_NOT_ALLOWED');
+  const cliSynth = await synthRepo.approveViaCli();
+  assert.equal(cliSynth.code, 3, 'the production CLI never records an approval against a synthetic decision');
+  assert.match(cliSynth.text, /SYNTHETIC_NOT_ALLOWED/);
   const synthPin = await repoWorld({ pinExtra: { synthetic: true } });
   assert.equal(await codeOf(evaluateAuthorizationCore(await synthPin.ctx(), synthPin.attempt)), 'SYNTHETIC_NOT_ALLOWED');
   const r = await repoWorld();

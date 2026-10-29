@@ -30,7 +30,10 @@ Run it yourself (no network, no secrets read): `node scripts/c3-proposal-preflig
 | A15 | Private records: gitignored, 0700/0600, exclusive atomic creation, symlink/hard-link/traversal/permission refusals | same file, file-attack test |
 | A16 | Fail-closed validator binds provider, model, input hash, repository SHA, clean tree, expiry, spent state and reservation | same file, refusal table; guard-removal run |
 | A17 | Approval is consumed before the reservation is claimed, state re-checked in between, crashes never release anything | same file, concurrency/crash/TOCTOU tests |
-| A18 | Repository register is EMPTY; production validator returns `LIVE_NOT_APPROVED` | `tests/security/live01a-boundary.test.ts`; `node scripts/c3-live-rehearsal.ts` |
+| A18 | Repository register and activation pin are EMPTY; production validator returns `LIVE_NOT_APPROVED` | `tests/security/live01a-boundary.test.ts`; `node scripts/c3-live-rehearsal.ts` |
+| A19 | Production API derives root, register, pin, Git state, directories and quota internally; fake roots, forged probes, synthetic approvals and simulated quotas cannot authorize | `tests/unit/live-approval.test.ts` (MAJOR-1), `tests/security/live01a-boundary.test.ts` |
+| A20 | HEAD must equal the owner-pinned activation revision; unauthorized newer clean commits are rejected by the CLI and validator | same, real-Git tests (MAJOR-2) |
+| A21 | `.proofpilot` parent and repo directory must be self-owned, non-group/other-writable real directories | same (MINOR-3) |
 
 ## B. Owner actions and decisions still required (none done)
 
@@ -48,8 +51,9 @@ Run it yourself (no network, no secrets read): `node scripts/c3-proposal-preflig
 
 - [ ] C3-LIVE-01A merged after an independent PASS.
 - [ ] Owner records the LIVE-C3-01 decision (provider Meta, model `muse-spark-1.3`, max 1 billable attempt, input ≤ 12,000 characters, output ≤ 3,072 tokens including reasoning, 0 retries, no fallback, text only, per-run approval mandatory, uncertain results spend the attempt).
-- [ ] 01B PR: register entry; `APPROVED_LIVE_QUOTA.meta` 0 → 1; `proposeCandidate` wired as authorize → prepareAttempt → one call → process → persist → settle; tests updated; no change to staging, coordinator, oracle or grammar. Independent exact-head audit PASS and merge.
-- [ ] Fresh checkout at the merged SHA, clean tree; zero-network preflight JSON kept.
+- [ ] 01B PR: register entry (commit A after merge); `APPROVED_LIVE_QUOTA.meta` 0 → 1; `proposeCandidate` wired as authorize → prepareAttempt → one call → process → persist → settle; tests updated; no change to staging, coordinator, oracle or grammar. Independent exact-head audit PASS and merge.
+- [ ] Owner runs `node scripts/c3-activation-digest.ts <A>` and records A and the digest in `config/live-activation.json` in a separate reviewed pin-only commit A' (production accepts only a HEAD whose digest, pin file excluded, equals the pinned one; any other commit is rejected).
+- [ ] Fresh checkout at A', clean tree; zero-network preflight JSON kept.
 - [ ] Owner runs `node scripts/c3-approve-live-run.ts` in a real terminal for the run id and input hash and types the exact phrase (valid 10 minutes).
 - [ ] Owner injects the Meta key for that one invocation from the secure store; agents never read it.
 - [ ] Run once; stop. Any further attempt needs a new decision. A credit balance is not permission to spend.

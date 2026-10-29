@@ -10,7 +10,7 @@
 - **Primary branch:** protected `main` at `e2e0216e922ef72b8310b3ec81e5afc4e6208fab` (PR #10 squash merge)
 - **Working branch:** `phase/pp-meta-i2-c3-live01a-approval-gate` (Draft PR; the branch head is authoritative)
 - **Active task:** `tasks/PP-META-I2-C3-LIVE-01A.md`
-- **Active handoff:** PP-META-I2-C3-LIVE-01A-A1
+- **Active handoff:** PP-META-I2-C3-LIVE-01A-A2
 - **Authorization:** Both single-use live smokes are **spent**. **APPROVED:** SEC-C3-01 (F01-only closed-grammar CSS, hand-authored controls only). **NOT APPROVED:** LIVE-C3-01 (`docs/LIVE-C3-01-DECISION-RECORD.md` is a proposal; quota 0), C3-B2B (evaluating model proposals), UI-C3-01 (report UI), HOST-C3-01 (Modal or any hosted backend). A credit balance is not permission to spend. No Meta/Baseten/Modal call, no execution of model-generated code, no deployment or merge by the agent.
 
 ## Completed milestones
@@ -85,7 +85,8 @@
 ## C3-LIVE-01A result (local; branch `phase/pp-meta-i2-c3-live01a-approval-gate`)
 - Approval architecture and limits: `tasks/PP-META-I2-C3-LIVE-01A.md`. The local operator record is **self-declared and not authenticated identity**; the repository register (empty) is the only place a live decision can exist.
 - Synthetic rehearsal (`node scripts/c3-live-rehearsal.ts`): 11 scenarios, 0 provider requests, never `VERIFIED`, production validator refuses with `LIVE_NOT_APPROVED`. A rehearsal result is **not** an authorization.
-- Test and CI evidence: see the Draft PR and handoff `PP-META-I2-C3-LIVE-01A-A1`.
+- Audit 1 (FIX REQUIRED: MAJOR-1 production boundary, MAJOR-2 owner-pinned revision, MINOR-3 ancestor permissions) remediated in handoff `PP-META-I2-C3-LIVE-01A-A2`: one production gate (`live-gate.ts`) derives root/register/pin/Git/dirs/quota internally; injectable core not exported; `config/live-activation.json` (EMPTY) pins a tree digest excluding itself; `.proofpilot` ancestors checked.
+- Test and CI evidence: see the Draft PR and the handoff.
 - C3-LIVE-01B (real activation) is **not started and not approved**.
 
 ## C3-B2A remediation (audit 1: MAJOR-1, MINOR-2)
