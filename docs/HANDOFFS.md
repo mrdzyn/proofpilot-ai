@@ -711,4 +711,26 @@ Lint and typecheck clean; unit 289/289 (a first hosted CI run at `f4227b1` faile
 ### Next action
 GPT-6 re-audit; owner decides merge and whether to record LIVE-C3-01 (then C3-LIVE-01B as a separate PR).
 
+## Handoff: PP-META-I2-C3-LIVE-01A-A3
+
+- **Task / phase:** `tasks/PP-META-I2-C3-LIVE-01A.md` (final remediation: residual MAJOR-2 of audit 2 on Draft PR #11)
+- **From:** Implementation agent (Claude Code, Claude Sonnet 5.5)
+- **To:** GPT-6 independent exact-head re-audit, then project owner
+- **Branch:** `phase/pp-meta-i2-c3-live01a-approval-gate`; code head `fa3260a0001f641aaab2a9438efd81b4059d8ae6` (audit the branch head)
+- **State:** READY FOR RE-AUDIT
+
+### Completed
+- `GitProbe.pinOnlyDescent` (real probe in `git-probe.ts`): the pinned activation commit must be an ancestor of HEAD and every commit in `A..HEAD` must be linear (no merge) and change only `config/live-activation.json` (1 to 50 commits). `checkActivation` (the single function used by both the CLI and the validator) enforces it after the existing digest checks, failing with `REVISION_NOT_APPROVED`. The A -> A' design is unchanged; MAJOR-1 and MINOR-3 fixes untouched.
+- Re-pin procedure documented (task file, SECURITY, checklist C0): another reviewed pin-only commit, or a reviewed new activation commit A2 then a pin-only commit naming it; earlier approvals stop working. Honest boundary stated: structure is enforced, authorship of the pin edit is the owner's review of that commit; a tree digest never proves an exact SHA.
+- Unchanged: quota 0, `proposeCandidate()` disabled, empty register and pin, expiry/consumption/concurrency/reservation gates, rehearsal, oracle, staging, `VERIFIED` semantics. No genuine approval, provider/Modal call or credential read.
+
+### Validation (local)
+Lint and typecheck clean; unit 294/294; security 58/58; integration 29/29; `f01:baseline` exit 0 certified; `test:e2e:f01` exit 1 (expected); real C3-B1 run PC-1 `VERIFIED` 3/3, scoreboard re-verified; rehearsal 0 provider requests. Real disposable Git repositories: A then pin-only A' accepted; A' then `--allow-empty` refused (digest identical, asserted); revert/recommit refused; empty commit before the pin refused; merge refused; same-tree sibling as pinned commit refused; code/config/pin-reference changes and pin+code bundles refused; both documented re-pin paths accepted; every refusal asserted at both the validator and the CLI; chain bound and bad input fail closed. Guard removal on the revision-identity boundary: 12 of 12 mutants killed. Hosted CI: see the Draft PR.
+
+### Open questions for the reviewer
+- Is structural enforcement (pin-only linear descent from the pinned commit) plus owner review of the pin commit an acceptable statement of the boundary, given git cannot authenticate the pin commit's SHA from inside its tree?
+
+### Next action
+GPT-6 re-audit; owner decides merge and whether to record LIVE-C3-01 (then C3-LIVE-01B as a separate PR).
+
 <!-- HANDOFF_ENTRIES_END -->
