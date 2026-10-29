@@ -663,4 +663,74 @@ Unit 262/262, security 50/50, integration 29/29, baseline certified, real C3-B1 
 ### Next action
 GPT-6 re-audit; owner decides merge and later gates.
 
+## Handoff: PP-META-I2-C3-LIVE-01A-A1
+
+- **Task / phase:** `tasks/PP-META-I2-C3-LIVE-01A.md` (human approval and live-activation safety gate; implementation and mock tests only)
+- **From:** Implementation agent (Claude Code, Claude Sonnet 5.5)
+- **To:** GPT-6 independent exact-head review, then project owner
+- **Branch:** `phase/pp-meta-i2-c3-live01a-approval-gate` from `main` `e2e0216e922ef72b8310b3ec81e5afc4e6208fab`; code head `7079aadc3f98b323bc35338bf5a4b9313259df75` (audit the branch head)
+- **State:** READY FOR REVIEW
+
+### Completed
+- STATUS corrected (PR #10 merged; `main` at `e2e0216`); task contract written.
+- `live-approval.ts` (records, private file handling, decision register, fail-closed validator, `consumeApproval`, `prepareAttempt`, `listStrandedApprovals`), `approval-cli.ts` + `scripts/c3-approve-live-run.ts` (TTY-only, exact phrase, self-declared, refuses without an approved register decision), `git-probe.ts`, `live-rehearsal.ts` + `scripts/c3-live-rehearsal.ts` (zero-network, synthetic), `inspectReservation` (read-only), EMPTY `config/live-authorization.json`.
+- Docs: STATUS, SECURITY, TESTING, decision record, activation checklist (incl. the C3-LIVE-01B checklist), this handoff. All approval registers stay unapproved.
+- Unchanged: `APPROVED_LIVE_QUOTA` (0), `proposeCandidate()` (disabled), `verifier/`, fixtures, patch policy and grammar, `candidate-stage.ts`, the coordinator. No Meta/Baseten/Modal call, no credential read, no genuine approval (`.proofpilot/approvals` does not exist), no model-derived CSS executed, no UI.
+
+### Validation (local, code head)
+Lint and typecheck clean; unit 283/283; security 56/56; integration 29/29; `f01:baseline` exit 0 certified; `test:e2e:f01` exit 1 (expected); real C3-B1 run PC-1 `VERIFIED` 3/3 and scoreboard re-verified; rehearsal 11 scenarios, 0 provider requests, never `VERIFIED`, production validator `LIVE_NOT_APPROVED`; piped invocation of the approval CLI exits 2. Guard-removal: 37 mutants on the validator/CLI, 34 killed (2 after adding tests for exclusive consume and re-approval of a consumed run id); 3 survivors are redundant defence in depth (provider/model re-compare after the model is already pinned, `isSymbolicLink` next to `lstat`+`isDirectory`, synthetic-record check next to the decision check). Hosted CI: see the Draft PR.
+
+### Open questions for the reviewer
+- Is the self-declared record plus empty register the right trust split, and is the consume-then-reserve order with fail-closed recovery sound?
+- Is the 01B diff and authorization sequence in the task file precise enough?
+
+### Next action
+GPT-6 review; owner decides merge and whether/how to record LIVE-C3-01 (then C3-LIVE-01B as a separate PR).
+
+## Handoff: PP-META-I2-C3-LIVE-01A-A2
+
+- **Task / phase:** `tasks/PP-META-I2-C3-LIVE-01A.md` (remediation of audit 1 on Draft PR #11)
+- **From:** Implementation agent (Claude Code, Claude Sonnet 5.5)
+- **To:** GPT-6 independent exact-head re-audit, then project owner
+- **Branch:** `phase/pp-meta-i2-c3-live01a-approval-gate`; code head: see the Draft PR (audit the branch head; `45fce66` plus the rehearsal-layout fix)
+- **State:** READY FOR RE-AUDIT
+
+### Completed
+- MAJOR-1: `live-gate.ts` is the only production API (`authorizeProductionAttempt`, `prepareProductionAttempt`, `runProductionApprovalCli`); it derives install root, register, activation pin, real Git probe, directories and quota internally and forwards only four attempt facts (no caller clock/store/context). Logic moved to `live-gate-core.ts` behind a `TrustContext` (`createInstallContext` / `createSyntheticContext`); the core, the context-taking CLI logic and the record primitives are not exported from the index; static tests restrict importers. Old injectable `authorizeLiveAttempt` / `prepareAttempt` / `allowSynthetic` are gone. The CLI now also refuses while the code quota is 0.
+- MAJOR-2: `config/live-activation.json` (EMPTY) pins an activation commit and a tree digest that excludes the pin file (non-circular; sequence in the task file and checklist C0, plus the read-only `scripts/c3-activation-digest.ts`). Production and the CLI reject any HEAD whose digest differs (`REVISION_NOT_APPROVED`), a missing pin (`ACTIVATION_NOT_PINNED`) and a pin that disagrees with its commit or the register reference (`ACTIVATION_MISMATCH`); approvals bind HEAD, activation commit and digest.
+- MINOR-3: `ensureApprovalsDir` requires `.proofpilot` and the repository directory to be real, self-owned and not group/other-writable (refused, never chmod-ed); approvals dir stays 0700.
+- Unchanged: quota 0, `proposeCandidate()` disabled, empty register, single-use approvals and reservations, 11-scenario zero-network rehearsal, F01 oracle, staging, `VERIFIED` semantics. No genuine approval (`.proofpilot/approvals` absent), no provider/Modal call, no credential read.
+
+### Validation (local)
+Lint and typecheck clean; unit 289/289 (a first hosted CI run at `f4227b1` failed because the rehearsal's temp layout put the approvals directory directly under the shared system temp dir, which the new ancestor check correctly refused; the rehearsal now uses a private `<tmp>/.proofpilot/...` layout and a regression test runs it under a world-writable sticky TMPDIR); security 58/58; integration 29/29; `f01:baseline` exit 0 certified; `test:e2e:f01` exit 1 (expected); real C3-B1 run PC-1 `VERIFIED` 3/3 and scoreboard re-verified; rehearsal 0 provider requests; piped approval CLI exit 2. New tests use real throw-away Git repositories for the valid-revision, unauthorized-newer-commit, pin-only re-record, changed-reference, wrong-digest, missing-commit and dirty-tree cases, a simulated positive quota against the real repository, and ancestor modes 0777/0775/0757/0722, symlinked and non-directory parents. Guard removal: 30 mutants on the new boundary, 28 killed (4 initial survivors: 2 killed after adding a static clock/argument-pick check and a production-CLI-vs-synthetic-decision test); 2 remain: the ancestor owner-uid check (needs a second OS user) and `isSymbolicLink` next to `lstat`+`isDirectory` (redundant). Hosted CI: see the Draft PR.
+
+### Open questions for the reviewer
+- Is a tree digest excluding the pin file, pinned in a separate pin-only commit, an acceptable non-circular owner binding?
+- Is exporting only the production gate from the index and restricting core importers by static test enough isolation?
+
+### Next action
+GPT-6 re-audit; owner decides merge and whether to record LIVE-C3-01 (then C3-LIVE-01B as a separate PR).
+
+## Handoff: PP-META-I2-C3-LIVE-01A-A3
+
+- **Task / phase:** `tasks/PP-META-I2-C3-LIVE-01A.md` (final remediation: residual MAJOR-2 of audit 2 on Draft PR #11)
+- **From:** Implementation agent (Claude Code, Claude Sonnet 5.5)
+- **To:** GPT-6 independent exact-head re-audit, then project owner
+- **Branch:** `phase/pp-meta-i2-c3-live01a-approval-gate`; code head `fa3260a0001f641aaab2a9438efd81b4059d8ae6` (audit the branch head)
+- **State:** READY FOR RE-AUDIT
+
+### Completed
+- `GitProbe.pinOnlyDescent` (real probe in `git-probe.ts`): the pinned activation commit must be an ancestor of HEAD and every commit in `A..HEAD` must be linear (no merge) and change only `config/live-activation.json` (1 to 50 commits). `checkActivation` (the single function used by both the CLI and the validator) enforces it after the existing digest checks, failing with `REVISION_NOT_APPROVED`. The A -> A' design is unchanged; MAJOR-1 and MINOR-3 fixes untouched.
+- Re-pin procedure documented (task file, SECURITY, checklist C0): another reviewed pin-only commit, or a reviewed new activation commit A2 then a pin-only commit naming it; earlier approvals stop working. Honest boundary stated: structure is enforced, authorship of the pin edit is the owner's review of that commit; a tree digest never proves an exact SHA.
+- Unchanged: quota 0, `proposeCandidate()` disabled, empty register and pin, expiry/consumption/concurrency/reservation gates, rehearsal, oracle, staging, `VERIFIED` semantics. No genuine approval, provider/Modal call or credential read.
+
+### Validation (local)
+Lint and typecheck clean; unit 294/294; security 58/58; integration 29/29; `f01:baseline` exit 0 certified; `test:e2e:f01` exit 1 (expected); real C3-B1 run PC-1 `VERIFIED` 3/3, scoreboard re-verified; rehearsal 0 provider requests. Real disposable Git repositories: A then pin-only A' accepted; A' then `--allow-empty` refused (digest identical, asserted); revert/recommit refused; empty commit before the pin refused; merge refused; same-tree sibling as pinned commit refused; code/config/pin-reference changes and pin+code bundles refused; both documented re-pin paths accepted; every refusal asserted at both the validator and the CLI; chain bound and bad input fail closed. Guard removal on the revision-identity boundary: 12 of 12 mutants killed. Hosted CI: see the Draft PR.
+
+### Open questions for the reviewer
+- Is structural enforcement (pin-only linear descent from the pinned commit) plus owner review of the pin commit an acceptable statement of the boundary, given git cannot authenticate the pin commit's SHA from inside its tree?
+
+### Next action
+GPT-6 re-audit; owner decides merge and whether to record LIVE-C3-01 (then C3-LIVE-01B as a separate PR).
+
 <!-- HANDOFF_ENTRIES_END -->

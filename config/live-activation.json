@@ -1,0 +1,5 @@
+{
+  "schemaVersion": 1,
+  "note": "Owner-pinned activation revision for LIVE-C3-01. EMPTY (null): nothing is pinned, so production authorization fails with ACTIVATION_NOT_PINNED. The digest covers every tracked file EXCEPT this one (see docs/META-ACTIVATION-CHECKLIST.md section C0 for the non-circular sequence). Filling it in is a separate, reviewed, owner-approved commit.",
+  "activation": null
+}

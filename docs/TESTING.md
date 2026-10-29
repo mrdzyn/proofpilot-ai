@@ -248,6 +248,15 @@ Before release:
 - complete platform/store-specific checks;
 - complete the applicable release QA/manual validation gate.
 
+## C3-LIVE-01A approval-gate checks (zero network, synthetic)
+
+- `tests/unit/live-approval.test.ts`: single use, every mismatch/expiry/replay/forgery refusal, file attacks (symlink, hard link, traversal, loose modes), concurrent use, crash points, TOCTOU re-checks, the interactive CLI (non-TTY, wrong/replayed confirmation, dirty tree, no approved decision) and the 11-scenario rehearsal under a global `fetch` trap.
+- `tests/security/live01a-boundary.test.ts`: empty register, quota 0, entry point disabled, no provider/env/credential/execution code in the approval modules, staging runner and coordinator never import them, test-only injection is unreachable from production, records gitignored and untracked, fixed fail-closed order.
+- `node scripts/c3-live-rehearsal.ts` is the zero-network rehearsal (synthetic; not an authorization). `scripts/c3-approve-live-run.ts` needs a real terminal and refuses today because no decision is approved; do not run it to create a real record in this milestone.
+- Remediation tests (MAJOR-1/2, MINOR-3): production API ignores forged roots, probes, registers, quotas and clocks; a simulated positive quota against the real repository still authorizes nothing; real throw-away Git repositories prove a valid owner-pinned revision, an unauthorized newer clean commit, a pin-only re-record, a changed decision reference, a wrong digest/missing commit and dirty trees; ancestor-directory modes 0777/0775/0757/0722, symlinked and non-directory parents; static tests restrict importers of the injectable core.
+- Revision-identity tests (residual MAJOR-2): real disposable Git repositories show A then pin-only A' accepted, A' then `--allow-empty` refused, revert/recommit refused, an empty commit before the pin refused, a merge refused, a same-tree sibling as the pinned commit refused, code/config/pin-reference changes refused, a pin+code bundle refused, and the documented re-pin procedures accepted; every refusal is asserted at both the validator and the CLI.
+- Guard-removal testing: each check on the authorization boundary was removed one at a time and the two test files re-run; see the PR for the result.
+
 ## C3-B2A readiness checks (zero network)
 
 - `node scripts/c3-proposal-preflight.ts [--provider meta|baseten] [--write]` runs the deterministic offline preflight (mock literals only; `--check-credentials` reports a boolean and only when authorized). Exit 0 means the technical checks passed and says nothing about authorization.
