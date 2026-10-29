@@ -723,3 +723,20 @@ test('MINOR-3: an unsafe existing .proofpilot parent or repository directory is 
   await ensureApprovalsDir(fresh);
   assert.equal(statSync(path.dirname(fresh)).mode & 0o777, 0o700);
 });
+
+test('the rehearsal works when the system temp directory is shared (world-writable, sticky), as on CI runners', async () => {
+  const shared = path.join(tempDir(), 'shared-tmp');
+  mkdirSync(shared);
+  chmodSync(shared, 0o1777);
+  const saved = process.env.TMPDIR;
+  process.env.TMPDIR = shared;
+  try {
+    const r = await runActivationRehearsal({ symptom, facts });
+    assert.equal(r.ok, true);
+    assert.equal(r.proposal?.status, 'PROPOSAL_ACCEPTED');
+    assert.deepEqual(readdirSync(shared), [], 'the disposable directory is removed');
+  } finally {
+    if (saved === undefined) delete process.env.TMPDIR;
+    else process.env.TMPDIR = saved;
+  }
+});

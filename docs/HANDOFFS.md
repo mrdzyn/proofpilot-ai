@@ -692,7 +692,7 @@ GPT-6 review; owner decides merge and whether/how to record LIVE-C3-01 (then C3-
 - **Task / phase:** `tasks/PP-META-I2-C3-LIVE-01A.md` (remediation of audit 1 on Draft PR #11)
 - **From:** Implementation agent (Claude Code, Claude Sonnet 5.5)
 - **To:** GPT-6 independent exact-head re-audit, then project owner
-- **Branch:** `phase/pp-meta-i2-c3-live01a-approval-gate`; code head `45fce66bc8da3bef33e43bf862fdc0924c6ce7c3` (audit the branch head)
+- **Branch:** `phase/pp-meta-i2-c3-live01a-approval-gate`; code head: see the Draft PR (audit the branch head; `45fce66` plus the rehearsal-layout fix)
 - **State:** READY FOR RE-AUDIT
 
 ### Completed
@@ -702,7 +702,7 @@ GPT-6 review; owner decides merge and whether/how to record LIVE-C3-01 (then C3-
 - Unchanged: quota 0, `proposeCandidate()` disabled, empty register, single-use approvals and reservations, 11-scenario zero-network rehearsal, F01 oracle, staging, `VERIFIED` semantics. No genuine approval (`.proofpilot/approvals` absent), no provider/Modal call, no credential read.
 
 ### Validation (local)
-Lint and typecheck clean; unit 288/288; security 58/58; integration 29/29; `f01:baseline` exit 0 certified; `test:e2e:f01` exit 1 (expected); real C3-B1 run PC-1 `VERIFIED` 3/3 and scoreboard re-verified; rehearsal 0 provider requests; piped approval CLI exit 2. New tests use real throw-away Git repositories for the valid-revision, unauthorized-newer-commit, pin-only re-record, changed-reference, wrong-digest, missing-commit and dirty-tree cases, a simulated positive quota against the real repository, and ancestor modes 0777/0775/0757/0722, symlinked and non-directory parents. Guard removal: 30 mutants on the new boundary, 28 killed (4 initial survivors: 2 killed after adding a static clock/argument-pick check and a production-CLI-vs-synthetic-decision test); 2 remain: the ancestor owner-uid check (needs a second OS user) and `isSymbolicLink` next to `lstat`+`isDirectory` (redundant). Hosted CI: see the Draft PR.
+Lint and typecheck clean; unit 289/289 (a first hosted CI run at `f4227b1` failed because the rehearsal's temp layout put the approvals directory directly under the shared system temp dir, which the new ancestor check correctly refused; the rehearsal now uses a private `<tmp>/.proofpilot/...` layout and a regression test runs it under a world-writable sticky TMPDIR); security 58/58; integration 29/29; `f01:baseline` exit 0 certified; `test:e2e:f01` exit 1 (expected); real C3-B1 run PC-1 `VERIFIED` 3/3 and scoreboard re-verified; rehearsal 0 provider requests; piped approval CLI exit 2. New tests use real throw-away Git repositories for the valid-revision, unauthorized-newer-commit, pin-only re-record, changed-reference, wrong-digest, missing-commit and dirty-tree cases, a simulated positive quota against the real repository, and ancestor modes 0777/0775/0757/0722, symlinked and non-directory parents. Guard removal: 30 mutants on the new boundary, 28 killed (4 initial survivors: 2 killed after adding a static clock/argument-pick check and a production-CLI-vs-synthetic-decision test); 2 remain: the ancestor owner-uid check (needs a second OS user) and `isSymbolicLink` next to `lstat`+`isDirectory` (redundant). Hosted CI: see the Draft PR.
 
 ### Open questions for the reviewer
 - Is a tree digest excluding the pin file, pinned in a separate pin-only commit, an acceptable non-circular owner binding?

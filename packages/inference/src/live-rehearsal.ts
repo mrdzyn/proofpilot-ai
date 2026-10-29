@@ -69,8 +69,9 @@ export async function runActivationRehearsal(input: { symptom: Symptom; facts: T
   const steps: RehearsalStep[] = [];
   const step = (id: string, ok: boolean, detail: string) => steps.push({ id, ok, detail });
   const dir = await mkdtemp(path.join(os.tmpdir(), 'pp-rehearsal-'));
-  const approvalsDir = path.join(dir, 'approvals');
-  const reservationsRoot = path.join(dir, 'reservations');
+  // same layout as the real tree (<root>/.proofpilot/...), so the ancestor checks see a private root even when the system temp dir is shared
+  const approvalsDir = path.join(dir, '.proofpilot', 'approvals');
+  const reservationsRoot = path.join(dir, '.proofpilot', 'reservations');
   const evidenceRoot = path.join(dir, 'evidence');
   let proposal: RehearsalReport['proposal'] = null;
   let productionValidatorRefusal: string | null = null;
