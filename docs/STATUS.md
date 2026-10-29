@@ -5,12 +5,12 @@
 ## Project
 
 - **Name:** ProofPilot AI — Meta Global AI Developer Hackathon (Push the Frontier)
-- **Current phase:** PP-META-I2-C3-LIVE-01A — human approval and live-activation safety gate (implementation and mock tests only; awaiting independent exact-head review)
-- **Status:** C3-B2A (PR #10) is **merged** after an independent PASS; protected `main` is `e2e0216e922ef72b8310b3ec81e5afc4e6208fab`. C3-LIVE-01A adds a TTY-only operator-approval CLI, private single-use approval records, a fail-closed authorization validator, an atomic approval-then-reservation order with documented crash recovery, an EMPTY decision register (`config/live-authorization.json`) and a zero-network SYNTHETIC rehearsal. **No genuine approval exists:** LIVE-C3-01 is **NOT APPROVED**, the live quota is a frozen code constant of 0, the production proposal entry point is hard-disabled, and no provider, Modal or model call was made.
-- **Primary branch:** protected `main` at `e2e0216e922ef72b8310b3ec81e5afc4e6208fab` (PR #10 squash merge)
-- **Working branch:** `phase/pp-meta-i2-c3-live01a-approval-gate` (Draft PR; the branch head is authoritative)
-- **Active task:** `tasks/PP-META-I2-C3-LIVE-01A.md`
-- **Active handoff:** PP-META-I2-C3-LIVE-01A-A3
+- **Current phase:** PP-META-I2-C3-LIVE-01B0 — Meta proposal integration, mock-only (awaiting independent exact-head review)
+- **Status:** C3-LIVE-01A (PR #11) is **merged** after an independent PASS; protected `main` is `5e9b73c0a412c9546bfd8026f63224af75f5afc3`. C3-LIVE-01B0 adds the proposal orchestration (preflight → authorize/consume/claim → one scripted response → strict validation → sanitized `UNTRUSTED PROPOSAL — NOT VERIFIED` artifact → settle → stop), runnable only against a synthetic context and a data-only scripted transport. **Nothing is enabled:** LIVE-C3-01 is **NOT APPROVED**, the live quota is a frozen code constant of 0, `proposeCandidate()` is hard-disabled, the register and activation pin are empty, no genuine approval exists, and no provider, Modal or model call was made.
+- **Primary branch:** protected `main` at `5e9b73c0a412c9546bfd8026f63224af75f5afc3` (PR #11 squash merge)
+- **Working branch:** `phase/pp-meta-i2-c3-live01b0-proposal-integration` (Draft PR; the branch head is authoritative)
+- **Active task:** `tasks/PP-META-I2-C3-LIVE-01B0.md`
+- **Active handoff:** PP-META-I2-C3-LIVE-01B0-A1
 - **Authorization:** Both single-use live smokes are **spent**. **APPROVED:** SEC-C3-01 (F01-only closed-grammar CSS, hand-authored controls only). **NOT APPROVED:** LIVE-C3-01 (`docs/LIVE-C3-01-DECISION-RECORD.md` is a proposal; quota 0), C3-B2B (evaluating model proposals), UI-C3-01 (report UI), HOST-C3-01 (Modal or any hosted backend). A credit balance is not permission to spend. No Meta/Baseten/Modal call, no execution of model-generated code, no deployment or merge by the agent.
 
 ## Completed milestones
@@ -72,8 +72,9 @@
 | C3-A proposal validator + adapter + reservations | **MERGED** (PR #8, independent audit PASS); production entry point hard-disabled |
 | C3-B1 offline coordinator, 3-replay VERIFIED logic, scoreboard, DID-1 (hand-authored controls) | **MERGED** (PR #9, independent PASS) |
 | C3-B2A pre-live readiness (preflight, coordinator guard, Baseten discovery procedure, LIVE-C3-01 record, Meta checklist, Modal update) | **MERGED** (PR #10, independent PASS after remediation of MAJOR-1 control provenance and MINOR-2 key-field read) |
-| C3-LIVE-01A human approval and live-activation safety gate (operator approval CLI, private single-use records, fail-closed validator, empty register, synthetic rehearsal) | **IMPLEMENTED** (mock/synthetic only); independent review PENDING; no genuine approval exists |
-| C3-LIVE-01B real activation of one Meta proposal attempt | NOT STARTED; **NOT APPROVED** |
+| C3-LIVE-01A human approval and live-activation safety gate (operator approval CLI, private single-use records, fail-closed validator, empty register, synthetic rehearsal) | **MERGED** (PR #11, independent PASS after two remediation rounds) |
+| C3-LIVE-01B0 Meta proposal integration (synthetic orchestration, scripted transport, no production runner) | **IMPLEMENTED** (mock only); independent review PENDING |
+| C3-LIVE-01B real activation of one Meta proposal attempt | NOT STARTED; **NOT APPROVED** (exact diff proposed in `tasks/PP-META-I2-C3-LIVE-01B0.md`, not applied) |
 | LIVE-C3-01 first bounded Muse Spark proposal | **NOT APPROVED** (`docs/LIVE-C3-01-DECISION-RECORD.md`); needs owner approval, per-run operator approval, and a separately reviewed code change |
 | C3-B2B model proposals through staging and the coordinator | NOT STARTED and **gated in code** (`assertHandAuthoredControls`); needs its own owner authorization, a reviewed change and a new provenance label |
 | C3-C scoreboard report UI, C3-D report + replay + audit, C3-E demo, C3-F submission | NOT STARTED (UI-C3-01 not approved) |
@@ -82,7 +83,11 @@
 | Muse Wonder as patcher | UNVERIFIED and not a dependency |
 | Baseten | NOT TESTED |
 
-## C3-LIVE-01A result (local; branch `phase/pp-meta-i2-c3-live01a-approval-gate`)
+## C3-LIVE-01B0 result (local; branch `phase/pp-meta-i2-c3-live01b0-proposal-integration`)
+- Orchestration, isolation and failure matrix: `tasks/PP-META-I2-C3-LIVE-01B0.md`. Synthetic and scripted only; a synthetic result is **not** an authorization and an accepted proposal is **not** verified.
+- Test and CI evidence: see the Draft PR and handoff `PP-META-I2-C3-LIVE-01B0-A1`.
+
+## C3-LIVE-01A result (merged PR #11; branch `phase/pp-meta-i2-c3-live01a-approval-gate`; branch `phase/pp-meta-i2-c3-live01a-approval-gate`)
 - Approval architecture and limits: `tasks/PP-META-I2-C3-LIVE-01A.md`. The local operator record is **self-declared and not authenticated identity**; the repository register (empty) is the only place a live decision can exist.
 - Synthetic rehearsal (`node scripts/c3-live-rehearsal.ts`): 11 scenarios, 0 provider requests, never `VERIFIED`, production validator refuses with `LIVE_NOT_APPROVED`. A rehearsal result is **not** an authorization.
 - Audit 1 (FIX REQUIRED: MAJOR-1 production boundary, MAJOR-2 owner-pinned revision, MINOR-3 ancestor permissions) remediated in handoff `PP-META-I2-C3-LIVE-01A-A2`: one production gate (`live-gate.ts`) derives root/register/pin/Git/dirs/quota internally; injectable core not exported; `config/live-activation.json` (EMPTY) pins a tree digest excluding itself; `.proofpilot` ancestors checked.
@@ -184,7 +189,7 @@
 
 ## Next action
 
-1. Independent exact-head review of the C3-LIVE-01A Draft PR (hosted CI plus the evidence above).
+1. Independent exact-head review of the C3-LIVE-01B0 Draft PR (hosted CI plus the evidence above).
 2. Owner decisions, none started: merge; whether to approve the per-run operator-approval design; whether and with what exact values to record LIVE-C3-01 (then C3-LIVE-01B as a separate PR and audit); run the Baseten discovery yourself; decide separately on C3-B2B, HOST-C3-01 (Modal) and UI-C3-01 (report).
 
 Submission deadline: Nov 4, 9:00 PM EST = **Nov 5, 10:00 AM PHT**; internal target is Nov 4 PHT.
