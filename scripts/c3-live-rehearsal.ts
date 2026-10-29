@@ -9,7 +9,7 @@ import { parseSymptom } from '../packages/core/src/index.ts';
 import { runActivationRehearsal, trustedFactsFromBaseline, type MockScenario } from '../packages/inference/src/index.ts';
 
 const ALL: MockScenario[] = ['accepted', 'refusal', 'incomplete', 'missing-status', 'wrong-model', 'empty', 'malformed', 'forbidden', 'out-of-grammar', 'provider-error', 'duplicate-run'];
-const repoRoot = path.resolve(import.meta.dirname, '..');
+const repoRoot = path.resolve(import.meta.dirname, '..'); // only for the optional --write output
 let values;
 try {
   ({ values } = parseArgs({ options: { scenario: { type: 'string' }, write: { type: 'boolean' } }, strict: true }));
@@ -38,7 +38,7 @@ const symptom = parseSymptom(
 );
 const facts = trustedFactsFromBaseline({ viewport: { width: 390, height: 844 }, tapPoint: { x: 195, y: 700 }, hitTestTarget: 'promo-overlay', cartCountBefore: '0', cartCountAfter: '0' }, true);
 const reports = [];
-for (const scenario of wanted === 'all' ? ALL : [wanted as MockScenario]) reports.push(await runActivationRehearsal({ symptom, facts, scenario, repoRoot }));
+for (const scenario of wanted === 'all' ? ALL : [wanted as MockScenario]) reports.push(await runActivationRehearsal({ symptom, facts, scenario, checkProduction: true }));
 
 console.log('=== C3-LIVE-01A activation rehearsal — SYNTHETIC, ZERO NETWORK, NOT A GENUINE AUTHORIZATION ===');
 for (const r of reports) {

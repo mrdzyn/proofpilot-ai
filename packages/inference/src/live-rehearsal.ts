@@ -17,12 +17,14 @@ import {
   buildProposalRequest, failureReason, PROPOSAL_LABEL, PROPOSAL_LIMITS, persistProposalArtifact, processProposalResponse, META_PROPOSAL_MODEL,
   type ProposalArtifact, type TrustedReproductionFacts,
 } from './patch-proposal.ts';
-import { createReservationStore } from './reservations.ts';
-import { authorizeLiveAttempt, AuthorizationError, DECISION_ID, parseDecisionRegister, prepareAttempt, type GitProbe } from './live-approval.ts';
+import { AuthorizationError, DECISION_ID, parseActivationPin, parseDecisionRegister, type GitProbe } from './live-approval.ts';
+import { createSyntheticContext, prepareAttemptCore } from './live-gate-core.ts';
+import { authorizeProductionAttempt } from './live-gate.ts';
 import { confirmationPhrase, runApprovalCli, type ApprovalIo } from './approval-cli.ts';
 
 export const REHEARSAL_LABEL = 'SYNTHETIC REHEARSAL — NOT A GENUINE AUTHORIZATION' as const;
 const SYNTHETIC_SHA = 'a'.repeat(40);
+const SYNTHETIC_DIGEST = 'e'.repeat(64);
 const PV1 = JSON.stringify({ adjustments: [{ selector: '.promo-overlay', property: 'pointer-events', value: 'none' }] });
 
 export type MockScenario = 'accepted' | 'refusal' | 'incomplete' | 'missing-status' | 'wrong-model' | 'empty' | 'malformed' | 'forbidden' | 'out-of-grammar' | 'provider-error' | 'duplicate-run';
@@ -61,7 +63,7 @@ export type RehearsalReport = {
 /** Scripted stand-in for the terminal (this is what makes it synthetic): it answers the two prompts. */
 const scriptedTerminal = (answers: string[]): ApprovalIo => ({ stdinIsTTY: true, stdoutIsTTY: true, ask: async () => answers.shift() ?? '', print: () => undefined });
 
-export async function runActivationRehearsal(input: { symptom: Symptom; facts: TrustedReproductionFacts; scenario?: MockScenario; repoRoot?: string; now?: () => Date }): Promise<RehearsalReport> {
+export async function runActivationRehearsal(input: { symptom: Symptom; facts: TrustedReproductionFacts; scenario?: MockScenario; checkProduction?: boolean; now?: () => Date }): Promise<RehearsalReport> {
   const scenario = input.scenario ?? 'accepted';
   const now = input.now ?? (() => new Date('2026-10-30T00:00:00.000Z'));
   const steps: RehearsalStep[] = [];
@@ -78,20 +80,22 @@ export async function runActivationRehearsal(input: { symptom: Symptom; facts: T
     step('request-built', request.chars <= PROPOSAL_LIMITS.maxInputChars, `${request.chars} characters; sha256 ${request.inputSha256.slice(0, 12)}…`);
 
     const register = parseDecisionRegister(JSON.stringify({ schemaVersion: 1, decisions: [{ decisionId: DECISION_ID, status: 'APPROVED', provider: 'meta', model: META_PROPOSAL_MODEL, maxBillableAttempts: 1, maxInputChars: 12_000, maxOutputTokens: 3_072, approvedBy: 'SYNTHETIC-REHEARSAL', approvedAt: '2026-10-30T00:00:00.000Z', reference: 'synthetic: not a real decision', synthetic: true }] }));
-    const git: GitProbe = { head: async () => SYNTHETIC_SHA, clean: async () => true }; // synthetic repository facts
+    const pin = parseActivationPin(JSON.stringify({ schemaVersion: 1, activation: { decisionId: DECISION_ID, decisionReference: 'synthetic: not a real decision', activationCommit: SYNTHETIC_SHA, activationDigest: SYNTHETIC_DIGEST, recordedBy: 'SYNTHETIC-REHEARSAL', recordedAt: '2026-10-30T00:00:00.000Z', reference: 'synthetic', synthetic: true } }));
+    const git: GitProbe = { head: async () => SYNTHETIC_SHA, clean: async () => true, treeDigest: async () => SYNTHETIC_DIGEST }; // synthetic repository facts
+    // a synthetic context: it can never be used by the production API, and a synthetic quota applies to the temp tree only
+    const ctx = createSyntheticContext({ register, pin, git, approvalsDir, reservationsRoot, liveQuota: 1 });
     const code = await runApprovalCli(['--run-id', runId, '--input-sha256', request.inputSha256, '--input-chars', String(request.chars)], {
-      io: scriptedTerminal(['SYNTHETIC-REHEARSAL', confirmationPhrase(runId, request.inputSha256)]), git, register, approvalsDir, reservationsRoot, now, synthetic: true,
+      io: scriptedTerminal(['SYNTHETIC-REHEARSAL', confirmationPhrase(runId, request.inputSha256)]), ctx, now,
     });
     step('simulated-approval-recorded', code === 0, 'a synthetic, self-declared record in a disposable directory (scripted terminal, synthetic decision)');
 
     const provider = { id: 'meta' as const, models: { visual: META_PROPOSAL_MODEL } };
-    const common = { approvalsDir, reservationsRoot, runId, request, provider, maxOutputTokens: PROPOSAL_LIMITS.maxOutputTokens, git, now };
-    const store = createReservationStore(reservationsRoot);
-    const injected = { register, liveQuota: 1, allowSynthetic: true }; // synthetic quota for the temp tree only
+    const attempt = { runId, request, provider, maxOutputTokens: PROPOSAL_LIMITS.maxOutputTokens, now };
+    const store = ctx.store;
     if (scenario === 'duplicate-run') await store.claim({ providerId: 'meta', runId, quota: 1 });
     let prepared;
     try {
-      prepared = await prepareAttempt(common, injected, store);
+      prepared = await prepareAttemptCore(ctx, attempt);
       step('authorized-and-reserved', true, `approval consumed, reservation slot ${prepared.claim.slot} claimed (synthetic)`);
     } catch (e) {
       const expected = scenario === 'duplicate-run' && e instanceof AuthorizationError && e.code === 'RESERVATION_SPENT';
@@ -120,13 +124,13 @@ export async function runActivationRehearsal(input: { symptom: Symptom; facts: T
     }
 
     // the production path, against the repository's real register, must refuse: nothing is approved
-    if (input.repoRoot) {
+    if (input.checkProduction) {
       try {
-        await authorizeLiveAttempt({ ...common, repoRoot: input.repoRoot, approvalsDir: path.join(dir, 'none') });
+        await authorizeProductionAttempt({ runId, request, provider, maxOutputTokens: PROPOSAL_LIMITS.maxOutputTokens });
         step('production-validator-refuses', false, 'the production validator authorized something it must not');
       } catch (e) {
         productionValidatorRefusal = e instanceof AuthorizationError ? e.code : 'ERROR';
-        step('production-validator-refuses', e instanceof AuthorizationError && e.code === 'LIVE_NOT_APPROVED', `production validator: ${productionValidatorRefusal} (the repository register holds no approved decision)`);
+        step('production-validator-refuses', e instanceof AuthorizationError && e.code === 'LIVE_NOT_APPROVED', `production validator: ${productionValidatorRefusal} (the repository register holds no approved decision and no activation revision is pinned)`);
       }
     }
   } finally {

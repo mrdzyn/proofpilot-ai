@@ -1,7 +1,8 @@
-// C3-LIVE-01A: single-use, auditable operator approval and a fail-closed authorization validator for a FUTURE
-// Meta Muse Spark 1.3 proposal attempt. This module enables nothing: the production entry point is still
-// hard-disabled, APPROVED_LIVE_QUOTA is 0 and config/live-authorization.json holds no approved decision, so
-// every production path through `authorizeLiveAttempt` fails with LIVE_NOT_APPROVED.
+// C3-LIVE-01A primitives: decision register, activation pin, approval records, private file handling and the single
+// atomic approval spend. These are LOW-LEVEL building blocks and make no authorization decision on their own. The only
+// production authorization API is live-gate.ts (it derives every trusted input internally); the injectable core used by
+// the synthetic rehearsal and the tests is live-gate-core.ts, which is not exported from the package index. This module
+// enables nothing: APPROVED_LIVE_QUOTA is 0 and both owner-controlled files are empty.
 //
 // Trust boundaries (see docs/SECURITY.md):
 //  * The repository's decision register (reviewed, owner-committed) says whether a live decision exists.
@@ -12,13 +13,12 @@
 // Order for a future activation: authorize -> consume -> re-check volatile facts -> claim reservation -> one call.
 // Every step fails closed; nothing is ever released or recycled.
 import { createHash, randomBytes } from 'node:crypto';
-import { constants as fsc, existsSync } from 'node:fs';
+import { constants as fsc, existsSync, type Stats } from 'node:fs';
 import { link, lstat, mkdir, open, readdir, readFile, unlink, chmod } from 'node:fs/promises';
 import path from 'node:path';
 import { isValidRunId } from '../../intake/src/consent.ts';
-import type { InferenceProvider } from './client.ts';
-import { buildProposalRequestHashOk, expectedProposalModel, META_PROPOSAL_MODEL, PROPOSAL_CONSENT_SCOPE, PROPOSAL_LIMITS, ProposalError, type BuiltProposalRequest } from './patch-proposal.ts';
-import { APPROVED_LIVE_QUOTA, inspectReservation, type Claim, type ReservationStore } from './reservations.ts';
+import { META_PROPOSAL_MODEL, PROPOSAL_CONSENT_SCOPE, PROPOSAL_LIMITS } from './patch-proposal.ts';
+import { inspectReservation } from './reservations.ts';
 
 export const DECISION_ID = 'LIVE-C3-01' as const;
 export const APPROVAL_LABEL = 'SELF-DECLARED OPERATOR APPROVAL — NOT AUTHENTICATED IDENTITY' as const;
@@ -38,7 +38,7 @@ export type AuthorizationErrorCode =
   | 'PROVIDER_NOT_ALLOWED' | 'MODEL_NOT_ALLOWED' | 'INPUT_MISMATCH' | 'BOUNDS'
   | 'APPROVAL_MISSING' | 'APPROVAL_MALFORMED' | 'APPROVAL_UNSAFE_FILE' | 'APPROVAL_MODIFIED' | 'APPROVAL_EXPIRED'
   | 'APPROVAL_SPENT' | 'APPROVAL_DUPLICATE' | 'APPROVAL_MISMATCH'
-  | 'REPO_MISMATCH' | 'TREE_DIRTY' | 'GIT_UNAVAILABLE' | 'RESERVATION_SPENT' | 'LOCK_STALE' | 'INTERNAL';
+  | 'ACTIVATION_NOT_PINNED' | 'ACTIVATION_MISMATCH' | 'REVISION_NOT_APPROVED' | 'PIN_INVALID' | 'REPO_MISMATCH' | 'TREE_DIRTY' | 'GIT_UNAVAILABLE' | 'RESERVATION_SPENT' | 'LOCK_STALE' | 'INTERNAL';
 
 export class AuthorizationError extends Error {
   readonly code: AuthorizationErrorCode;
@@ -54,7 +54,57 @@ const fail = (code: AuthorizationErrorCode, message: string): never => {
 
 // ------------------------------------------------------------------ git probe
 
-export type GitProbe = { head(): Promise<string>; clean(): Promise<boolean> };
+/** Read-only repository facts. `treeDigest(rev, exclude)` is the activation digest of a revision (see ACTIVATION below). */
+export type GitProbe = { head(): Promise<string>; clean(): Promise<boolean>; treeDigest(rev: string, excludePath: string): Promise<string> };
+
+// ------------------------------------------------------------------ owner-pinned activation revision
+//
+// MAJOR-2. A register that lives inside a commit cannot name that commit's own SHA. Instead the owner pins a DIGEST OF THE
+// TREE EXCLUDING THE PIN FILE ITSELF (config/live-activation.json). Safe sequence (docs/META-ACTIVATION-CHECKLIST.md C0):
+//   1. the reviewed C3-LIVE-01B PR (register entry + code) is audited and merged -> commit A exists;
+//   2. the owner computes `node scripts/c3-activation-digest.ts <A>` and records A plus that digest, with the decision
+//      reference, in a separate pin-only commit A' (reviewed) -> the pin file is the only difference between A and A';
+//   3. production accepts HEAD only if its tree digest (pin file excluded) equals the pinned digest AND the pinned commit A
+//      still hashes to it. Any other commit, even a clean descendant that keeps the register, changes the digest and is
+//      rejected until the owner pins again. A self-declared HEAD is never proof of authorization.
+export const ACTIVATION_PIN_PATH = 'config/live-activation.json' as const;
+export type ActivationPin = {
+  decisionId: typeof DECISION_ID;
+  decisionReference: string;
+  activationCommit: string;
+  activationDigest: string;
+  recordedBy: string;
+  recordedAt: string;
+  reference: string;
+  synthetic?: true;
+};
+export type LoadedPin = { activation: ActivationPin | null; sha256: string };
+
+export function parseActivationPin(text: string): LoadedPin {
+  let raw: { schemaVersion?: unknown; activation?: unknown; note?: unknown } | null;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    return fail('PIN_INVALID', 'the activation pin is not valid JSON');
+  }
+  if (!raw || typeof raw !== 'object' || raw.schemaVersion !== 1 || !('activation' in raw) || Object.keys(raw).some((k) => !['schemaVersion', 'note', 'activation'].includes(k))) return fail('PIN_INVALID', 'the activation pin has an unexpected shape');
+  const sha256 = createHash('sha256').update(text, 'utf8').digest('hex');
+  if (raw.activation === null) return { activation: null, sha256 };
+  const a = raw.activation as Record<string, unknown>;
+  const keys = ['decisionId', 'decisionReference', 'activationCommit', 'activationDigest', 'recordedBy', 'recordedAt', 'reference', 'synthetic'];
+  const text300 = (v: unknown) => typeof v === 'string' && v.length > 0 && v.length <= 300;
+  if (!a || typeof a !== 'object' || Object.keys(a).some((k) => !keys.includes(k)) || a.decisionId !== DECISION_ID || !text300(a.decisionReference) || typeof a.activationCommit !== 'string' || !SHA1.test(a.activationCommit) ||
+    typeof a.activationDigest !== 'string' || !SHA256.test(a.activationDigest) || !text300(a.recordedBy) || typeof a.recordedAt !== 'string' || !ISO.test(a.recordedAt) || !text300(a.reference) || (a.synthetic !== undefined && a.synthetic !== true)) {
+    return fail('PIN_INVALID', 'the activation pin entry is malformed');
+  }
+  return { activation: a as unknown as ActivationPin, sha256 };
+}
+
+export async function loadActivationPin(repoRoot: string): Promise<LoadedPin> {
+  const text = await readFile(path.join(repoRoot, ACTIVATION_PIN_PATH), 'utf8').catch(() => null);
+  if (text === null) return fail('PIN_INVALID', `${ACTIVATION_PIN_PATH} is missing`);
+  return parseActivationPin(text);
+}
 
 // ------------------------------------------------------------------ decision register
 
@@ -100,13 +150,13 @@ export async function loadDecisionRegister(repoRoot: string): Promise<LoadedRegi
 }
 
 /** The one APPROVED LIVE-C3-01 entry for Meta muse-spark-1.3 whose limits do not exceed the code limits; otherwise LIVE_NOT_APPROVED. */
-export function findApprovedDecision(register: LoadedRegister, allowSynthetic: boolean): Decision {
+export function findApprovedDecision(register: LoadedRegister, syntheticContext: boolean): Decision {
   const candidates = register.decisions.filter((d) => d?.decisionId === DECISION_ID);
   if (candidates.length === 0) return fail('LIVE_NOT_APPROVED', 'LIVE-C3-01 has no decision in config/live-authorization.json (NOT APPROVED)');
   if (candidates.length > 1) return fail('REGISTER_INVALID', 'LIVE-C3-01 appears more than once in the register');
   const d = candidates[0]!;
   if (d.status !== 'APPROVED') return fail('LIVE_NOT_APPROVED', 'LIVE-C3-01 is not APPROVED in the register');
-  if (d.synthetic !== undefined && (d.synthetic !== true || !allowSynthetic)) return fail('SYNTHETIC_NOT_ALLOWED', 'a synthetic decision can never authorize live activity');
+  if (d.synthetic !== undefined && (d.synthetic !== true || !syntheticContext)) return fail('SYNTHETIC_NOT_ALLOWED', 'a synthetic decision can never authorize live activity');
   const okText = (v: unknown) => typeof v === 'string' && v.length > 0 && v.length <= 300;
   if (d.provider !== 'meta' || d.model !== META_PROPOSAL_MODEL) return fail('LIVE_NOT_APPROVED', 'the approved decision does not name Meta muse-spark-1.3');
   if (!okText(d.approvedBy) || !okText(d.reference) || typeof d.approvedAt !== 'string' || !ISO.test(d.approvedAt)) return fail('REGISTER_INVALID', 'the approved decision lacks approver, date or reference');
@@ -126,6 +176,8 @@ export type ApprovalBody = {
   decisionId: typeof DECISION_ID;
   registerSha256: string;
   repoSha: string;
+  activationCommit: string;
+  activationDigest: string;
   runId: string;
   providerId: 'meta';
   model: typeof META_PROPOSAL_MODEL;
@@ -140,7 +192,7 @@ export type ApprovalBody = {
 };
 export type ApprovalRecord = ApprovalBody & { recordSha256: string };
 
-const BODY_KEYS: Array<keyof ApprovalBody> = ['schemaVersion', 'label', 'approvalId', 'decisionId', 'registerSha256', 'repoSha', 'runId', 'providerId', 'model', 'inputSha256', 'inputChars', 'scope', 'bounds', 'declaredBy', 'approvedAt', 'expiresAt', 'synthetic'];
+const BODY_KEYS: Array<keyof ApprovalBody> = ['schemaVersion', 'label', 'approvalId', 'decisionId', 'registerSha256', 'repoSha', 'activationCommit', 'activationDigest', 'runId', 'providerId', 'model', 'inputSha256', 'inputChars', 'scope', 'bounds', 'declaredBy', 'approvedAt', 'expiresAt', 'synthetic'];
 const canonicalBody = (b: ApprovalBody): string => JSON.stringify(BODY_KEYS.reduce<Record<string, unknown>>((o, k) => ((o[k] = b[k]), o), {}));
 export const digestOf = (b: ApprovalBody): string => createHash('sha256').update(canonicalBody(b), 'utf8').digest('hex');
 
@@ -149,14 +201,14 @@ export function newApprovalId(): string {
 }
 
 export function buildApprovalRecord(input: {
-  runId: string; repoSha: string; inputSha256: string; inputChars: number; register: LoadedRegister; declaredBy: string; now: Date; ttlMs?: number; synthetic?: boolean; approvalId?: string;
+  runId: string; repoSha: string; activation: { commit: string; digest: string }; inputSha256: string; inputChars: number; register: LoadedRegister; declaredBy: string; now: Date; ttlMs?: number; synthetic?: boolean; approvalId?: string;
 }): ApprovalRecord {
   const ttl = input.ttlMs ?? APPROVAL_TTL_MS.default;
-  if (!isValidRunId(input.runId) || !SHA1.test(input.repoSha) || !SHA256.test(input.inputSha256) || !DECLARED_BY.test(input.declaredBy)) return fail('APPROVAL_MALFORMED', 'approval fields are malformed');
+  if (!isValidRunId(input.runId) || !SHA1.test(input.repoSha) || !SHA1.test(input.activation?.commit) || !SHA256.test(input.activation?.digest) || !SHA256.test(input.inputSha256) || !DECLARED_BY.test(input.declaredBy)) return fail('APPROVAL_MALFORMED', 'approval fields are malformed');
   if (!Number.isInteger(input.inputChars) || input.inputChars < 1 || input.inputChars > LIVE_LIMITS.maxInputChars) return fail('BOUNDS', `input must be 1..${LIVE_LIMITS.maxInputChars} characters`);
   if (!Number.isInteger(ttl) || ttl < 1_000 || ttl > APPROVAL_TTL_MS.max) return fail('APPROVAL_MALFORMED', `ttl must be 1 s .. ${APPROVAL_TTL_MS.max / 60_000} min`);
   const body: ApprovalBody = {
-    schemaVersion: 1, label: APPROVAL_LABEL, approvalId: input.approvalId ?? newApprovalId(), decisionId: DECISION_ID, registerSha256: input.register.sha256, repoSha: input.repoSha,
+    schemaVersion: 1, label: APPROVAL_LABEL, approvalId: input.approvalId ?? newApprovalId(), decisionId: DECISION_ID, registerSha256: input.register.sha256, repoSha: input.repoSha, activationCommit: input.activation.commit, activationDigest: input.activation.digest,
     runId: input.runId, providerId: 'meta', model: META_PROPOSAL_MODEL, inputSha256: input.inputSha256, inputChars: input.inputChars, scope: PROPOSAL_CONSENT_SCOPE,
     bounds: { maxBillableAttempts: 1, retries: 0, maxInputChars: LIVE_LIMITS.maxInputChars, maxOutputTokens: LIVE_LIMITS.maxOutputTokens, textOnly: true },
     declaredBy: input.declaredBy, approvedAt: input.now.toISOString(), expiresAt: new Date(input.now.getTime() + ttl).toISOString(), synthetic: input.synthetic === true,
@@ -172,7 +224,7 @@ export function parseApprovalRecord(raw: unknown): ApprovalRecord {
   if (keys !== [...BODY_KEYS, 'recordSha256'].sort().join(',')) return fail('APPROVAL_MALFORMED', 'approval record has missing or unexpected keys');
   const b = r.bounds;
   const ok =
-    r.schemaVersion === 1 && r.label === APPROVAL_LABEL && /^[0-9a-f]{32}$/.test(r.approvalId) && r.decisionId === DECISION_ID && SHA256.test(r.registerSha256) && SHA1.test(r.repoSha) &&
+    r.schemaVersion === 1 && r.label === APPROVAL_LABEL && /^[0-9a-f]{32}$/.test(r.approvalId) && r.decisionId === DECISION_ID && SHA256.test(r.registerSha256) && SHA1.test(r.repoSha) && SHA1.test(r.activationCommit) && SHA256.test(r.activationDigest) &&
     isValidRunId(r.runId) && r.providerId === 'meta' && r.model === META_PROPOSAL_MODEL && SHA256.test(r.inputSha256) && Number.isInteger(r.inputChars) && r.inputChars >= 1 && r.scope === PROPOSAL_CONSENT_SCOPE &&
     b && typeof b === 'object' && Object.keys(b).sort().join(',') === 'maxBillableAttempts,maxInputChars,maxOutputTokens,retries,textOnly' &&
     typeof r.declaredBy === 'string' && DECLARED_BY.test(r.declaredBy) && typeof r.approvedAt === 'string' && ISO.test(r.approvedAt) && typeof r.expiresAt === 'string' && ISO.test(r.expiresAt) &&
@@ -187,27 +239,33 @@ export function parseApprovalRecord(raw: unknown): ApprovalRecord {
 
 const ownUid = (): number | null => (typeof process.getuid === 'function' ? process.getuid() : null);
 
-/** Create (0700) or verify the private approvals directory: a real directory, not a symlink, owned by us, no group/other access. */
+/**
+ * Create (0700) or verify the private approvals directory and its mutable ancestors. The existing `.proofpilot` parent and
+ * the directory above it must be real directories (not symlinks), owned by us, and not writable by group or others, so
+ * nobody else can swap the private directory out; an unsafe existing ancestor is REFUSED, never chmod-ed. The approvals
+ * directory itself must have no group/other access at all. This does not defend against the same OS user.
+ */
 export async function ensureApprovalsDir(dir: string): Promise<void> {
   const parent = path.dirname(dir);
-  await mkdir(parent, { recursive: true, mode: 0o700 });
-  for (const p of [parent, dir]) {
-    const st = await lstat(p).catch(() => null);
-    if (p === dir && st === null) {
-      await mkdir(dir, { mode: 0o700 });
-      await chmod(dir, 0o700);
-    }
-    const now = await lstat(p);
-    if (now.isSymbolicLink() || !now.isDirectory()) return fail('APPROVAL_UNSAFE_FILE', `${path.basename(p)} is a symlink or not a directory`);
-    if (p === dir) {
-      if ((now.mode & 0o077) !== 0) return fail('APPROVAL_UNSAFE_FILE', 'the approvals directory is accessible to other users');
-      if (ownUid() !== null && now.uid !== ownUid()) return fail('APPROVAL_UNSAFE_FILE', 'the approvals directory is owned by another user');
-    }
+  const grand = path.dirname(parent);
+  const check = (st: Stats, name: string, strict: boolean) => {
+    if (st.isSymbolicLink() || !st.isDirectory()) return fail('APPROVAL_UNSAFE_FILE', `${name} is a symlink or not a directory`);
+    if (ownUid() !== null && st.uid !== ownUid()) return fail('APPROVAL_UNSAFE_FILE', `${name} is owned by another user`);
+    if ((st.mode & (strict ? 0o077 : 0o022)) !== 0) return fail('APPROVAL_UNSAFE_FILE', `${name} is ${strict ? 'accessible' : 'writable'} by other users`);
+  };
+  const gst = await lstat(grand).catch(() => null);
+  if (gst) check(gst, path.basename(grand) || 'the repository directory', false);
+  if ((await lstat(parent).catch(() => null)) === null) await mkdir(parent, { recursive: true, mode: 0o700 });
+  check(await lstat(parent), path.basename(parent), false);
+  if ((await lstat(dir).catch(() => null)) === null) {
+    await mkdir(dir, { mode: 0o700 });
+    await chmod(dir, 0o700);
   }
+  check(await lstat(dir), path.basename(dir), true);
 }
 
 const recordPath = (dir: string, runId: string) => path.join(dir, `${runId}.json`);
-const consumedPath = (dir: string, runId: string) => path.join(dir, `${runId}.consumed`);
+export const consumedPath = (dir: string, runId: string) => path.join(dir, `${runId}.consumed`);
 
 /** Atomic exclusive publication: full content in a private temp file, then link() which fails if the name exists. */
 export async function writeApprovalRecord(dir: string, record: ApprovalRecord): Promise<string> {
@@ -268,103 +326,7 @@ export async function readApprovalRecord(dir: string, runId: string): Promise<Ap
   return parseApprovalRecord(raw);
 }
 
-// ------------------------------------------------------------------ the validator
-
-export type AuthorizeInput = {
-  approvalsDir: string;
-  reservationsRoot: string;
-  runId: string;
-  request: BuiltProposalRequest;
-  provider: Pick<InferenceProvider, 'id' | 'models'>;
-  maxOutputTokens: number;
-  git: GitProbe;
-  now?: () => Date;
-};
-/** Fields only tests may supply; the production wrapper `authorizeLiveAttempt` fixes every one of them. */
-export type AuthorizeInjected = { register: LoadedRegister; liveQuota: number; allowSynthetic: boolean };
-
-export type AuthorizedAttempt = Readonly<{ runId: string; approvalId: string; recordSha256: string; repoSha: string; model: string; inputSha256: string; expiresAt: string; decisionReference: string; synthetic: boolean }>;
-
-/**
- * Fail-closed authorization check. Throws AuthorizationError on the first failed condition; never consumes or reserves anything.
- * `afterConsume` is used only for the re-check between consuming the approval and claiming the reservation.
- * EXPLICITLY TEST-ONLY interface: the `injected` argument. Production callers use `authorizeLiveAttempt`.
- */
-export async function evaluateAuthorization(input: AuthorizeInput, injected: AuthorizeInjected, mode: { afterConsume?: boolean } = {}): Promise<AuthorizedAttempt> {
-  try {
-    const now = (input.now ?? (() => new Date()))();
-    const { request, provider } = input;
-    if (provider?.id !== 'meta') fail('PROVIDER_NOT_ALLOWED', 'only the Meta provider may be authorized');
-    try {
-      expectedProposalModel(provider);
-    } catch (e) {
-      if (e instanceof ProposalError) fail('MODEL_NOT_ALLOWED', 'the model must be exactly muse-spark-1.3');
-      throw e;
-    }
-    const decision = findApprovedDecision(injected.register, injected.allowSynthetic);
-    if (!Number.isInteger(injected.liveQuota) || injected.liveQuota < 1) fail('QUOTA_ZERO', 'the live quota is 0');
-
-    if (!isValidRunId(input.runId)) fail('APPROVAL_MALFORMED', 'run id is malformed');
-    if (!request || typeof request.prompt !== 'string' || !buildProposalRequestHashOk(request)) fail('INPUT_MISMATCH', 'the request does not match its hash');
-    if (request.prompt.length > Math.min(LIVE_LIMITS.maxInputChars, decision.maxInputChars)) fail('BOUNDS', 'input exceeds the approved character bound');
-    if (!Number.isInteger(input.maxOutputTokens) || input.maxOutputTokens < 1 || input.maxOutputTokens > Math.min(LIVE_LIMITS.maxOutputTokens, decision.maxOutputTokens)) fail('BOUNDS', 'output tokens exceed the approved bound');
-
-    const rec = await readApprovalRecord(input.approvalsDir, input.runId);
-    if (rec.synthetic && !injected.allowSynthetic) fail('SYNTHETIC_NOT_ALLOWED', 'a synthetic approval can never authorize live activity');
-    if (rec.synthetic !== (decision.synthetic === true)) fail('APPROVAL_MISMATCH', 'approval and decision disagree about being synthetic');
-    if (rec.runId !== input.runId) fail('APPROVAL_MISMATCH', 'approval is for a different run');
-    if (rec.providerId !== provider.id || rec.model !== provider.models.visual) fail('APPROVAL_MISMATCH', 'approval is for a different provider or model');
-    if (rec.inputSha256 !== request.inputSha256 || rec.inputChars !== request.prompt.length) fail('INPUT_MISMATCH', 'approval is for a different input');
-    if (rec.registerSha256 !== injected.register.sha256) fail('APPROVAL_MISMATCH', 'the decision register changed since this approval');
-    if (rec.bounds.maxInputChars !== LIVE_LIMITS.maxInputChars || rec.bounds.maxOutputTokens !== LIVE_LIMITS.maxOutputTokens || rec.bounds.maxBillableAttempts !== 1 || rec.bounds.retries !== 0 || rec.bounds.textOnly !== true) fail('BOUNDS', 'approval bounds differ from the code limits');
-
-    const approvedAt = Date.parse(rec.approvedAt);
-    const expiresAt = Date.parse(rec.expiresAt);
-    if (!(expiresAt > approvedAt) || expiresAt - approvedAt > APPROVAL_TTL_MS.max) fail('APPROVAL_MALFORMED', 'approval lifetime is invalid');
-    if (approvedAt > now.getTime() + CLOCK_SKEW_MS) fail('APPROVAL_MALFORMED', 'approval is dated in the future');
-    if (now.getTime() >= expiresAt) fail('APPROVAL_EXPIRED', 'approval has expired');
-
-    const marker = await readFile(consumedPath(input.approvalsDir, input.runId), 'utf8').then((t) => t, (e: NodeJS.ErrnoException) => (e.code === 'ENOENT' ? null : fail('APPROVAL_UNSAFE_FILE', 'consumption marker cannot be read')));
-    if (mode.afterConsume) {
-      let m: { approvalId?: unknown; recordSha256?: unknown } | null = null;
-      try {
-        m = marker === null ? null : JSON.parse(marker);
-      } catch { /* handled below */ }
-      if (!m || m.approvalId !== rec.approvalId || m.recordSha256 !== rec.recordSha256) fail('APPROVAL_MISMATCH', 'the consumption marker does not match this approval');
-    } else if (marker !== null) {
-      fail('APPROVAL_SPENT', 'this approval has already been used');
-    }
-
-    let head: string;
-    let clean: boolean;
-    try {
-      head = await input.git.head();
-      clean = await input.git.clean();
-    } catch {
-      return fail('GIT_UNAVAILABLE', 'repository state could not be determined');
-    }
-    if (head !== rec.repoSha) fail('REPO_MISMATCH', 'repository HEAD differs from the approved revision');
-    if (!clean) fail('TREE_DIRTY', 'the working tree is not clean');
-
-    const res = await inspectReservation(input.reservationsRoot, 'meta', input.runId);
-    if (res.runSpent) fail('RESERVATION_SPENT', 'this run id already has a reservation');
-    if (res.lockPresent) fail('LOCK_STALE', 'a reservation lock is present (live or crashed); refusing');
-    if (res.slotsSpent >= injected.liveQuota) fail('QUOTA_EXHAUSTED', 'no unspent quota slot remains');
-
-    return Object.freeze({ runId: rec.runId, approvalId: rec.approvalId, recordSha256: rec.recordSha256, repoSha: rec.repoSha, model: rec.model, inputSha256: rec.inputSha256, expiresAt: rec.expiresAt, decisionReference: decision.reference, synthetic: rec.synthetic });
-  } catch (e) {
-    if (e instanceof AuthorizationError) throw e;
-    throw new AuthorizationError('INTERNAL', 'authorization failed closed on an unexpected error');
-  }
-}
-
-/** Production wrapper: the register comes from the repository file, synthetic decisions are impossible and the quota is the code constant. */
-export async function authorizeLiveAttempt(input: AuthorizeInput & { repoRoot: string }): Promise<AuthorizedAttempt> {
-  const register = await loadDecisionRegister(input.repoRoot).catch((e) => {
-    throw e instanceof AuthorizationError ? e : new AuthorizationError('INTERNAL', 'authorization failed closed');
-  });
-  return evaluateAuthorization(input, { register, liveQuota: APPROVED_LIVE_QUOTA.meta, allowSynthetic: false });
-}
+export type AuthorizedAttempt = Readonly<{ runId: string; approvalId: string; recordSha256: string; repoSha: string; activationDigest: string; model: string; inputSha256: string; expiresAt: string; decisionReference: string; synthetic: boolean }>;
 
 // ------------------------------------------------------------------ consumption and the activation order
 
@@ -381,33 +343,6 @@ export async function consumeApproval(dir: string, a: AuthorizedAttempt, now: ()
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === 'EEXIST') return fail('APPROVAL_SPENT', 'this approval has already been used');
     throw e;
-  }
-}
-
-export type PreparedAttempt = { authorized: AuthorizedAttempt; claim: Claim };
-
-/**
- * The only sanctioned order for a future live attempt (used today only by the synthetic rehearsal):
- *   1. authorize (read-only)  2. consume the approval atomically  3. re-check expiry, HEAD, tree and reservation state
- *   4. claim the reservation (run id + quota slot)  5. only then may a provider be called.
- * A crash after 2 spends the approval and nothing else (the operator must approve a NEW run id); a crash after 4 leaves a
- * CLAIMED run and a spent slot. Neither is ever released, so no crash can produce an extra billable attempt.
- */
-export async function prepareAttempt(input: AuthorizeInput, injected: AuthorizeInjected, store: ReservationStore): Promise<PreparedAttempt> {
-  const authorized = await evaluateAuthorization(input, injected);
-  await consumeApproval(input.approvalsDir, authorized, input.now);
-  const again = await evaluateAuthorization(input, injected, { afterConsume: true });
-  if (again.approvalId !== authorized.approvalId || again.recordSha256 !== authorized.recordSha256) fail('APPROVAL_MISMATCH', 'approval changed between checks');
-  try {
-    const claim = await store.claim({ providerId: 'meta', runId: input.runId, quota: injected.liveQuota });
-    return { authorized: again, claim };
-  } catch (e) {
-    if (e instanceof AuthorizationError) throw e;
-    const code = (e as { code?: string })?.code;
-    if (code === 'RUN_ID_SPENT') return fail('RESERVATION_SPENT', 'this run id already has a reservation');
-    if (code === 'QUOTA_EXHAUSTED') return fail('QUOTA_EXHAUSTED', 'no unspent quota slot remains');
-    if (code === 'LOCK_UNAVAILABLE') return fail('LOCK_STALE', 'the reservation lock is unavailable');
-    return fail('INTERNAL', 'reservation failed closed');
   }
 }
 
