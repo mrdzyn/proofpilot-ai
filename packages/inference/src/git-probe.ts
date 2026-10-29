@@ -8,6 +8,7 @@ import type { GitProbe } from './live-approval.ts';
 
 const run = promisify(execFile);
 const REV = /^(HEAD|[0-9a-f]{40})$/;
+const MAX_PIN_CHAIN = 50;
 
 /**
  * Activation digest of a revision: SHA-256 over the sorted "mode blobSha path" lines of every tracked file in the revision's tree
@@ -30,6 +31,24 @@ export function createGitProbe(repoRoot: string): GitProbe {
     },
     async clean() {
       return (await git(['status', '--porcelain', '--untracked-files=normal'])).trim().length === 0;
+    },
+    async pinOnlyDescent(activationCommit, pinPath) {
+      if (!/^[0-9a-f]{40}$/.test(activationCommit)) throw new Error('activation commit must be a full commit id');
+      try {
+        await git(['merge-base', '--is-ancestor', activationCommit, 'HEAD']);
+      } catch {
+        return { ok: false, reason: 'the activation commit is not an ancestor of HEAD' };
+      }
+      const range = `${activationCommit}..HEAD`;
+      if ((await git(['rev-list', '--merges', range])).trim()) return { ok: false, reason: 'a merge commit lies between the activation commit and HEAD' };
+      const commits = (await git(['rev-list', '--reverse', range])).split('\n').filter(Boolean);
+      if (commits.length === 0) return { ok: false, reason: 'HEAD is the activation commit itself; no pin commit follows it' };
+      if (commits.length > MAX_PIN_CHAIN) return { ok: false, reason: `more than ${MAX_PIN_CHAIN} commits follow the activation commit` };
+      for (const c of commits) {
+        const files = (await git(['diff-tree', '-r', '-z', '--no-commit-id', '--name-only', c])).split('\0').filter(Boolean);
+        if (files.length !== 1 || files[0] !== pinPath) return { ok: false, reason: `commit ${c.slice(0, 12)} does not change only ${pinPath}` };
+      }
+      return { ok: true };
     },
     async treeDigest(rev, excludePath) {
       if (!REV.test(rev)) throw new Error('revision must be HEAD or a full commit id');

@@ -93,6 +93,10 @@ test('MAJOR-2: authorization requires the owner-pinned activation revision, chec
   const core = code('packages/inference/src/live-gate-core.ts');
   assert.ok(core.indexOf('checkActivation(ctx, decision)') > 0 && core.indexOf('checkActivation(ctx, decision)') < core.indexOf('readApprovalRecord('), 'the revision check precedes reading an approval');
   assert.match(core, /REVISION_NOT_APPROVED/);
+  assert.match(core, /ctx\.git\.pinOnlyDescent\(act\.activationCommit, ACTIVATION_PIN_PATH\)/, 'the revision relationship, not only the tree digest, is enforced');
+  assert.match(core, /if \(!descent\.ok\) return fail\('REVISION_NOT_APPROVED'/);
+  const probe = code('packages/inference/src/git-probe.ts');
+  for (const needle of ["'merge-base', '--is-ancestor'", "'rev-list', '--merges'", "'diff-tree'", 'commits.length === 0', 'MAX_PIN_CHAIN']) assert.ok(probe.includes(needle), needle);
   assert.match(code('packages/inference/src/approval-cli.ts'), /checkActivation\(ctx, decision\)/);
   assert.match(code('packages/inference/src/approval-cli.ts'), /QUOTA_ZERO/);
   assert.equal(JSON.parse(read('config/live-activation.json')).activation, null);

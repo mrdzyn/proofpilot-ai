@@ -86,6 +86,14 @@ export async function checkActivation(ctx: TrustContext, decision: Decision): Pr
     return fail('GIT_UNAVAILABLE', 'repository state could not be determined');
   }
   if (head !== act.activationDigest) return fail('REVISION_NOT_APPROVED', 'HEAD is not the owner-approved activation revision (it differs from the pinned tree digest)');
+  // the revision RELATIONSHIP, not only equal contents: an empty or revert/recommit descendant has the same tree but is not owner-pinned
+  let descent;
+  try {
+    descent = await ctx.git.pinOnlyDescent(act.activationCommit, ACTIVATION_PIN_PATH);
+  } catch {
+    return fail('GIT_UNAVAILABLE', 'repository state could not be determined');
+  }
+  if (!descent.ok) return fail('REVISION_NOT_APPROVED', `HEAD is not a pin-only descendant of the owner-pinned activation commit: ${descent.reason}`);
   return act;
 }
 

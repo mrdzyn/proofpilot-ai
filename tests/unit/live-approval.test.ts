@@ -46,11 +46,12 @@ function world(over: { runId?: string; ttlMs?: number; clock?: { t: Date } } = {
   const request = buildProposalRequest({ symptom, facts });
   const register = parseDecisionRegister(SYNTH_REGISTER_TEXT);
   const pin = parseActivationPin(SYNTH_PIN_TEXT);
-  const git = { head: SHA, clean: true, fail: false, headDigest: HEAD_DIGEST, pinDigest: HEAD_DIGEST };
+  const git = { head: SHA, clean: true, fail: false, headDigest: HEAD_DIGEST, pinDigest: HEAD_DIGEST, descent: true };
   const probe: GitProbe = {
     head: async () => (git.fail ? Promise.reject(new Error('no git')) : git.head),
     clean: async () => git.clean,
     treeDigest: async (rev) => (git.fail ? Promise.reject(new Error('no git')) : rev === 'HEAD' ? git.headDigest : git.pinDigest),
+    pinOnlyDescent: async () => (git.descent ? { ok: true } : { ok: false, reason: 'synthetic: not a pin-only descendant' }),
   };
   const approvalsDir = path.join(dir, '.proofpilot', 'approvals');
   const reservationsRoot = path.join(dir, '.proofpilot', 'reservations');
@@ -123,6 +124,7 @@ test('every mismatch fails closed with its own reason', async () => {
     ['decision reference changed', 'ACTIVATION_MISMATCH', (w) => { w.injected.register = parseDecisionRegister(SYNTH_REGISTER_TEXT.replace('synthetic test decision', 'edited reference')); }],
     ['activation not pinned', 'ACTIVATION_NOT_PINNED', (w) => { w.injected.pin = parseActivationPin(JSON.stringify({ schemaVersion: 1, activation: null })); }],
     ['HEAD is not the pinned revision', 'REVISION_NOT_APPROVED', (w) => { w.git.headDigest = 'f'.repeat(64); }],
+    ['same tree, not a pin-only descendant', 'REVISION_NOT_APPROVED', (w) => { w.git.descent = false; }],
     ['pinned commit hashes differently', 'ACTIVATION_MISMATCH', (w) => { w.git.pinDigest = 'f'.repeat(64); }],
     ['spent run id', 'RESERVATION_SPENT', async (w) => { await w.store.claim({ providerId: 'meta', runId: w.runId, quota: 1 }); }],
     ['other run took the slot', 'QUOTA_EXHAUSTED', async (w) => { await w.store.claim({ providerId: 'meta', runId: 'someone-else', quota: 1 }); }],
@@ -499,7 +501,7 @@ const commitAll = (root: string, msg: string) => {
 const approvedRegister = (extra: Record<string, unknown> = {}) => JSON.stringify({ schemaVersion: 1, decisions: [{ decisionId: DECISION_ID, status: 'APPROVED', provider: 'meta', model: META_PROPOSAL_MODEL, maxBillableAttempts: 1, maxInputChars: 12000, maxOutputTokens: 3072, approvedBy: 'Owner (test fixture)', approvedAt: '2026-10-30T00:00:00.000Z', reference: OWNER_REF, ...extra }] }, null, 2) + '\n';
 
 /** A real throw-away Git repository laid out like this one: activation commit A, then a pin-only commit A'. TEST FIXTURE: nothing here is an owner decision. */
-async function repoWorld(opts: { registerExtra?: Record<string, unknown>; pinExtra?: Record<string, unknown>; skipPin?: boolean } = {}) {
+async function repoWorld(opts: { registerExtra?: Record<string, unknown>; pinExtra?: Record<string, unknown>; skipPin?: boolean; emptyBeforePin?: boolean } = {}) {
   const root = path.join(tempDir(), 'repo');
   mkdirSync(path.join(root, 'config'), { recursive: true });
   git(root, 'init', '-q');
@@ -511,6 +513,7 @@ async function repoWorld(opts: { registerExtra?: Record<string, unknown>; pinExt
   const { createGitProbe } = await import('../../packages/inference/src/git-probe.ts');
   const digest = await createGitProbe(root).treeDigest(A, PIN_PATH);
   const writePin = (over: Record<string, unknown> = {}) => writeFileSync(path.join(root, PIN_PATH), JSON.stringify({ schemaVersion: 1, activation: { decisionId: DECISION_ID, decisionReference: OWNER_REF, activationCommit: A, activationDigest: digest, recordedBy: 'Owner (test fixture)', recordedAt: '2026-10-30T00:00:00.000Z', reference: 'pin-commit', ...opts.pinExtra, ...over } }, null, 2) + '\n');
+  if (opts.emptyBeforePin) git(root, 'commit', '-q', '--allow-empty', '-m', 'unreviewed empty commit before the pin');
   if (!opts.skipPin) writePin();
   const Aprime = opts.skipPin ? A : commitAll(root, 'pin-only commit');
   const request = buildProposalRequest({ symptom, facts });
@@ -739,4 +742,146 @@ test('the rehearsal works when the system temp directory is shared (world-writab
     if (saved === undefined) delete process.env.TMPDIR;
     else process.env.TMPDIR = saved;
   }
+});
+
+// ------------------------------------------------------------ MAJOR-2 (residual): the REVISION RELATIONSHIP, not only the tree contents
+
+/** Both enforcement points must give the same answer: the validator (checked before any approval is read) and the CLI. */
+async function bothRefuse(r: Awaited<ReturnType<typeof repoWorld>>, code: string, label: string) {
+  assert.equal(await codeOf(evaluateAuthorizationCore(await r.ctx(), r.attempt)), code, `${label}: validator`);
+  const cli = await r.approveViaCli('run-x');
+  assert.equal(cli.code, 3, `${label}: CLI exit`);
+  assert.match(cli.text, new RegExp(code), `${label}: CLI reason`);
+  assert.equal(existsSync(path.join(r.root, '.proofpilot/approvals/run-x.json')), false, `${label}: nothing recorded`);
+}
+async function bothAccept(r: Awaited<ReturnType<typeof repoWorld>>, label: string, runId = 'run-ok') {
+  assert.equal((await r.approveViaCli(runId)).code, 0, `${label}: CLI`);
+  const a = await evaluateAuthorizationCore(await r.ctx(), { ...r.attempt, runId });
+  assert.equal(a.synthetic, false, label);
+}
+const currentBranch = (root: string) => git(root, 'rev-parse', '--abbrev-ref', 'HEAD');
+
+test('MAJOR-2: approved A then approved pin-only A-prime is accepted by the validator and the CLI', async () => {
+  const r = await repoWorld();
+  assert.notEqual(r.A, r.Aprime);
+  await bothAccept(r, 'A -> A-prime');
+});
+
+test('MAJOR-2: an unauthorized clean SAME-TREE descendant is refused by both enforcement points', async () => {
+  // A' then git commit --allow-empty: identical tracked tree, different commit
+  const empty = await repoWorld();
+  git(empty.root, 'commit', '-q', '--allow-empty', '-m', 'unreviewed');
+  assert.equal(git(empty.root, 'status', '--porcelain'), '', 'clean tree');
+  assert.equal(await (await import('../../packages/inference/src/git-probe.ts')).createGitProbe(empty.root).treeDigest('HEAD', PIN_PATH), empty.digest, 'the digest alone cannot tell the difference');
+  await bothRefuse(empty, 'REVISION_NOT_APPROVED', 'A\' + empty commit');
+
+  // an approval made BEFORE the unauthorized commit does not carry over either
+  const early = await repoWorld();
+  assert.equal((await early.approveViaCli()).code, 0);
+  git(early.root, 'commit', '-q', '--allow-empty', '-m', 'unreviewed');
+  assert.equal(await codeOf(evaluateAuthorizationCore(await early.ctx(), early.attempt)), 'REVISION_NOT_APPROVED');
+
+  // revert/recommit: the final tree equals A' again, but the history contains non-pin changes
+  const revert = await repoWorld();
+  writeFileSync(path.join(revert.root, 'code.txt'), 'tampered\n');
+  commitAll(revert.root, 'unreviewed change');
+  writeFileSync(path.join(revert.root, 'code.txt'), 'reviewed code\n');
+  commitAll(revert.root, 'revert the change');
+  assert.equal(git(revert.root, 'diff', revert.Aprime, 'HEAD'), '', 'same tree as A-prime');
+  await bothRefuse(revert, 'REVISION_NOT_APPROVED', 'revert/recommit');
+
+  // an unauthorized empty commit between A and A'
+  const between = await repoWorld({ emptyBeforePin: true });
+  await bothRefuse(between, 'REVISION_NOT_APPROVED', 'empty commit before the pin');
+
+  // a merge commit (even of an empty side branch) breaks the linear pin-only chain
+  const merged = await repoWorld();
+  const main = currentBranch(merged.root);
+  git(merged.root, 'checkout', '-q', '-b', 'side');
+  git(merged.root, 'commit', '-q', '--allow-empty', '-m', 'side');
+  git(merged.root, 'checkout', '-q', main);
+  git(merged.root, 'merge', '-q', '--no-ff', 'side', '-m', 'merge');
+  await bothRefuse(merged, 'REVISION_NOT_APPROVED', 'merge commit');
+
+  // a same-tree SIBLING of A (not an ancestor of HEAD) cannot stand in for the pinned commit
+  const sibling = await repoWorld();
+  const main2 = currentBranch(sibling.root);
+  git(sibling.root, 'checkout', '-q', '-b', 'sibling', sibling.A);
+  git(sibling.root, 'commit', '-q', '--allow-empty', '-m', 'same tree as A, different commit');
+  const S = git(sibling.root, 'rev-parse', 'HEAD');
+  git(sibling.root, 'checkout', '-q', main2);
+  sibling.writePin({ activationCommit: S });
+  commitAll(sibling.root, 'pin names the sibling');
+  await bothRefuse(sibling, 'REVISION_NOT_APPROVED', 'same-tree sibling as the pinned commit');
+});
+
+test('MAJOR-2: modified executable, configuration or pin-decision files are refused by both enforcement points', async () => {
+  for (const [file, content] of [['code.txt', 'tampered\n'], ['config/live-authorization.json', approvedRegister({ reference: 'edited' })], ['config/extra.json', '{}\n']] as const) {
+    const r = await repoWorld();
+    writeFileSync(path.join(r.root, file), content);
+    commitAll(r.root, `change ${file}`);
+    await bothRefuse(r, file === 'config/live-authorization.json' ? 'ACTIVATION_MISMATCH' : 'REVISION_NOT_APPROVED', file);
+  }
+  // pin change bundled with a code change in ONE commit
+  const bundled = await repoWorld();
+  writeFileSync(path.join(bundled.root, 'code.txt'), 'tampered\n');
+  bundled.writePin({ recordedBy: 'Owner (re-recorded)' });
+  commitAll(bundled.root, 'pin plus code');
+  await bothRefuse(bundled, 'REVISION_NOT_APPROVED', 'pin + code in one commit');
+  // changed pin decision reference
+  const ref = await repoWorld();
+  ref.writePin({ decisionReference: 'some other decision' });
+  commitAll(ref.root, 'pin names another decision');
+  await bothRefuse(ref, 'ACTIVATION_MISMATCH', 'changed decision reference');
+});
+
+test('MAJOR-2: re-pinning follows the documented procedure: another reviewed pin-only commit, or a reviewed new activation commit then a pin-only commit', async () => {
+  // (1) a corrected pin: one more pin-only commit on top of the chain; old approvals (bound to the old HEAD) stop working
+  const r = await repoWorld();
+  assert.equal((await r.approveViaCli('run-old')).code, 0);
+  r.writePin({ recordedBy: 'Owner (re-recorded)' });
+  commitAll(r.root, 're-record the pin');
+  assert.equal(await codeOf(evaluateAuthorizationCore(await r.ctx(), { ...r.attempt, runId: 'run-old' })), 'REPO_MISMATCH');
+  await bothAccept(r, 'pin-only re-record', 'run-new');
+
+  // (2) authorizing NEW code: the code commit A2 alone is refused; A2 followed by a pin-only commit naming A2 and its digest is accepted
+  const n = await repoWorld();
+  assert.equal((await n.approveViaCli('run-old')).code, 0);
+  writeFileSync(path.join(n.root, 'code.txt'), 'newly reviewed code\n');
+  const A2 = commitAll(n.root, 'reviewed activation commit A2');
+  await bothRefuse(n, 'REVISION_NOT_APPROVED', 'new code before it is pinned');
+  const { createGitProbe } = await import('../../packages/inference/src/git-probe.ts');
+  const digest2 = await createGitProbe(n.root).treeDigest(A2, PIN_PATH);
+  n.writePin({ activationCommit: A2, activationDigest: digest2 });
+  commitAll(n.root, 'pin A2');
+  await bothAccept(n, 'A2 -> pin-only', 'run-new');
+  assert.equal(await codeOf(evaluateAuthorizationCore(await n.ctx(), { ...n.attempt, runId: 'run-old' })), 'REVISION_NOT_APPROVED', 'the earlier approval is bound to the old activation digest and does not carry over');
+  // ... and the same-tree empty commit after the new pin is refused again
+  git(n.root, 'commit', '-q', '--allow-empty', '-m', 'unreviewed');
+  await bothRefuse(n, 'REVISION_NOT_APPROVED', 'empty commit after the re-pin');
+});
+
+test('MAJOR-2: the descent check itself: unreachable pins, huge chains and bad input fail closed', async () => {
+  const { createGitProbe } = await import('../../packages/inference/src/git-probe.ts');
+  const r = await repoWorld();
+  const probe = createGitProbe(r.root);
+  assert.deepEqual(await probe.pinOnlyDescent(r.A, PIN_PATH), { ok: true });
+  const none = await probe.pinOnlyDescent('0'.repeat(40), PIN_PATH);
+  assert.equal(none.ok, false);
+  const self = await probe.pinOnlyDescent(r.Aprime, PIN_PATH);
+  assert.equal(self.ok, false, 'HEAD itself is not "after" the activation commit');
+  await assert.rejects(probe.pinOnlyDescent('HEAD', PIN_PATH), /full commit id/);
+  await assert.rejects(probe.pinOnlyDescent('--all', PIN_PATH), /full commit id/);
+  // a commit that changes the pin file AND another file is not pin-only, whichever sorts first
+  const bundled = await repoWorld();
+  bundled.writePin({ recordedBy: 'Owner (bundled)' });
+  writeFileSync(path.join(bundled.root, 'zzz.txt'), 'extra\n');
+  commitAll(bundled.root, 'pin plus a late-sorting file');
+  assert.equal((await createGitProbe(bundled.root).pinOnlyDescent(bundled.A, PIN_PATH)).ok, false);
+  for (let i = 0; i < 51; i++) {
+    r.writePin({ recordedBy: `Owner ${i}` });
+    commitAll(r.root, `pin ${i}`);
+  }
+  const long = await probe.pinOnlyDescent(r.A, PIN_PATH);
+  assert.equal(long.ok, false, 'a chain longer than the bound is refused rather than walked');
 });

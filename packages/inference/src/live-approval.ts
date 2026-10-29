@@ -55,7 +55,17 @@ const fail = (code: AuthorizationErrorCode, message: string): never => {
 // ------------------------------------------------------------------ git probe
 
 /** Read-only repository facts. `treeDigest(rev, exclude)` is the activation digest of a revision (see ACTIVATION below). */
-export type GitProbe = { head(): Promise<string>; clean(): Promise<boolean>; treeDigest(rev: string, excludePath: string): Promise<string> };
+export type PinDescent = { ok: true } | { ok: false; reason: string };
+export type GitProbe = {
+  head(): Promise<string>;
+  clean(): Promise<boolean>;
+  treeDigest(rev: string, excludePath: string): Promise<string>;
+  /**
+   * Revision relationship (not just tree contents): `activationCommit` is an ancestor of HEAD and EVERY commit in activationCommit..HEAD is a
+   * linear, non-merge commit whose only change is `pinPath`. An empty commit, a revert/recommit, a code or config change, or a merge breaks it.
+   */
+  pinOnlyDescent(activationCommit: string, pinPath: string): Promise<PinDescent>;
+};
 
 // ------------------------------------------------------------------ owner-pinned activation revision
 //
@@ -64,9 +74,15 @@ export type GitProbe = { head(): Promise<string>; clean(): Promise<boolean>; tre
 //   1. the reviewed C3-LIVE-01B PR (register entry + code) is audited and merged -> commit A exists;
 //   2. the owner computes `node scripts/c3-activation-digest.ts <A>` and records A plus that digest, with the decision
 //      reference, in a separate pin-only commit A' (reviewed) -> the pin file is the only difference between A and A';
-//   3. production accepts HEAD only if its tree digest (pin file excluded) equals the pinned digest AND the pinned commit A
-//      still hashes to it. Any other commit, even a clean descendant that keeps the register, changes the digest and is
-//      rejected until the owner pins again. A self-declared HEAD is never proof of authorization.
+//   3. production accepts HEAD only if (a) its tree digest (pin file excluded) equals the pinned digest AND A still hashes to it, AND
+//      (b) the REVISION RELATIONSHIP holds: A is an ancestor of HEAD and every commit in A..HEAD is linear and changes ONLY the pin
+//      file. (a) alone would accept an unauthorized empty or revert/recommit descendant with an identical tree; (b) rejects it,
+//      because such a commit changes nothing, or something other than, the pin file.
+//   Re-pinning: a corrected pin is another reviewed pin-only commit on top of the chain (still pin-only descent from A); authorizing
+//   NEW code means merging a reviewed activation commit A2 and then a pin-only commit naming A2 and its digest. Old approvals bind
+//   the activation commit and digest, so they stop working. Honest boundary: git cannot prove a commit's SHA from inside the tree.
+//   What is enforced is structure (only the pin file changes after A); that the pin-file edit itself was the owner's is the review of
+//   that commit (protected main + owner review). A commit that edits only the pin file is, by definition, an owner pin action.
 export const ACTIVATION_PIN_PATH = 'config/live-activation.json' as const;
 export type ActivationPin = {
   decisionId: typeof DECISION_ID;

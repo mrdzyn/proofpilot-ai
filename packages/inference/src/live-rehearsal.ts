@@ -82,7 +82,7 @@ export async function runActivationRehearsal(input: { symptom: Symptom; facts: T
 
     const register = parseDecisionRegister(JSON.stringify({ schemaVersion: 1, decisions: [{ decisionId: DECISION_ID, status: 'APPROVED', provider: 'meta', model: META_PROPOSAL_MODEL, maxBillableAttempts: 1, maxInputChars: 12_000, maxOutputTokens: 3_072, approvedBy: 'SYNTHETIC-REHEARSAL', approvedAt: '2026-10-30T00:00:00.000Z', reference: 'synthetic: not a real decision', synthetic: true }] }));
     const pin = parseActivationPin(JSON.stringify({ schemaVersion: 1, activation: { decisionId: DECISION_ID, decisionReference: 'synthetic: not a real decision', activationCommit: SYNTHETIC_SHA, activationDigest: SYNTHETIC_DIGEST, recordedBy: 'SYNTHETIC-REHEARSAL', recordedAt: '2026-10-30T00:00:00.000Z', reference: 'synthetic', synthetic: true } }));
-    const git: GitProbe = { head: async () => SYNTHETIC_SHA, clean: async () => true, treeDigest: async () => SYNTHETIC_DIGEST }; // synthetic repository facts
+    const git: GitProbe = { head: async () => SYNTHETIC_SHA, clean: async () => true, treeDigest: async () => SYNTHETIC_DIGEST, pinOnlyDescent: async () => ({ ok: true }) }; // synthetic repository facts
     // a synthetic context: it can never be used by the production API, and a synthetic quota applies to the temp tree only
     const ctx = createSyntheticContext({ register, pin, git, approvalsDir, reservationsRoot, liveQuota: 1 });
     const code = await runApprovalCli(['--run-id', runId, '--input-sha256', request.inputSha256, '--input-chars', String(request.chars)], {
