@@ -442,6 +442,11 @@ test('activation lineage: a commit after the pin that is not pin-only, a merge c
   git(a.root, 'commit', '-q', '-m', 'later change');
   assert.equal(noApprovalRun(a, 'c3-live-meta-001'), 'REVISION_NOT_APPROVED');
   assert.equal(await expectedGateCode(a.root), 'REVISION_NOT_APPROVED');
+  // an EMPTY commit after the pin has the identical tree but is not a pin-file-only commit: the relationship, not the contents, is enforced
+  const e = await makeInstall();
+  git(e.root, 'commit', '-q', '--allow-empty', '-m', 'empty descendant');
+  assert.equal(noApprovalRun(e, 'c3-live-meta-001'), 'REVISION_NOT_APPROVED');
+  assert.equal(await expectedGateCode(e.root), 'REVISION_NOT_APPROVED');
   // a synthetic merge commit (what a pull-request checkout without ref creates): A' merged into an unrelated tip
   const b = await makeInstall();
   git(b.root, 'checkout', '-q', '-b', 'pr', b.Aprime);
