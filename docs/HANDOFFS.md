@@ -886,4 +886,30 @@ Review and owner merge decision; then the owner chooses between C3-B2B and submi
 ### Next action
 Re-audit; owner merge decision; then C3-B2B approval decision and the submission tasks.
 
+## Handoff: PP-META-I2-C3-B2B-P1-A1
+
+- **Task / phase:** C3-B2B slice P1 — pure provenance extraction (specification section 3 prerequisite)
+- **From:** Implementation agent (Muse Code)
+- **To:** GPT-6 independent exact-head review, then project owner
+- **Branch:** `phase/pp-meta-c3-b2b-p1-provenance-extraction` from `main` `4e74e32eefa937b31761fd08914aad6a2be5f759` (PR #18)
+- **State:** READY FOR REVIEW. No activation, quota, authorization, credential, reservation, parser or production-runner change; the stored `c3-live-meta-001` artifact was not loaded or executed; no provider call; no deployment or merge. Owner authorization covers P1/P2/E1/E2 implementation and offline synthetic testing in Draft PRs; executing the real proposal is a separate, still-pending approval.
+
+### Completed
+- `packages/provenance/src/provenance-input.ts` (new neutral Zone P module): the certified-baseline / proposal-input loaders, `trustedFactsFromBaseline`, `buildProposalRequest` and their error/limit/type dependencies, moved unchanged; `live-input.ts` is a pure re-export shim and `patch-proposal.ts` re-exports the moved symbols (owner command wiring unchanged).
+- `tests/security/provenance-boundary.test.ts`: exact transitive allow-list (static + dynamic imports), zero dynamic imports, read-only fs members, no network/credential/process/write capability, shim purity, Zone E separation, and a negative control proving the check rejects the inference pipeline.
+- `tests/unit/provenance-input.test.ts` (behavior through the neutral module) and `tests/unit/provenance-equivalence.test.ts` (reference identity plus identical results/refusals across a mutation battery); synthetic evidence only.
+- `tasks/PP-META-I2-C3-B2B.md` section 6 now references section 3.5 (was an obsolete 3.7); `docs/STATUS.md` reflects PR #18's merge and the P1 state.
+
+### Validation
+- `pnpm lint` clean; `pnpm typecheck` clean; `pnpm test:security` 123/123 PASS (includes the 5 new boundary tests).
+- `pnpm test:unit`: all P1 suites pass; the only failures are the 16 pre-existing port-bind (`EPERM`) failures in the coordinator/stage suites, reproduced identically on the untouched base in a clean worktree (sandbox blocks loopback binds; unrelated to this change).
+- Targeted P1 evidence: 9 new unit tests + 5 boundary tests green; equivalence battery (9 scenarios) byte-identical.
+
+### Continuation notes
+- The existing `live01b-activation-boundary` gate assertions were redirected to the neutral module with the no-capability net widened to both files (no assertion weakened; the shim gains a purity assertion).
+- STOP after P1: P2 (artifact validator, source-provenance check, registration bridge) is not started.
+
+### Next action
+GPT-6 exact-head review; owner merge decision; separate owner decision on P2 and on executing the real proposal.
+
 <!-- HANDOFF_ENTRIES_END -->

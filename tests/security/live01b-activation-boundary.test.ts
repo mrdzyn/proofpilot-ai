@@ -22,6 +22,9 @@ const prod = () => walk(path.join(root, 'packages')).concat(walk(path.join(root,
 const SCRIPT = 'scripts/c3-live-proposal.ts';
 const CLI = 'packages/inference/src/live-proposal-cli.ts';
 const INPUT = 'packages/inference/src/live-input.ts';
+// C3-B2B P1: the gate implementation moved unchanged to the neutral Zone P module; INPUT is its pure
+// re-export shim. Content markers below guard the module that holds the logic; the no-capability net covers both.
+const PROVENANCE = 'packages/provenance/src/provenance-input.ts';
 
 test('the owner script is a thin wiring of the real terminal and the two real production functions: no env, fetch, provider, root or trust parameter', () => {
   const text = code(SCRIPT);
@@ -56,8 +59,10 @@ test('the CLI logic calls the gated entry point exactly once, in straight-line c
 });
 
 test('the provenance gate is read-only and offline: no network, environment, credential, spawn or write', () => {
-  const text = code(INPUT);
-  assert.doesNotMatch(text, /process\.env|\bfetch\b|createProvider|structuredResponse|child_process|execFile|\bspawn\b|writeFile|appendFile|rm\(|unlink|rename|MODEL_API_KEY|apiKey|\beval\(|new Function/);
+  for (const f of [INPUT, PROVENANCE]) {
+    assert.doesNotMatch(code(f), /process\.env|\bfetch\b|createProvider|structuredResponse|child_process|execFile|\bspawn\b|writeFile|appendFile|rm\(|unlink|rename|MODEL_API_KEY|apiKey|\beval\(|new Function/, f);
+  }
+  const text = code(PROVENANCE);
   assert.match(text, /extractOracleResults/);
   assert.match(text, /classifyF01Baseline/);
   assert.match(text, /certifyF01Baseline/);
