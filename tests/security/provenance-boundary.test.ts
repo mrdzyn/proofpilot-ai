@@ -20,10 +20,15 @@ const MODULE = 'packages/provenance/src/provenance-input.ts';
 const LEGACY_INPUT = 'packages/inference/src/live-input.ts';
 const LEGACY_PIPELINE = 'packages/inference/src/patch-proposal.ts';
 
-/** The complete transitive import set Zone P is allowed: the module itself, the core parser leaves (plus the
+/** The complete transitive import set Zone P is allowed: the module itself, the artifact loader and source
+ *  checks, the SEC-P2-02 authentication module (pure Ed25519 verification over `node:crypto` plus the
+ *  already allow-listed read-only filesystem members and `node:path`; verified by the assertions below
+ *  to add no builtin, no filesystem member and no Zone E edge), the core parser leaves (plus the
  *  type-only status leaf), the intake run-id check (plus its error leaf), and nothing else. Never expanded
- *  to make a test pass. */
+ *  to make a test pass: this entry is justified in tasks/SEC-P2-02-ARTIFACT-AUTHENTICITY.md and covered
+ *  by tests/unit/artifact-auth.test.ts. */
 const ALLOW_FILES = [
+  'packages/provenance/src/artifact-auth.ts',
   'packages/provenance/src/provenance-input.ts',
   'packages/provenance/src/proposal-artifact.ts',
   'packages/provenance/src/source-provenance.ts',
@@ -436,7 +441,7 @@ function zonePViolations(c: Closure): string[] {
 }
 
 /** Every Zone P production entry module; their closures are unioned for the allow-list check. */
-const ZONE_P_ENTRIES = [MODULE, 'packages/provenance/src/proposal-artifact.ts', 'packages/provenance/src/source-provenance.ts'];
+const ZONE_P_ENTRIES = [MODULE, 'packages/provenance/src/proposal-artifact.ts', 'packages/provenance/src/source-provenance.ts', 'packages/provenance/src/artifact-auth.ts'];
 
 function zonePUnion(): { union: Closure; closures: Closure[] } {
   const closures = ZONE_P_ENTRIES.map(closureOf);

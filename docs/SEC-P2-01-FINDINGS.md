@@ -92,3 +92,25 @@ Narrow reader hardening is necessary but not sufficient. Full closure needs one 
 - [ ] Accept options 2/3 for a future real run, or direct option 1 (signed artifacts) first.
 - [ ] Confirm that no real execution happens until the decision above plus the separate
       execution approval and security review are all recorded.
+
+## 7. SEC-P2-02 addendum — what content authentication closes (and what it does not)
+
+SEC-P2-02 (`packages/provenance/src/artifact-auth.ts`, `scripts/c3-b2b-verify-authenticated.ts`,
+`config/artifact-trust-roots.json`, runbook `docs/SEC-P2-02-ISOLATED-VERIFICATION-RUNBOOK.md`)
+implements option 1 from section 4: detached Ed25519 signatures over a domain-separated
+canonical manifest binding the exact artifact bytes, run id, input hash and source-provenance
+identifiers to a pinned key, verified fail-closed before registration or staging.
+
+- **Closed, with test evidence:** every content-substitution row in the section 3 table —
+  mid-read rewrites, persistent or reverted swaps, in-place rewrites (including
+  same-size), substitutions between pipeline phases, tampered or replayed signatures,
+  unknown or substituted keys, altered bindings, unauthenticated legacy artifacts —
+  provided the verifier code and the pinned keys are intact. The guard-removal test proves
+  the gate is load-bearing, not decorative.
+- **Not closed:** verifier and trust-root integrity against a same-UID writer (no in-repo
+  check bootstraps that trust; it needs the runbook's owner-operated prerequisites);
+  pre-installed swaps that predate enrollment (signatures authenticate forward from
+  enrollment, never backward to origin); historical origin of the unsigned Muse Spark
+  artifact (section 7 of the runbook). The residual owner decision above stays open and is
+  now joined by the runbook's section 10 preconditions. Nothing in SEC-P2-02 is an OS
+  sandbox, and nothing here claims otherwise.

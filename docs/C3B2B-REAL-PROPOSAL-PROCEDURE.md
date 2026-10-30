@@ -3,10 +3,14 @@
 > **STATUS: DISABLED. DO NOT RUN.** This procedure is a plan for a separately authorized future.
 > Every execution gate below stays closed: the E2 run function refuses unattested runs, the
 > operator command refuses `c3-live-meta-001` before any file read (`REAL_ARTIFACT_DISABLED`),
-> and the exported E2 verifier refuses the reserved run id at its own boundary. Enabling a real
-> run requires (a) an explicit owner execution approval naming the exact revisions below,
-> (b) the P2 ancestor-swap owner risk decision, (c) a new independent security review, and
-> (d) a reviewed code change — there is no flag, environment variable or credential that lifts
+> and the exported E2 verifier refuses the reserved run id at its own boundary. SEC-P2-02 adds
+> the authenticated path (`scripts/c3-b2b-verify-authenticated.ts`, detached Ed25519 manifest
+> against `config/artifact-trust-roots.json`; runbook `docs/SEC-P2-02-ISOLATED-VERIFICATION-RUNBOOK.md`),
+> which is likewise HARD-DISABLED for the real id. Enabling a real run requires
+> (a) an explicit owner execution approval naming the exact revisions below,
+> (b) the P2 ancestor-swap owner risk decision, (c) a reviewed historical-artifact enrollment
+> per runbook section 7, (d) a new independent security review, and (e) a reviewed code
+> change — there is no flag, environment variable, trust-root entry or credential that lifts
 > the disable. No step of this procedure has been executed.
 
 ## 1. Authorization prerequisites (all required, in order)
@@ -19,7 +23,11 @@
    - acceptance of the SEC-P2-01 residual risk (same-UID writer) or the isolation in place.
 2. **P2 ancestor-swap risk decision** (see `docs/SEC-P2-01-FINDINGS.md`): either a read-only
    snapshot / separate-UID run, or documented single-writer owner-machine operation.
-3. **Independent security review** of the exact HEAD to be run, after the enabling code change.
+3. **Historical-artifact enrollment** per `docs/SEC-P2-02-ISOLATED-VERIFICATION-RUNBOOK.md`
+   section 7: re-derived source evidence plus explicit authorization naming the key id and
+   artifact hash — or a recorded decision that the source cannot be established (which
+   cancels the run, since signing afterward can never prove Meta produced those bytes).
+4. **Independent security review** of the exact HEAD to be run, after the enabling code change.
 
 ## 2. Exact parameters (fixed at authorization time, not before)
 

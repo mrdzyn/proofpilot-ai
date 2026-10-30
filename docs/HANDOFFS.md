@@ -1191,4 +1191,35 @@ GPT-6 focused re-audit of the new HEAD; owner merge decision; then owner-run loc
 ### Next action
 GPT-6 focused re-audit of the new HEAD; owner merge decision; then owner-run local QA per the corrected runbook.
 
+## Handoff: PP-SEC-P2-02-A1
+
+- **Task / phase:** SEC-P2-02 artifact authenticity + isolated-verification readiness
+  (task contract `tasks/SEC-P2-02-ARTIFACT-AUTHENTICITY.md`)
+- **From:** Implementation agent (Muse Code)
+- **To:** GPT-6 independent exact-head security review, then project owner
+- **Branch:** `phase/pp-secp202-authenticity` (new Draft PR from `main@07ae865a`)
+- **State:** READY FOR REVIEW. Detached Ed25519 manifest authentication (Zone P,
+  `node:crypto` only) verified fail-closed before registration/staging; empty committed
+  trust roots; authenticated operator command mirrors the existing pipeline with the same
+  five flags and a first-position real-id hard disable; 19 adversarial tests plus
+  guard-removal; Zone P boundary extended by one file with no new builtin/member/edge;
+  runbook documents the threat model, key rules, macOS prerequisites, refusal codes and
+  the explicit residual. Real proposal never read; no providers, credentials, activation
+  or oracle changes; F01/PC-1 behavior preserved.
+
+### Completed
+- `packages/provenance/src/artifact-auth.ts`, `config/artifact-trust-roots.json`,
+  `scripts/c3-b2b-verify-authenticated.ts`, `tests/unit/artifact-auth.test.ts`,
+  `tests/support/artifact-auth-fixture.ts`, boundary allow-list update with justification.
+- `docs/SEC-P2-02-ISOLATED-VERIFICATION-RUNBOOK.md`, SEC-P2-01 findings addendum,
+  disabled-procedure enrollment prerequisite, STATUS refresh (PR #23 merged, QA-01 PASS).
+
+### Validation
+- `pnpm lint`, `pnpm typecheck`, `pnpm test:unit`, `pnpm test:security` and hosted CI at
+  the exact HEAD (evidence on the PR).
+
+### Next action
+GPT-6 exact-head security review; owner merge decision; owner-operated prerequisites stay
+open per runbook sections 3/7/10. No real execution, enrollment, merge or deploy.
+
 <!-- HANDOFF_ENTRIES_END -->
