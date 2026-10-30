@@ -1222,4 +1222,40 @@ GPT-6 focused re-audit of the new HEAD; owner merge decision; then owner-run loc
 GPT-6 exact-head security review; owner merge decision; owner-operated prerequisites stay
 open per runbook sections 3/7/10. No real execution, enrollment, merge or deploy.
 
+## Handoff: PP-SEC-P2-02-A2
+
+- **Task / phase:** SEC-P2-02 remediation of the four independent-audit findings, same Draft PR #24
+- **From:** Implementation agent (Muse Code)
+- **To:** GPT-6 independent exact-head re-audit, then project owner
+- **Branch:** `phase/pp-secp202-authenticity` (same Draft PR #24, new HEAD)
+- **State:** READY FOR RE-REVIEW. All four findings remediated with the smallest changes:
+  MAJOR-1 sidecars now read through a shared pinned descriptor helper
+  (`openNoFollowReadOnly`, extracted from the P2 reader with byte-identical artifact
+  behavior; boundary `open`/`realpath` assertions unchanged) with FIFO/dir/oversize
+  refusals, a descriptor-pinning proof, and a deterministic test-only open-to-read seam;
+  MAJOR-2 `asymmetricKeyType === 'ed25519'` enforced at trust-root parse and defensively
+  at verification, with RSA/EC/Ed448 negative controls; MINOR-3 structural decoded-key
+  top-level walk replaces the regex scan (escaped duplicates/proto refuse, string-value
+  colons are not keys); MINOR-4 composition test plus exact-command harness (temporary
+  in-test trust-roots overlay, committed roots restored byte-for-byte) proving past-auth
+  advance and substitution refusal. Empty production roots and the real-artifact
+  hard disable preserved; no new builtins, members, Zone E edges, providers, credentials
+  or activation changes.
+
+### Completed
+- `packages/provenance/src/proposal-artifact.ts` (shared helper, no behavior change),
+  `packages/provenance/src/artifact-auth.ts` (descriptor reads, key-type gates, structural
+  scan, test hooks), `tests/unit/artifact-auth.test.ts` (+10 tests),
+  `tests/unit/artifact-auth-pipeline.test.ts` (new, 4 tests), runbook sections 4/6,
+  STATUS handoff pointer.
+
+### Validation
+- `pnpm lint`, `pnpm typecheck`, `git diff --check` clean; `pnpm test:security` 137/137;
+  auth suites 33/33; full unit failures remain the 16 pre-existing sandbox EPERM blocks.
+  Hosted CI at the exact HEAD (evidence on the PR).
+
+### Next action
+GPT-6 exact-head re-audit of the new HEAD; owner merge decision. No real execution,
+enrollment, merge or residual-risk acceptance.
+
 <!-- HANDOFF_ENTRIES_END -->

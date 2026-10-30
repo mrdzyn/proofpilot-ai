@@ -18,9 +18,14 @@
 // members and `node:path`, and the existing P2 loader. It adds no builtin, no
 // filesystem member and no Zone E edge.
 import { createPublicKey, timingSafeEqual, verify } from 'node:crypto';
-import { lstat, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { loadAndValidateProposalArtifact, type ValidatedProposal } from './proposal-artifact.ts';
+import {
+  ArtifactError,
+  loadAndValidateProposalArtifact,
+  openNoFollowReadOnly,
+  readBoundedBytes,
+  type ValidatedProposal,
+} from './proposal-artifact.ts';
 
 export type AuthErrorCode =
   | 'AUTH_UNSIGNED'
@@ -122,6 +127,132 @@ export function canonicalManifestBytes(manifest: SignatureManifest): Buffer {
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   v !== null && typeof v === 'object' && !Array.isArray(v);
 
+type TextCursor = { i: number };
+
+const skipJsonWs = (text: string, c: TextCursor): void => {
+  while (c.i < text.length) {
+    const ch = text[c.i]!;
+    if (ch !== ' ' && ch !== '\t' && ch !== '\n' && ch !== '\r') return;
+    c.i++;
+  }
+};
+
+/**
+ * Decode one JSON string literal starting at its opening quote; null when malformed.
+ * Decoding (including every escape form) happens before any key comparison, so a key
+ * spelled with Unicode escapes can never dodge the duplicate or forbidden-key checks,
+ * and a quote-colon sequence inside a string value can never be mistaken for a key.
+ */
+const decodeJsonString = (text: string, c: TextCursor): string | null => {
+  let out = '';
+  c.i++; // opening quote
+  for (;;) {
+    const ch = text[c.i];
+    if (ch === undefined) return null;
+    if (ch === '"') { c.i++; return out; }
+    if (ch === '\\') {
+      const e = text[c.i + 1];
+      if (e === undefined) return null;
+      if (e === 'u') {
+        const hex = text.slice(c.i + 2, c.i + 6);
+        if (!/^[0-9a-fA-F]{4}$/.test(hex)) return null;
+        const hi = parseInt(hex, 16);
+        c.i += 6;
+        if (hi >= 0xd800 && hi <= 0xdbff) {
+          const lo = /^\\u([0-9a-fA-F]{4})/.exec(text.slice(c.i, c.i + 6));
+          if (!lo || lo[1] === undefined) return null;
+          const low = parseInt(lo[1], 16);
+          if (low < 0xdc00 || low > 0xdfff) return null;
+          out += String.fromCodePoint((hi - 0xd800) * 0x400 + (low - 0xdc00) + 0x10000);
+          c.i += 6;
+          continue;
+        }
+        if (hi >= 0xdc00 && hi <= 0xdfff) return null;
+        out += String.fromCodePoint(hi);
+        continue;
+      }
+      const simple: Record<string, string> = { '"': '"', '\\': '\\', '/': '/', b: '\b', f: '\f', n: '\n', r: '\r', t: '\t' };
+      const rep = simple[e];
+      if (rep === undefined) return null;
+      out += rep;
+      c.i += 2;
+      continue;
+    }
+    if (ch < ' ') return null;
+    out += ch;
+    c.i++;
+  }
+};
+
+/** Skip one JSON value of any shape (strings decoded, containers balanced); false when malformed. */
+const skipJsonValue = (text: string, c: TextCursor, depth: number): boolean => {
+  if (depth > 8) return false;
+  skipJsonWs(text, c);
+  const ch = text[c.i];
+  if (ch === undefined) return false;
+  if (ch === '"') return decodeJsonString(text, c) !== null;
+  if (ch === '{' || ch === '[') {
+    const close = ch === '{' ? '}' : ']';
+    c.i++;
+    skipJsonWs(text, c);
+    if (text[c.i] === close) { c.i++; return true; }
+    for (;;) {
+      if (ch === '{') {
+        skipJsonWs(text, c);
+        if (text[c.i] !== '"') return false;
+        if (decodeJsonString(text, c) === null) return false;
+        skipJsonWs(text, c);
+        if (text[c.i] !== ':') return false;
+        c.i++;
+      }
+      if (!skipJsonValue(text, c, depth + 1)) return false;
+      skipJsonWs(text, c);
+      if (text[c.i] === ',') { c.i++; continue; }
+      if (text[c.i] === close) { c.i++; return true; }
+      return false;
+    }
+  }
+  if (ch === '-' || (ch >= '0' && ch <= '9')) {
+    const m = /^-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?/.exec(text.slice(c.i));
+    if (!m) return false;
+    c.i += m[0].length;
+    return true;
+  }
+  for (const lit of ['true', 'false', 'null']) {
+    if (text.startsWith(lit, c.i)) { c.i += lit.length; return true; }
+  }
+  return false;
+};
+
+/**
+ * Collect the decoded top-level keys of a JSON object in order; null when the text is not
+ * exactly one well-formed object. Nested keys are values, never collected: the manifest
+ * schema rejects non-scalar values afterwards.
+ */
+const scanTopLevelKeys = (text: string): string[] | null => {
+  const c: TextCursor = { i: 0 };
+  const keys: string[] = [];
+  skipJsonWs(text, c);
+  if (text[c.i] !== '{') return null;
+  c.i++;
+  for (;;) {
+    skipJsonWs(text, c);
+    if (text[c.i] === '}' && keys.length === 0) { c.i++; skipJsonWs(text, c); return c.i === text.length ? keys : null; }
+    if (text[c.i] !== '"') return null;
+    const key = decodeJsonString(text, c);
+    if (key === null) return null;
+    keys.push(key);
+    skipJsonWs(text, c);
+    if (text[c.i] !== ':') return null;
+    c.i++;
+    if (!skipJsonValue(text, c, 1)) return null;
+    skipJsonWs(text, c);
+    if (text[c.i] === ',') { c.i++; continue; }
+    if (text[c.i] === '}') { c.i++; skipJsonWs(text, c); return c.i === text.length ? keys : null; }
+    return null;
+  }
+};
+
 /** Strict manifest parse: flat object, exact keys, scalar values, no duplicates. */
 export function parseSignatureManifest(text: string): SignatureManifest {
   let parsed: unknown;
@@ -131,21 +262,15 @@ export function parseSignatureManifest(text: string): SignatureManifest {
     return fail('AUTH_MANIFEST_MALFORMED', 'refused: authentication manifest is not valid JSON');
   }
   if (!isRecord(parsed)) return fail('AUTH_MANIFEST_BAD_TYPE', 'refused: authentication manifest must be a JSON object');
-  const seen = new Map<string, number>();
-  // Built without a literal quote inside the pattern: the Zone P boundary scanner masks
-  // string literals syntactically, so an unbalanced quote inside a regex literal would
-  // mis-tokenize this module. Char-code construction keeps every quote balanced.
-  const quote = String.fromCharCode(34);
-  const keyPattern = new RegExp(`${quote}((?:[^${quote}\\\\]|\\\\.)*)${quote}\\s*:`, 'g');
-  for (const m of text.matchAll(keyPattern)) {
-    const key = m[1]!;
-    seen.set(key, (seen.get(key) ?? 0) + 1);
-  }
-  for (const [key, count] of seen) {
-    if (count > 1) return fail('AUTH_MANIFEST_DUPLICATE_KEY', `refused: duplicate manifest key ${JSON.stringify(key)}`);
-  }
-  for (const key of Object.keys(parsed)) {
+  const topKeys = scanTopLevelKeys(text);
+  if (topKeys === null) return fail('AUTH_MANIFEST_MALFORMED', 'refused: authentication manifest is not well-formed JSON');
+  for (const key of topKeys) {
     if (POLLUTED.has(key)) return fail('AUTH_MANIFEST_PROTO_KEY', 'refused: forbidden manifest key');
+  }
+  const seen = new Set<string>();
+  for (const key of topKeys) {
+    if (seen.has(key)) return fail('AUTH_MANIFEST_DUPLICATE_KEY', `refused: duplicate manifest key ${JSON.stringify(key)}`);
+    seen.add(key);
   }
   for (const key of Object.keys(parsed)) {
     if (!(MANIFEST_KEYS as readonly string[]).includes(key)) {
@@ -233,10 +358,14 @@ export function parseTrustRoots(text: string): TrustRoots {
     } catch {
       return fail('AUTH_TRUST_ROOT_BAD_VALUE', 'refused: trust root public key is not decodable');
     }
+    let imported: ReturnType<typeof createPublicKey>;
     try {
-      createPublicKey({ key: spki!, format: 'der', type: 'spki' });
+      imported = createPublicKey({ key: spki!, format: 'der', type: 'spki' });
     } catch {
-      return fail('AUTH_KEY_MISMATCH', 'refused: trust root public key is not a usable Ed25519 key');
+      return fail('AUTH_KEY_MISMATCH', 'refused: trust root public key is not a usable key');
+    }
+    if (imported.asymmetricKeyType !== 'ed25519') {
+      return fail('AUTH_KEY_MISMATCH', 'refused: trust root public key is not an Ed25519 key');
     }
     keys.push({ keyId, algorithm: 'ed25519', publicKeySpkiBase64, status: 'active' });
   }
@@ -293,6 +422,11 @@ export function verifyArtifactAuthentication(args: {
     format: 'der',
     type: 'spki',
   });
+  // Defensive: trust roots arriving from a caller (tests, future wiring) are re-checked here,
+  // so a non-Ed25519 key can never reach verification under an Ed25519 label.
+  if (publicKey.asymmetricKeyType !== 'ed25519') {
+    return fail('AUTH_KEY_MISMATCH', 'refused: trust root public key is not an Ed25519 key');
+  }
   let ok = false;
   try {
     ok = verify(null, canonicalManifestBytes(manifest), publicKey, signature);
@@ -315,29 +449,59 @@ const evidenceChild = (repoRoot: string, runId: string, file: string): string =>
   join(repoRoot, '.proofpilot/evidence/proposals', runId, file);
 
 /**
- * Read a small authentication sidecar with distrust: symlinks, non-regular files and
- * oversize files refuse as unauthenticated rather than being followed or loaded.
+ * Test-only seam for the sidecar read: when supplied, runs after the descriptor is pinned
+ * and stat-checked but before the bounded read, so a test can deterministically reproduce a
+ * mid-read swap, rewrite or growth without timing. Production never supplies it.
  */
-async function readSidecar(repoRoot: string, runId: string, file: string, maxBytes: number): Promise<string> {
+export type SidecarTestHooks = {
+  afterSidecarOpen?: (file: string) => void | Promise<void>;
+};
+
+/**
+ * Read a small authentication sidecar through a pinned descriptor: the path is opened
+ * read-only with no-follow and no-block semantics, the open descriptor is stat-checked
+ * (regular file, fixed bound), and the content is read bounded from the descriptor — never
+ * from the pathname. A same-UID swap, FIFO, device or growth after the open cannot divert
+ * or hang the read: post-open path changes do not affect the descriptor, and over-bound
+ * reads refuse. Every failure is a typed `AUTH_UNSIGNED` refusal, never an uncaught error.
+ */
+async function readSidecar(
+  repoRoot: string,
+  runId: string,
+  file: string,
+  maxBytes: number,
+  hooks?: SidecarTestHooks,
+): Promise<string> {
   const target = evidenceChild(repoRoot, runId, file);
-  let meta;
+  let handle;
   try {
-    meta = await lstat(target);
-  } catch {
-    return fail('AUTH_UNSIGNED', `refused: ${file} is absent, so this artifact is unauthenticated`);
+    handle = await openNoFollowReadOnly(target, `refused: ${file} is absent, so this artifact is unauthenticated`);
+  } catch (e) {
+    if (e instanceof ArtifactError) {
+      return fail('AUTH_UNSIGNED', `refused: ${file} cannot be pinned to a readable file (${e.code}), so this artifact is unauthenticated`);
+    }
+    throw e;
   }
-  if (meta!.isSymbolicLink() || !meta!.isFile() || meta!.size > maxBytes) {
-    return fail('AUTH_UNSIGNED', `refused: ${file} is not a directly readable sidecar, so this artifact is unauthenticated`);
+  try {
+    const st = await handle.stat();
+    if (!st.isFile()) return fail('AUTH_UNSIGNED', `refused: ${file} is not a regular file, so this artifact is unauthenticated`);
+    if (st.size > maxBytes) return fail('AUTH_UNSIGNED', `refused: ${file} exceeds its fixed bound, so this artifact is unauthenticated`);
+    await hooks?.afterSidecarOpen?.(target);
+    const bytes = await readBoundedBytes(handle, maxBytes);
+    if (bytes.length > maxBytes) {
+      return fail('AUTH_UNSIGNED', `refused: ${file} grew past its fixed bound while reading, so this artifact is unauthenticated`);
+    }
+    return bytes.toString('utf8');
+  } finally {
+    await handle.close().catch(() => undefined);
   }
-  const bytes = await readFile(target);
-  if (bytes.length > maxBytes) return fail('AUTH_UNSIGNED', `refused: ${file} exceeds its fixed bound`);
-  return bytes.toString('utf8');
 }
 
 /**
  * Load the artifact through the existing strict P2 checks, then require a valid
  * detached authentication binding it before anything may register or stage it.
  * Artifact failures surface as `ArtifactError`; authentication failures as `AuthError`.
+ * The optional hooks are test-only (see `SidecarTestHooks`); production passes none.
  */
 export async function loadAndAuthenticateProposalArtifact(args: {
   repoRoot: string;
@@ -346,10 +510,10 @@ export async function loadAndAuthenticateProposalArtifact(args: {
   sourceFixtureTree: string;
   sourceAnalysisId: string;
   trustRoots: TrustRoots;
-}): Promise<{ artifact: ValidatedProposal; authentication: AuthenticatedArtifact }> {
+}, hooks?: SidecarTestHooks): Promise<{ artifact: ValidatedProposal; authentication: AuthenticatedArtifact }> {
   const artifact = await loadAndValidateProposalArtifact({ repoRoot: args.repoRoot, runId: args.runId });
-  const manifestText = await readSidecar(args.repoRoot, args.runId, MANIFEST_FILE, MAX_MANIFEST_BYTES);
-  const signatureText = (await readSidecar(args.repoRoot, args.runId, SIGNATURE_FILE, MAX_SIGNATURE_BYTES)).trim();
+  const manifestText = await readSidecar(args.repoRoot, args.runId, MANIFEST_FILE, MAX_MANIFEST_BYTES, hooks);
+  const signatureText = (await readSidecar(args.repoRoot, args.runId, SIGNATURE_FILE, MAX_SIGNATURE_BYTES, hooks)).trim();
   const manifest = parseSignatureManifest(manifestText);
   const authentication = verifyArtifactAuthentication({
     manifest,

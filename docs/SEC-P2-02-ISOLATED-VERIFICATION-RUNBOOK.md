@@ -70,6 +70,9 @@ Prerequisites: clean tree on this branch, `pnpm lint && pnpm typecheck` green.
 # Targeted proof of the authentication gate (synthetic keys in memory, real temp dirs):
 node --test tests/unit/artifact-auth.test.ts
 
+# Composition plus exact-command wiring (MINOR-4; harness restores trust roots byte-for-byte):
+node --test tests/unit/artifact-auth-pipeline.test.ts
+
 # Zone P boundary proof (the new module adds no builtin, member or Zone E edge):
 node --test tests/security/provenance-boundary.test.ts
 
@@ -82,11 +85,20 @@ node scripts/c3-b2b-verify-authenticated.ts \
   --verification-sha cccccccccccccccccccccccccccccccccccccccc
 ```
 
-A full authenticated synthetic end-to-end (three replays, VERIFIED verdict) is **not**
-runnable yet on purpose: the committed trust roots are empty until a reviewed enrollment
-adds a key, and no enrollment is performed in this task. The per-phase composition the
-command performs (P2 load → auth → provenance → E1 → rebind → E2 → revalidation) is the
-same pipeline the existing E2 tests already exercise with synthetic fixtures.
+Integration evidence (`tests/unit/artifact-auth-pipeline.test.ts`): a composition test
+runs load → signature verification → E1 registration → cross-phase rebind to success on
+one synthetic flow. The exact-command tests run the real
+`scripts/c3-b2b-verify-authenticated.ts` against a synthetic fixture with a temporary
+in-test trust-roots overlay (committed roots restored byte-for-byte afterwards): a valid
+binding advances past authentication into a provenance refusal (exit 2, non-AUTH),
+while tampered bytes refuse at the auth gate (manifest-binding text, no provenance
+stage reached). The temporary overlay never touches the committed roots, which stay
+empty until a reviewed enrollment.
+
+A full authenticated synthetic end-to-end with a VERIFIED verdict is **not** runnable by
+design: provenance requires certified baseline evidence no synthetic fixture carries,
+and the three replays require the browser stage. The per-phase composition is the same
+pipeline the existing E2 tests exercise with hand-authored controls (green in hosted CI).
 
 ## 5. Expected refusal codes and exit statuses
 
@@ -107,7 +119,7 @@ same pipeline the existing E2 tests already exercise with synthetic fixtures.
 
 ## 6. Adversarial-test evidence
 
-`tests/unit/artifact-auth.test.ts` (19 tests, all passing) covers, each fail-closed:
+`tests/unit/artifact-auth.test.ts` (29 tests, all passing) covers, each fail-closed:
 
 1. valid authenticated synthetic artifact passes; 2. modified bytes; 3. same-size in-place
    rewrite; 4. schema-valid substitution; 5. ancestor-directory replacement; 6. manifest
@@ -120,7 +132,17 @@ same pipeline the existing E2 tests already exercise with synthetic fixtures.
    (`RENDER_MISMATCH`: auth never blesses semantics); 15. concurrency + environment
    pollution irrelevance; 16. loader demands explicit roots (no default); 17. guard-removal
    (substitution validates bare, refuses authenticated); 18. command surface (no env, no
-   key/bypass flags, hard disable precedes reads) + live spawn refusal of the real id.
+   key/bypass flags, hard disable precedes reads) + live spawn refusal of the real id;
+   19. MAJOR-1 descriptor reads: FIFO / directory / oversize sidecars refuse, post-open
+   path swaps cannot divert the read (proven by descriptor), growth and content rewrites
+   after open refuse via the hook seam while a path swap of a valid binding stays valid;
+   20. MAJOR-2 RSA/EC/Ed448 keys refuse at parse and at verification (`AUTH_KEY_MISMATCH`);
+   21. MINOR-3 Unicode-escaped duplicates and escaped proto keys refuse with decoded
+   names; quote-colon string values are not keys; nested keys are refused as shape.
+
+`tests/unit/artifact-auth-pipeline.test.ts` (4 tests): authenticated composition to
+E1 registration and rebind; exact-command positive (past auth into provenance) and
+substitution (auth-gate refusal) wiring; harness restore proof.
 
 `tests/security/provenance-boundary.test.ts` proves the new module adds no builtin, no
 filesystem member and no Zone E edge. Full `pnpm test:unit` + `pnpm test:security` +

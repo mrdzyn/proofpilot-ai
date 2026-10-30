@@ -5,8 +5,8 @@
 // credential or environment input is involved.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { createHash, generateKeyPairSync } from 'node:crypto';
 import { mkdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import {
@@ -21,6 +21,8 @@ import {
 import {
   ArtifactError,
   loadAndValidateProposalArtifact,
+  openNoFollowReadOnly,
+  readBoundedBytes,
   reloadAndBindArtifact,
 } from '../../packages/provenance/src/proposal-artifact.ts';
 import { ModelProposalError, registerModelProposal } from '../../packages/core/src/model-proposal.ts';
@@ -420,4 +422,143 @@ test('authenticated command refuses the real reserved run id before any file rea
   ], { encoding: 'utf8', timeout: 120000, cwd: probeDir });
   assert.equal(r.status, 2);
   assert.match(String(r.stderr), /HARD-DISABLED/);
+});
+
+const sidecarPath = (root: string, runId: string, file: string): string =>
+  path.join(root, '.proofpilot/evidence/proposals', runId, file);
+
+test('MAJOR-1: a FIFO at a sidecar path refuses without blocking (AUTH_UNSIGNED)', async () => {
+  const s = setupAuth();
+  const manifestPath = sidecarPath(s.root, s.runId, 'auth-manifest.json');
+  rmSync(manifestPath);
+  execFileSync('mkfifo', [manifestPath]);
+  // O_NONBLOCK opens the FIFO without blocking; the descriptor stat refuses it before any read.
+  assert.equal(await authCodeOf(loadAndAuthenticateProposalArtifact(s.args)), 'AUTH_UNSIGNED');
+});
+
+test('MAJOR-1: a directory or oversize file at a sidecar path refuses (AUTH_UNSIGNED)', async () => {
+  const d = setupAuth();
+  rmSync(sidecarPath(d.root, d.runId, 'auth-manifest.json'));
+  mkdirSync(sidecarPath(d.root, d.runId, 'auth-manifest.json'));
+  assert.equal(await authCodeOf(loadAndAuthenticateProposalArtifact(d.args)), 'AUTH_UNSIGNED');
+  const o = setupAuth();
+  writeFileSync(sidecarPath(o.root, o.runId, 'auth-manifest.json'), 'x'.repeat(3000));
+  assert.equal(await authCodeOf(loadAndAuthenticateProposalArtifact(o.args)), 'AUTH_UNSIGNED');
+});
+
+test('MAJOR-1: sidecar reads pin the open descriptor — a post-open path swap cannot divert the read', async () => {
+  const s = setupAuth();
+  const manifestPath = sidecarPath(s.root, s.runId, 'auth-manifest.json');
+  const original = readFileSync(manifestPath);
+  const handle = await openNoFollowReadOnly(manifestPath, 'missing');
+  try {
+    renameSync(manifestPath, `${manifestPath}.orig`);
+    writeFileSync(manifestPath, JSON.stringify({ forged: true }));
+    const bytes = await readBoundedBytes(handle, 2048);
+    assert.deepEqual(bytes, original);
+  } finally {
+    await handle.close().catch(() => undefined);
+  }
+});
+
+test('MAJOR-1: growth after the descriptor open refuses deterministically (hook seam)', async () => {
+  const s = setupAuth();
+  const hooks = {
+    afterSidecarOpen: async (file: string) => {
+      if (file.endsWith('auth-manifest.json')) {
+        writeFileSync(file, `${readFileSync(file, 'utf8')}${' '.repeat(3000)}`);
+      }
+    },
+  };
+  assert.equal(await authCodeOf(loadAndAuthenticateProposalArtifact(s.args, hooks)), 'AUTH_UNSIGNED');
+});
+
+test('MAJOR-1: content rewritten after the descriptor open is still refused (hook seam)', async () => {
+  const s = setupAuth();
+  const hooks = {
+    afterSidecarOpen: async (file: string) => {
+      if (file.endsWith('auth-manifest.json')) writeFileSync(file, '{"forged":true} not json {{{');
+    },
+  };
+  // The descriptor read observes the swapped bytes; the strict parse refuses them.
+  assert.equal(await authCodeOf(loadAndAuthenticateProposalArtifact(s.args, hooks)), 'AUTH_MANIFEST_MALFORMED');
+});
+
+test('MAJOR-1: a path swap after the descriptor open cannot defeat a valid authentication', async () => {
+  const s = setupAuth();
+  writeFileSync(path.join(s.root, 'evil.json'), '{"evil":true}');
+  const hooks = {
+    afterSidecarOpen: async (file: string) => {
+      if (file.endsWith('auth-manifest.json')) {
+        renameSync(file, `${file}.orig`);
+        symlinkSync(path.join(s.root, 'evil.json'), file);
+      }
+    },
+  };
+  // The pinned descriptor still reads the enrolled bytes: the swap is inert, not trusted.
+  const { authentication } = await loadAndAuthenticateProposalArtifact(s.args, hooks);
+  assert.equal(authentication.artifactSha256, s.manifest.artifactSha256);
+});
+
+test('MAJOR-2: non-Ed25519 trust-root keys refuse at parse (AUTH_KEY_MISMATCH)', () => {
+  const rsa = generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const ec = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+  const ed448 = generateKeyPairSync('ed448');
+  for (const [alg, key] of [['rsa', rsa], ['ec', ec], ['ed448', ed448]] as const) {
+    const spki = key.publicKey.export({ format: 'der', type: 'spki' }).toString('base64');
+    const text = JSON.stringify({
+      version: 1,
+      keys: [{ keyId: 'wrong-alg-01', algorithm: 'ed25519', publicKeySpkiBase64: spki, status: 'active' }],
+    });
+    assert.throws(() => parseTrustRoots(text), (e) => e instanceof AuthError && e.code === 'AUTH_KEY_MISMATCH', alg);
+  }
+});
+
+test('MAJOR-2: a substituted non-Ed25519 key refuses at verification even with a valid signature', () => {
+  const s = setupAuth();
+  const { publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const rsaRoots: TrustRoots = {
+    version: 1,
+    keys: [{
+      keyId: s.id.keyId,
+      algorithm: 'ed25519',
+      publicKeySpkiBase64: publicKey.export({ format: 'der', type: 'spki' }).toString('base64'),
+      status: 'active',
+    }],
+  };
+  let code = 'NO_ERROR';
+  try {
+    verifyArtifactAuthentication({
+      manifest: s.manifest,
+      signatureBase64: signManifest(s.manifest, s.id.privateKeyPem),
+      runId: s.manifest.runId,
+      artifactHash: s.manifest.artifactSha256,
+      inputSha256: s.manifest.inputSha256,
+      sourceSha: s.manifest.sourceSha,
+      sourceFixtureTree: s.manifest.sourceFixtureTree,
+      sourceAnalysisId: s.manifest.sourceAnalysisId,
+      trustRoots: rsaRoots,
+    });
+  } catch (e) {
+    code = e instanceof AuthError ? e.code : `OTHER:${(e as Error).message}`;
+  }
+  assert.equal(code, 'AUTH_KEY_MISMATCH');
+});
+
+test('MINOR-3: Unicode-escaped duplicate manifest keys refuse with the decoded name', () => {
+  const escaped = manifestTextFor(manifestFor()).replace('"runId":', '"runId":"first", "\\u0072unId":');
+  assert.throws(() => parseSignatureManifest(escaped), (e) =>
+    e instanceof AuthError && e.code === 'AUTH_MANIFEST_DUPLICATE_KEY' && /"runId"/.test(e.message));
+  const escapedProto = manifestTextFor(manifestFor()).replace(/}$/, ', "\\u005f\\u005fproto\\u005f\\u005f": {}}');
+  assert.throws(() => parseSignatureManifest(escapedProto), (e) =>
+    e instanceof AuthError && e.code === 'AUTH_MANIFEST_PROTO_KEY');
+});
+
+test('MINOR-3: quote-colon sequences inside string values are not keys, and nested keys are values', () => {
+  const tricky = manifestFor({ sourceAnalysisId: 'note: "runId": 1, see "keyId": 2' });
+  const parsed = parseSignatureManifest(manifestTextFor(tricky));
+  assert.equal(parsed.sourceAnalysisId, 'note: "runId": 1, see "keyId": 2');
+  const nested = manifestTextFor(manifestFor()).replace(/}$/, ', "bonus": {"runId": 1}}');
+  assert.throws(() => parseSignatureManifest(nested), (e) =>
+    e instanceof AuthError && e.code === 'AUTH_MANIFEST_UNKNOWN_FIELD');
 });
