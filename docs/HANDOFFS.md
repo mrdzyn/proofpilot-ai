@@ -937,4 +937,21 @@ GPT-6 exact-head review; owner merge decision; separate owner decision on P2 and
 ### Next action
 GPT-6 focused re-audit of the new HEAD; owner merge decision.
 
+## Handoff: PP-META-I2-C3-B2B-P1-A3
+
+- **Task / phase:** C3-B2B P1 MAJOR-1 residual remediation — builtin re-export gap (GPT-6 re-audit of PR #19)
+- **From:** Implementation agent (Muse Code)
+- **To:** GPT-6 independent exact-head re-audit, then project owner
+- **Branch:** `phase/pp-meta-c3-b2b-p1-provenance-extraction` (same Draft PR #19, new HEAD)
+- **State:** READY FOR RE-REVIEW. Test-only change; no production file touched. No activation, quota, authorization, credential, reservation, parser or runner change; the stored proposal was not loaded or executed; no provider call; no merge.
+
+### Completed
+- `tests/security/provenance-boundary.test.ts`: Zone P forbids every `export ... from "node:*"` re-export (wildcard, namespace and named) as an explicit violation. Two negative mutation tests prove `export * from "node:fs/promises"` and `export * as fs from "node:fs/promises"` fail (plus a named re-export case), and a positive control proves a named read-only `import` stays permitted. Allow-lists unchanged; all existing tests preserved.
+
+### Validation
+- Targeted boundary suite 16/16 PASS; full gates below before push.
+
+### Next action
+GPT-6 focused re-audit of the new HEAD; owner merge decision.
+
 <!-- HANDOFF_ENTRIES_END -->

@@ -315,7 +315,11 @@ function scanSource(abs: string, label: string): { edges: string[]; scan: Scan }
     const clause = stmt.slice(kind.length, stmt.indexOf(specM[0]));
     if (spec.startsWith('node:')) {
       builtin(spec, `${kind} clause`, clause);
-      if (kind === 'import') {
+      if (kind === 'export') {
+        // Zone P forbids every builtin re-export: `export *` / `export * as` re-expose unlisted members
+        // (including write-capable fs functions), and named re-exports add no provenance value.
+        scan.unsupported.push(`${label}: re-export from builtin ${spec} is not permitted`);
+      } else {
         const body = clause.replace(/^\s*type\s+/, '').trim();
         if (body.startsWith('*')) scan.namespaceImports.push(`${label}: namespace import from ${spec}`);
         else if (/^[A-Za-z_$][\w$]*\s*(,|$)/.test(body) && !body.startsWith('{')) scan.defaultImports.push(`${label}: default import from ${spec}`);
@@ -538,6 +542,28 @@ test('mutation: require() and import attributes are unsupported, but literal tar
   assert.ok(c.unsupported.some((u) => u.includes('require()')), 'require() rejected');
   assert.ok(c.unsupported.some((u) => u.includes('import attributes')), 'import attributes rejected');
   assert.ok(zonePViolations(c).some((v) => v.startsWith('unsupported forms:')), 'rejected by the policy');
+});
+
+test('mutation: wildcard, namespace and named re-exports from an fs builtin are rejected', () => {
+  const { dir } = fixtureRoot({
+    'w.ts': 'export * from "node:fs/promises";\n',
+    'n.ts': 'export * as fs from "node:fs/promises";\n',
+    'r.ts': 'export { readFile } from "node:fs/promises";\n',
+  });
+  for (const name of ['w.ts', 'n.ts', 'r.ts']) {
+    const { scan } = scanSource(path.join(dir, name), path.join(dir, name));
+    assert.ok(scan.unsupported.some((u) => u.includes('re-export from builtin node:fs/promises')), `${name}: builtin re-export recorded`);
+    assert.ok(zonePViolations(fixClosure(dir, name)).some((v) => v.includes('re-export from builtin')), `${name}: rejected by the policy`);
+  }
+});
+
+test('mutation: a named read-only fs import remains permitted (positive control)', () => {
+  const { dir } = fixtureRoot({
+    'a.ts': 'import { readFile } from "node:fs/promises";\nexport const f = readFile;\n',
+  });
+  const c = fixClosure(dir, 'a.ts');
+  assert.deepEqual(c.fsMembers, ['readFile']);
+  assert.deepEqual(zonePViolations(c), [], 'named read-only import is not a violation');
 });
 
 test('mutation: a legitimate type-only import is permitted and followed', () => {
