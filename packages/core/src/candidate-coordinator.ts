@@ -289,6 +289,240 @@ const VERDICT_PHRASE = /\bpassed\b|\b3\s*\/\s*3\b/i;
 const carriesVerdictLanguage = (s: string): boolean => VERDICT_LITERAL.test(s) || VERDICT_PHRASE.test(s);
 
 /**
+ * Fail-closed checks for one E2 model-verification row. The identity, CSS, hashes, anchors and
+ * the verdict are all re-derived: the verdict must equal a fresh `decideVerification` over the
+ * persisted evidence loaded from `root`, so a row with zero replays can never verify and PC-1's
+ * evidence can never satisfy a model row (namespaced evidence dirs, provenance-tagged ids).
+ */
+export async function modelVerificationProblems(m: unknown, sha: string, root: string): Promise<string[]> {
+  if (typeof m !== 'object' || m === null || Array.isArray(m)) return ['model verification is not an object'];
+  const p: string[] = [];
+  const r = m as Record<string, unknown>;
+  for (const k of Object.keys(r)) if (!MODEL_VERIFICATION_KEYS.includes(k)) p.push(`unexpected model-verification field: ${k}`);
+  for (const k of MODEL_VERIFICATION_KEYS) if (!(k in r)) p.push(`missing model-verification field: ${k}`);
+  if (r.kind !== 'model-proposal-verification') p.push(`kind is ${JSON.stringify(r.kind)}, expected "model-proposal-verification"`);
+  if (r.schemaVersion !== 2) p.push('unsupported model-verification schema version');
+  if (typeof r.provenanceAttested !== 'boolean') p.push('provenanceAttested must be a boolean');
+  if (r.provenance !== 'model-proposal') p.push(`provenance is ${JSON.stringify(r.provenance)}, expected "model-proposal"`);
+  if (typeof r.runId !== 'string' || !RUN_ID.test(r.runId)) {
+    p.push('runId is missing or malformed');
+  } else if (r.id !== `MODEL-${r.runId}`) {
+    p.push(`id is ${JSON.stringify(r.id)}, expected "MODEL-${r.runId}"`);
+  }
+  if (r.sourceProvenance !== 'operator-reported') p.push('source revision must stay labelled operator-reported, never verified');
+  if (typeof r.sourceSha !== 'string' || !SHA40.test(r.sourceSha)) p.push('sourceSha is missing or malformed');
+  if (typeof r.inputSha256 !== 'string' || !SHA64.test(r.inputSha256)) p.push('inputSha256 is missing or malformed');
+  if (typeof r.artifactSha256 !== 'string' || !SHA64.test(r.artifactSha256)) p.push('artifactSha256 is missing or malformed');
+  if (typeof r.verificationSha !== 'string' || r.verificationSha !== sha) p.push('row is not bound to the scoreboard approved SHA');
+  if (typeof r.fixtureTreeSource !== 'string' || !SHA40.test(r.fixtureTreeSource)) p.push('fixtureTreeSource is missing or malformed');
+  if (typeof r.fixtureTreeVerification !== 'string' || !SHA40.test(r.fixtureTreeVerification)) p.push('fixtureTreeVerification is missing or malformed');
+  if (
+    typeof r.fixtureTreeSource === 'string' && typeof r.fixtureTreeVerification === 'string' &&
+    SHA40.test(r.fixtureTreeSource) && SHA40.test(r.fixtureTreeVerification) &&
+    r.fixtureTreeSource !== r.fixtureTreeVerification
+  ) {
+    p.push('fixture anchor drifted between the source and verification revisions (a changed oracle is a different experiment)');
+  }
+  let rendered: string | null = null;
+  let clean: CssAdjustment[] | null = null;
+  const triples = r.adjustments;
+  if (!Array.isArray(triples) || triples.length === 0) {
+    p.push('adjustments must be a non-empty list');
+  } else {
+    const list: CssAdjustment[] = [];
+    triples.forEach((t, i) => {
+      if (typeof t !== 'object' || t === null) {
+        p.push(`adjustment ${i} is not an object`);
+        return;
+      }
+      const proto: unknown = Object.getPrototypeOf(t);
+      if (proto !== Object.prototype && proto !== null) {
+        p.push(`adjustment ${i} is not plain data`);
+        return;
+      }
+      const keys = Object.keys(t);
+      if (keys.length !== 3 || !['selector', 'property', 'value'].every((k) => keys.includes(k))) {
+        p.push(`adjustment ${i} must hold exactly selector, property and value`);
+        return;
+      }
+      const rec = t as Record<string, unknown>;
+      if (typeof rec.selector !== 'string' || typeof rec.property !== 'string' || typeof rec.value !== 'string') {
+        p.push(`adjustment ${i} fields must be strings`);
+        return;
+      }
+      list.push({ selector: rec.selector, property: rec.property, value: rec.value });
+    });
+    if (list.length === triples.length) {
+      clean = list;
+      try {
+        rendered = renderCssAdjustments(clean);
+      } catch (e) {
+        p.push(`adjustments violate the closed grammar: ${(e as Error).message}`);
+      }
+      if (rendered !== null) {
+        if (r.renderedCss !== rendered) p.push('renderedCss differs from the freshly rendered bytes');
+        if (typeof r.runId === 'string' && r.candidateId !== candidateIdOf(sha, rendered, `model-proposal:${r.runId}`)) {
+          p.push('candidate id does not match the provenance-tagged identity');
+        }
+      }
+    }
+  }
+  const baseline = (typeof r.baseline === 'object' && r.baseline !== null ? r.baseline : null) as {
+    reproduced?: unknown; reasons?: unknown; replay?: unknown;
+  } | null;
+  if (!baseline || typeof baseline.reproduced !== 'boolean' || !Array.isArray(baseline.reasons)) {
+    p.push('baseline verdict is missing or malformed');
+  }
+  if (!Array.isArray(r.replays)) p.push('replays is not a list');
+  if (r.replaysRequired !== REPLAYS_REQUIRED_FOR_VERIFIED) p.push(`replaysRequired is ${JSON.stringify(r.replaysRequired)}, expected ${REPLAYS_REQUIRED_FOR_VERIFIED}`);
+  if (r.complete !== true) p.push('verification is not complete');
+  const runId = typeof r.runId === 'string' && RUN_ID.test(r.runId) ? r.runId : null;
+  if (runId === null || !baseline || !Array.isArray(r.replays)) return p;
+  // ---- evidence phase: recompute everything from the persisted bytes under root ----
+  // The presented row is bound to the persisted verification.json byte for byte: independent
+  // revalidation reads the saved record, never trusts the caller's object alone.
+  const persistedRaw = await readFile(path.join(root, `MODEL-${runId}`, VERIFICATION_FILE), 'utf8').catch(() => null);
+  if (persistedRaw === null) {
+    p.push('persisted verification.json is missing');
+  } else {
+    let persisted: unknown = null;
+    try {
+      persisted = JSON.parse(persistedRaw);
+    } catch {
+      p.push('persisted verification.json is not JSON');
+    }
+    if (persisted !== null && !sameJson(persisted, m)) p.push('persisted verification.json differs from the presented row');
+  }
+  // The source attestation (written by the Zone P provenance check at run time) is the
+  // independently inspectable basis for the row's provenance values. Without a matching
+  // attestation the row verifies at most Tier B: replays recomputed, provenance unattested.
+  let attested = false;
+  const attRaw = await readFile(path.join(root, `MODEL-${runId}`, ATTESTATION_FILE), 'utf8').catch(() => null);
+  if (attRaw !== null) {
+    let att: unknown = null;
+    try {
+      att = JSON.parse(attRaw);
+    } catch {
+      p.push('source attestation is not JSON');
+    }
+    if (att !== null) {
+      const a = att as Record<string, unknown>;
+      const classes = (typeof a.classes === 'object' && a.classes !== null ? a.classes : {}) as Record<string, unknown>;
+      let good = true;
+      const holds = (cond: boolean, msg: string): boolean => {
+        if (!cond) p.push(`source attestation: ${msg}`);
+        return cond;
+      };
+      good = holds(a.sourceHead === r.sourceSha, 'sourceHead differs from the row') && good;
+      good = holds(a.verificationHead === r.verificationSha, 'verificationHead differs from the row') && good;
+      good = holds(a.sourceFixtureTree === r.fixtureTreeSource, 'sourceFixtureTree differs from the row') && good;
+      good = holds(a.inputSha256 === r.inputSha256, 'inputSha256 differs from the row') && good;
+      good = holds(a.artifactInputSha256 === r.inputSha256, 'artifact input hash differs from the recomputed input') && good;
+      good = holds(a.artifactHash === r.artifactSha256, 'artifactHash differs from the row') && good;
+      good = holds(a.ancestryOk === true, 'ancestry is not certified') && good;
+      good = holds(a.treesEqual === true, 'tree equality is not certified') && good;
+      good = holds(classes.sourceHead === 'operator-reported', 'sourceHead class is not operator-reported') && good;
+      good = holds(classes.verificationHead === 'operator-reported', 'verificationHead class is not operator-reported') && good;
+      good = holds(classes.inputSha256 === 'recomputed', 'inputSha256 class is not recomputed') && good;
+      good = holds(classes.artifactInputSha256 === 'local-file', 'artifact input class is not local-file') && good;
+      good = holds(classes.artifactHash === 'local-file', 'artifactHash class is not local-file') && good;
+      good = holds(classes.ancestryOk === 'local-git', 'ancestry class is not local-git') && good;
+      good = holds(classes.treesEqual === 'local-git', 'tree-equality class is not local-git') && good;
+      attested = good;
+    }
+  }
+  if (r.provenanceAttested !== attested) {
+    p.push(`provenanceAttested is ${String(r.provenanceAttested)} but the persisted attestation ${attested ? 'supports' : 'does not support'} the row provenance`);
+  }
+  // Without an attested source basis the row verifies at most Tier B: the replays are
+  // recomputed, but VERIFIED is withheld until the provenance is attested.
+  if (!attested && r.status === 'VERIFIED') {
+    p.push('VERIFIED requires a persisted source attestation binding the provenance (Tier B rows verify replays only)');
+  }
+  if (!baseline.replay || typeof baseline.replay !== 'object') {
+    p.push('baseline replay is missing');
+    return p;
+  }
+  const bEntry = baseline.replay as ReplayEntry;
+  if (bEntry.evidenceDir !== `MODEL-${runId}/baseline/replay-1`) {
+    p.push(`baseline evidence must be MODEL-${runId}/baseline/replay-1, not ${String(bEntry.evidenceDir)}`);
+  }
+  const b = await loadReplayEvidence(root, bEntry, p);
+  if (b && b.record.label !== `MODEL-${runId}`) p.push(`baseline record is labelled ${JSON.stringify(b.record.label)}, expected "MODEL-${runId}"`);
+  // The baseline stage must carry no adjustments: the verified baseline is the unmodified oracle run.
+  if (b && (!Array.isArray(b.record.adjustments) || b.record.adjustments.length !== 0 || b.record.renderedCss !== '')) {
+    p.push('baseline record carries adjustments (the baseline stage must be unmodified)');
+  }
+  const gate = b ? baselineGate(b, sha) : { reproduced: false, reasons: ['baseline evidence unavailable'] };
+  if (gate.reproduced !== baseline.reproduced) p.push('baseline verdict does not match its evidence');
+  if (!sameJson(gate.reasons, baseline.reasons)) p.push('baseline reasons do not match its evidence');
+  const entries = r.replays as ReplayEntry[];
+  const replays: ReplayEvidence[] = [];
+  entries.forEach((entry, i) => {
+    if (!entry || typeof entry !== 'object' || (entry as ReplayEntry).n !== i + 1) {
+      p.push(`model replay ${i + 1} is not sequential`);
+    }
+    if ((entry as ReplayEntry)?.evidenceDir !== `MODEL-${runId}/replay-${i + 1}`) {
+      p.push(`model replay ${i + 1} points at ${String((entry as ReplayEntry)?.evidenceDir)}, outside the namespaced evidence`);
+    }
+  });
+  for (const entry of entries) {
+    const evd = await loadReplayEvidence(root, entry as ReplayEntry, p);
+    if (evd) {
+      replays.push(evd);
+      if (evd.record.label !== `MODEL-${runId}`) p.push(`replay record is labelled ${JSON.stringify(evd.record.label)}, expected "MODEL-${runId}"`);
+      // Every replay must attest the registered candidate itself: evidence for a different patch
+      // can never verify this row, however internally consistent the row looks.
+      if (rendered !== null && clean !== null) {
+        const gotRaw: unknown = evd.record.adjustments;
+        if (!Array.isArray(gotRaw)) {
+          p.push('replay record adjustments are not a list');
+        } else {
+          const got = gotRaw.map((x) => {
+            const o = ((x ?? {}) as Record<string, unknown>);
+            return [o.selector, o.property, o.value];
+          });
+          const want = clean.map((a) => [a.selector, a.property, a.value]);
+          if (JSON.stringify(got) !== JSON.stringify(want) || evd.record.renderedCss !== rendered) {
+            p.push('replay record does not attest the registered candidate (adjustments or CSS differ from the row)');
+          }
+        }
+        if (evd.record.manifest?.candidateCss?.sha256 === undefined) {
+          p.push('replay record has no staged candidate CSS hash');
+        }
+      }
+    }
+  }
+  if (replays.length !== entries.length) {
+    p.push('model replay evidence unavailable');
+    return p;
+  }
+  if (typeof r.replaysAttempted !== 'number' || r.replaysAttempted !== entries.length) {
+    p.push(`replaysAttempted ${JSON.stringify(r.replaysAttempted)} does not match ${entries.length} replay(s) of evidence`);
+  }
+  // Without a reproduced baseline no replay may be attempted (mirrors expectedAttempts); with one,
+  // the list stops at the first replay that is not a clean pass and is otherwise complete.
+  if (!gate.reproduced) {
+    if (entries.length !== 0) p.push(`replays were attempted without a reproduced baseline (${entries.length} replay(s))`);
+  } else {
+    const firstBad = replays.findIndex((x) => replayPassProblems(x, sha).length > 0);
+    if (!(firstBad >= 0 ? entries.length === firstBad + 1 : entries.length === REPLAYS_REQUIRED_FOR_VERIFIED)) {
+      p.push(`the replay list is truncated or padded relative to the evidence (${entries.length} replay(s))`);
+    }
+  }
+  const d = decideVerification({ approvedSha: sha, baseline: b, replays });
+  if (d.status !== r.status) p.push(`row says ${String(r.status)} but the evidence gives ${d.status}`);
+  if (typeof r.replaysPassed !== 'number' || r.replaysPassed !== d.replaysPassed) {
+    p.push(`replaysPassed ${JSON.stringify(r.replaysPassed)} but the evidence gives ${d.replaysPassed}`);
+  }
+  if (r.reason !== d.reason) p.push('reason does not match the evidence');
+  if (r.status === 'VERIFIED' && (entries.length !== REPLAYS_REQUIRED_FOR_VERIFIED || d.replaysPassed !== REPLAYS_REQUIRED_FOR_VERIFIED)) {
+    p.push('VERIFIED without 3/3 replays');
+  }
+  return p;
+}
+
+/**
  * A registered stored-model-proposal row (C3-B2B E1). It lives in its own scoreboard section,
  * never in `candidates`, carries the provenance-tagged identity, and claims no verdict: E1
  * registers, it never runs. `sourceProvenance` is always the literal `operator-reported`; the
@@ -314,7 +548,7 @@ export type ModelProposalEntry = {
 
 export type Scoreboard = {
   schemaVersion: 1;
-  label: 'HAND-AUTHORED CONTROLS ONLY — NO MODEL INPUT' | typeof MODEL_BOARD_LABEL;
+  label: 'HAND-AUTHORED CONTROLS ONLY — NO MODEL INPUT' | typeof MODEL_BOARD_LABEL | typeof MODEL_VERIFICATION_LABEL;
   complete: boolean;
   approvedSha: string;
   createdAt: string;
@@ -327,6 +561,8 @@ export type Scoreboard = {
   notes: string[];
   /** Optional separate section for registered model-proposal rows. Absent on pre-E1 boards. */
   modelProposals?: ModelProposalEntry[];
+  /** Optional separate section for E2 model-verification rows. Absent on pre-E2 boards. */
+  modelVerifications?: ModelVerificationEntry[];
 };
 
 /**
@@ -423,6 +659,62 @@ export function modelRowProblems(m: unknown, sha: string): string[] {
   }
   return p;
 }
+
+/**
+ * A verified (or honestly attempted) stored-model-proposal run (C3-B2B E2). Versioned and
+ * discriminated separately from the E1 zero-replay row: E1 validation is never loosened to
+ * accommodate E2. The verdict fields are only ever produced by `decideVerification` over
+ * persisted evidence and are recomputed by the verifier below; a row with zero replays can
+ * never carry VERIFIED.
+ */
+export type ModelVerificationEntry = {
+  schemaVersion: 2;
+  kind: 'model-proposal-verification';
+  id: string;
+  provenance: 'model-proposal';
+  candidateId: string;
+  adjustments: CssAdjustment[];
+  renderedCss: string;
+  runId: string;
+  verificationSha: string;
+  sourceSha: string;
+  sourceProvenance: 'operator-reported';
+  inputSha256: string;
+  artifactSha256: string;
+  fixtureTreeSource: string;
+  fixtureTreeVerification: string;
+  /**
+   * True only when a persisted source attestation (produced by the Zone P provenance check)
+   * exists beside the evidence and agrees with every provenance value in this row. Recomputed
+   * by the verifier from disk; never trusted from the presented row alone.
+   */
+  provenanceAttested: boolean;
+  baseline: { reproduced: boolean; reasons: string[]; replay: ReplayEntry };
+  replays: ReplayEntry[];
+  replaysRequired: number;
+  replaysAttempted: number;
+  replaysPassed: number;
+  status: CandidateStatus;
+  reason: string | null;
+  complete: boolean;
+};
+
+/** A board carrying recomputed model-verification rows must use this label. */
+export const MODEL_VERIFICATION_LABEL = 'HAND-AUTHORED CONTROLS PLUS MODEL-PROPOSAL VERIFICATION ROWS — VERDICTS RECOMPUTED FROM EVIDENCE';
+
+const RUN_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+const SHA40 = /^[0-9a-f]{40}$/;
+const SHA64 = /^[0-9a-f]{64}$/;
+
+/**
+ * Exact E2 row shape (versioned by `schemaVersion: 2` + `kind`). Additive fields would let a
+ * row smuggle verdict-adjacent claims past the field checks, so any unknown key is refused and
+ * every known key is required. The E1 14-key schema is untouched.
+ */
+const MODEL_VERIFICATION_KEYS = ['schemaVersion', 'kind', 'id', 'provenance', 'candidateId', 'adjustments', 'renderedCss', 'runId', 'verificationSha', 'sourceSha', 'sourceProvenance', 'inputSha256', 'artifactSha256', 'fixtureTreeSource', 'fixtureTreeVerification', 'provenanceAttested', 'baseline', 'replays', 'replaysRequired', 'replaysAttempted', 'replaysPassed', 'status', 'reason', 'complete'];
+/** Persisted beside the namespaced replays by the run function; the verifier binds the presented row to these bytes. */
+const VERIFICATION_FILE = 'verification.json';
+const ATTESTATION_FILE = 'source-provenance.json';
 
 export class UntrustedControlError extends Error {
   constructor(detail: string) {
@@ -590,10 +882,40 @@ export async function runOfflineVerification(opts: CoordinatorOptions): Promise<
 // ------------------------------------------------------------ scoreboard verification (fail closed)
 
 const TOP_KEYS = ['schemaVersion', 'label', 'complete', 'approvedSha', 'createdAt', 'modelOrProviderCalls', 'modalCalls', 'baseline', 'candidates', 'nc5', 'notes'];
-/** Top-level keys an E1 board may carry in addition to TOP_KEYS. Absent on pre-E1 boards. */
-const OPTIONAL_TOP_KEYS = ['modelProposals'];
+/** Top-level keys an E1/E2 board may carry in addition to TOP_KEYS. Absent on earlier boards. */
+const OPTIONAL_TOP_KEYS = ['modelProposals', 'modelVerifications'];
 const SCOREBOARD_LABEL = 'HAND-AUTHORED CONTROLS ONLY — NO MODEL INPUT';
 const sameJson = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+
+/**
+ * Load one replay's persisted record and evidence, rebuild the published entry from the record
+ * bytes and compare every field. Shared by the hand-authored and model-verification paths so
+ * both recompute verdicts from the same persisted bytes. Failures are appended to `problems`.
+ */
+async function loadReplayEvidence(root: string, entry: ReplayEntry, problems: string[]): Promise<ReplayEvidence | null> {
+  if (!entry || typeof entry.evidenceDir !== 'string' || entry.evidenceDir.split('/').includes('..') || path.isAbsolute(entry.evidenceDir)) {
+    problems.push('a replay entry has a missing or unsafe evidence path');
+    return null;
+  }
+  const dir = path.join(root, entry.evidenceDir);
+  const raw = await readFile(path.join(dir, RECORD_FILE)).catch(() => null);
+  if (!raw) {
+    problems.push(`record missing: ${entry.evidenceDir}`);
+    return null;
+  }
+  if (sha256(raw) !== entry.recordSha256) problems.push(`record hash mismatch: ${entry.evidenceDir}`);
+  const record = JSON.parse(raw.toString('utf8')) as CandidateRecord;
+  const finalizedVerdict = record.outcome === 'ORACLE_PASS' || record.outcome === 'PATCH_FAILED';
+  const evidenceProblems = finalizedVerdict ? await verifyPersistedEvidence(dir) : [];
+  for (const x of evidenceProblems) problems.push(`${entry.evidenceDir}: ${x}`);
+  // Rebuild the entire published entry from the persisted record and compare every field (and reject extras).
+  const rebuilt = buildReplayEntry(entry.n, { record, evidenceProblems }, entry.evidenceDir, raw) as unknown as Record<string, unknown>;
+  const published = entry as unknown as Record<string, unknown>;
+  for (const key of new Set([...Object.keys(rebuilt), ...Object.keys(published)])) {
+    if (!sameJson(published[key], rebuilt[key])) problems.push(`${entry.evidenceDir}: scoreboard ${key} does not match the persisted record and evidence`);
+  }
+  return { record, evidenceProblems };
+}
 
 /**
  * Recompute everything from the persisted evidence and trusted in-code control definitions, and compare
@@ -617,41 +939,24 @@ export async function verifyScoreboard(outDir: string): Promise<string[]> {
   if (board.schemaVersion !== 1) problems.push('unsupported schema version');
   if (board.complete !== true) problems.push('scoreboard is not complete');
   if (board.modelProposals !== undefined && !Array.isArray(board.modelProposals)) problems.push('modelProposals is not a list');
+  if (board.modelVerifications !== undefined && !Array.isArray(board.modelVerifications)) problems.push('modelVerifications is not a list');
   const models: unknown[] = Array.isArray(board.modelProposals) ? board.modelProposals : [];
-  if (models.length > 0 && board.label !== MODEL_BOARD_LABEL) {
+  const verifications: unknown[] = Array.isArray(board.modelVerifications) ? board.modelVerifications : [];
+  if (verifications.length > 0 && board.label !== MODEL_VERIFICATION_LABEL) {
+    problems.push('scoreboard with model-verification rows must carry the model-verification label');
+  } else if (verifications.length === 0 && models.length > 0 && board.label !== MODEL_BOARD_LABEL) {
     problems.push('scoreboard with model-proposal rows must carry the model-rows label, never the hand-authored-only label');
   }
-  if (models.length === 0 && board.label !== SCOREBOARD_LABEL) problems.push('scoreboard label is not the hand-authored-controls label');
+  if (verifications.length === 0 && models.length === 0 && board.label !== SCOREBOARD_LABEL) {
+    problems.push('scoreboard label is not the hand-authored-controls label');
+  }
   if (board.modelOrProviderCalls !== 0 || board.modalCalls !== 0) problems.push('scoreboard claims provider or Modal calls');
   if (typeof board.approvedSha !== 'string' || !/^[0-9a-f]{40}$/.test(board.approvedSha)) return [...problems, 'scoreboard approvedSha is missing or malformed'];
   if (!Array.isArray(board.candidates)) return [...problems, 'scoreboard has no candidate list'];
   if (!board.baseline || typeof board.baseline !== 'object' || !board.baseline.replay) return [...problems, 'scoreboard has no baseline entry'];
   const sha = board.approvedSha;
 
-  const load = async (entry: ReplayEntry): Promise<ReplayEvidence | null> => {
-    if (!entry || typeof entry.evidenceDir !== 'string' || entry.evidenceDir.split('/').includes('..') || path.isAbsolute(entry.evidenceDir)) {
-      problems.push('a replay entry has a missing or unsafe evidence path');
-      return null;
-    }
-    const dir = path.join(outDir, entry.evidenceDir);
-    const raw = await readFile(path.join(dir, RECORD_FILE)).catch(() => null);
-    if (!raw) {
-      problems.push(`record missing: ${entry.evidenceDir}`);
-      return null;
-    }
-    if (sha256(raw) !== entry.recordSha256) problems.push(`record hash mismatch: ${entry.evidenceDir}`);
-    const record = JSON.parse(raw.toString('utf8')) as CandidateRecord;
-    const finalizedVerdict = record.outcome === 'ORACLE_PASS' || record.outcome === 'PATCH_FAILED';
-    const evidenceProblems = finalizedVerdict ? await verifyPersistedEvidence(dir) : [];
-    for (const x of evidenceProblems) problems.push(`${entry.evidenceDir}: ${x}`);
-    // Rebuild the entire published entry from the persisted record and compare every field (and reject extras).
-    const rebuilt = buildReplayEntry(entry.n, { record, evidenceProblems }, entry.evidenceDir, raw) as unknown as Record<string, unknown>;
-    const published = entry as unknown as Record<string, unknown>;
-    for (const key of new Set([...Object.keys(rebuilt), ...Object.keys(published)])) {
-      if (!sameJson(published[key], rebuilt[key])) problems.push(`${entry.evidenceDir}: scoreboard ${key} does not match the persisted record and evidence`);
-    }
-    return { record, evidenceProblems };
-  };
+  const load = (entry: ReplayEntry): Promise<ReplayEvidence | null> => loadReplayEvidence(outDir, entry, problems);
 
   // ---- baseline: same approved SHA, same evidence, same verdict ----
   const b = await load(board.baseline.replay);
@@ -732,6 +1037,62 @@ export async function verifyScoreboard(outDir: string): Promise<string[]> {
         problems.push(`${where}: candidate id collides with a hand-authored row`);
       }
     });
+  }
+
+  // ---- model-verification rows: discriminated E2 evidence, verdicts recomputed, never inherited ----
+  // The same run id legitimately appears in both model sections (E1 registration row plus E2
+  // verification row for one proposal), so id separation is enforced within this section and
+  // against hand-authored rows — never by equating the two sections. But immutable identity
+  // and hashes must agree across sections: differing labels for one run never silently coexist
+  // with an E2 claim. This is metadata reconciliation, not cross-provenance replay inheritance.
+  {
+    const boardIds = new Set(board.candidates.map((c) => c?.id));
+    const handIds = new Set(board.candidates.map((c) => c?.candidateId));
+    const e1ByRun = new Map<string, {
+      sourceSha?: unknown; inputSha256?: unknown; artifactSha256?: unknown; candidateId?: unknown;
+      adjustments?: unknown; renderedCss?: unknown;
+    }>();
+    for (const m of models) {
+      if (typeof m === 'object' && m !== null) {
+        const e = m as {
+          runId?: unknown; sourceSha?: unknown; inputSha256?: unknown; artifactSha256?: unknown;
+          candidateId?: unknown; adjustments?: unknown; renderedCss?: unknown;
+        };
+        if (typeof e.runId === 'string') e1ByRun.set(e.runId, e);
+      }
+    }
+    const seenVerifications = new Set<string>();
+    for (let i = 0; i < verifications.length; i++) {
+      const row = verifications[i];
+      const where = `model-verification[${i}]`;
+      for (const x of await modelVerificationProblems(row, sha, outDir)) problems.push(`${where}: ${x}`);
+      const rec = (typeof row === 'object' && row !== null ? row : {}) as {
+        id?: unknown; candidateId?: unknown; runId?: unknown; sourceSha?: unknown; inputSha256?: unknown;
+        artifactSha256?: unknown; adjustments?: unknown; renderedCss?: unknown;
+      };
+      if (typeof rec.id === 'string') {
+        if (boardIds.has(rec.id) || seenVerifications.has(rec.id)) {
+          problems.push(`${where}: id ${JSON.stringify(rec.id)} is not separate from the board inventory`);
+        }
+        seenVerifications.add(rec.id);
+      }
+      if (typeof rec.candidateId === 'string' && handIds.has(rec.candidateId)) {
+        problems.push(`${where}: candidate id collides with a hand-authored row (model verification never inherits PC-1)`);
+      }
+      if (typeof rec.runId === 'string') {
+        const e1 = e1ByRun.get(rec.runId);
+        if (e1) {
+          if (e1.sourceSha !== rec.sourceSha) problems.push(`${where}: sourceSha differs from the E1 row for the same run`);
+          if (e1.inputSha256 !== rec.inputSha256) problems.push(`${where}: inputSha256 differs from the E1 row for the same run`);
+          if (e1.artifactSha256 !== rec.artifactSha256) problems.push(`${where}: artifactSha256 differs from the E1 row for the same run`);
+          // The CSS identity must agree too: an E1 row describing a different patch under the
+          // same run id and hashes must not silently coexist with an E2 VERIFIED claim.
+          if (e1.candidateId !== rec.candidateId) problems.push(`${where}: candidateId differs from the E1 row for the same run`);
+          if (!sameJson(e1.adjustments, rec.adjustments)) problems.push(`${where}: adjustments differ from the E1 row for the same run`);
+          if (e1.renderedCss !== rec.renderedCss) problems.push(`${where}: renderedCss differs from the E1 row for the same run`);
+        }
+      }
+    }
   }
 
   // ---- NC-5: recomputed from the persisted PC-1 evidence, never trusted ----

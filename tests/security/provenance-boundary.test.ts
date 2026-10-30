@@ -532,7 +532,7 @@ test('the legacy live-input.ts is a pure delegation shim: one re-export, no logi
 });
 
 test('Zone E stays separate: staging, the coordinator and the E1 bridge import no inference or provenance code', () => {
-  for (const f of ['packages/core/src/candidate-stage.ts', 'packages/core/src/candidate-coordinator.ts', 'packages/core/src/model-proposal.ts']) {
+  for (const f of ['packages/core/src/candidate-stage.ts', 'packages/core/src/candidate-coordinator.ts', 'packages/core/src/model-proposal.ts', 'packages/core/src/model-verification.ts']) {
     assert.doesNotMatch(code(read(f)), /inference\/src|packages\/provenance|provenance-input/, f);
   }
 });
@@ -546,6 +546,39 @@ test('E1 bridge has a minimal direct edge: only the core grammar leaf and the si
   assert.doesNotMatch(text, /node:/, 'no builtin import in the bridge (identity and rendering delegate to the leaves)');
   const c = closureOf(f);
   assert.ok(!c.files.some((x) => /inference\/src|packages\/provenance/.test(x)), 'the bridge closure reaches no inference or provenance file');
+});
+
+test('E2 verifier has a minimal direct edge: grammar, stage, coordinator and the E1 bridge only', () => {
+  const f = 'packages/core/src/model-verification.ts';
+  const text = code(read(f));
+  const specs = [...new Set([...text.matchAll(/from\s*['"]([^'"]+)['"]/g)].map((m) => m[1]!))].sort();
+  assert.deepEqual(
+    specs,
+    ['./candidate-coordinator.ts', './candidate-stage.ts', './css-adjustments.ts', './model-proposal.ts', 'node:fs/promises', 'node:path'],
+    'no other module edge out of the E2 module',
+  );
+  assert.doesNotMatch(text, /import\s*\(|require\s*\(/, 'no dynamic import or require in the E2 module');
+  assert.match(text, /c3-live-meta-001/, 'the reserved real run id is refused at the execution boundary');
+  assert.match(text, /REAL_ARTIFACT_DISABLED/, 'the boundary refusal has a dedicated code');
+  const c = closureOf(f);
+  assert.ok(!c.files.some((x) => /inference\/src|packages\/provenance/.test(x)), 'the E2 closure reaches no inference or provenance file');
+});
+
+test('E2 command is narrow and hard-disabled: five explicit SHAs/ids, no env, no execution switch, real artifact refused', () => {
+  const f = 'scripts/c3-b2b-verify-proposal.ts';
+  const text = code(read(f));
+  for (const opt of ['run-id', 'source-sha', 'source-fixture-tree', 'source-analysis-id', 'verification-sha']) {
+    assert.match(text, new RegExp(`['"]${opt}['"]`), `explicit --${opt} parameter`);
+  }
+  assert.doesNotMatch(text, /process\.env/, 'the command never reads the environment');
+  assert.doesNotMatch(text, /--execute|['"]execute['"]/, 'no blanket execution flag exists');
+  assert.doesNotMatch(text, /packages\/inference|inference\/src/, 'no inference import');
+  assert.doesNotMatch(text, /baseten|modal|apiKey|api_key/i, 'no provider or credential capability');
+  assert.match(text, /c3-live-meta-001/, ' the real run id is named');
+  assert.match(text, /HARD-DISABLED/, 'the hard-disable names itself');
+  assert.match(text, /REAL_ARTIFACT_MESSAGE/, 'refusal precedes every file read, stage and Git call');
+  assert.match(text, /sourceAttestation/, 'the Zone P attestation travels with the run and is persisted');
+  assert.match(text, /modelVerificationProblems/, 'the command revalidates the persisted bundle before reporting');
 });
 
 // ---------------------------------------------------------------- mutation tests: the scanner rejects every missed form

@@ -1055,4 +1055,66 @@ GPT-6 exact-head audit; owner merge decision; E2 stays unstarted.
 ### Next action
 GPT-6 focused re-audit of the new HEAD; owner merge decision; E2 stays unstarted.
 
+## Handoff: PP-META-I2-C3-B2B-E2-A1
+
+- **Task / phase:** C3-B2B slice E2 — offline model-proposal verification pipeline
+- **From:** Implementation agent (Muse Code)
+- **To:** GPT-6 independent exact-head audit, then project owner
+- **Branch:** `phase/pp-meta-c3-b2b-e2-verification` from `main` `9499a42c97c4fa311e1001489b5bc0440a549d21` (PR #21 squash merge, audit PASS)
+- **State:** READY FOR REVIEW. No activation, quota, authorization, credential, reservation, parser, oracle, patch-policy, pin or hand-authored-control change; the stored `c3-live-meta-001` artifact was not read, loaded, staged or executed; no provider call; no merge. Owner authorization covers E2 implementation, synthetic fixtures, offline tests and a Draft PR only. Real execution stays NOT APPROVED; the P2 transient ancestor-swap residual stays unaccepted.
+
+### Completed
+- `packages/core/src/model-verification.ts` (new, Zone E): `verifyRegisteredProposal` — identity-checked registration only; exact-V binding, commit/ancestry/conflation gates, fixture/verifier/policy anchor equality; baseline gate + up to three fresh stages via the existing runner; verdict solely from `decideVerification`; namespaced `MODEL-<runId>/` evidence; `verification.json` persisted.
+- `packages/core/src/candidate-coordinator.ts`: `ModelVerificationEntry` (schemaVersion 2, kind-discriminated), `MODEL_VERIFICATION_LABEL`, `modelVerificationProblems` (identity/CSS/hashes/anchors recomputed, verdict recomputed from persisted bytes, zero replays never VERIFIED); `Scoreboard.modelVerifications?`; `verifyScoreboard` separates the sections (shared E1/E2 run id legitimate across sections, collisions with hand-authored rows refused); shared `loadReplayEvidence` hoist (hand-authored path behavior unchanged). E1 row validation untouched.
+- `scripts/c3-b2b-verify-proposal.ts` (new): five explicit params, no env reads, no execution/provider/path options, real artifact hard-refused before any read (exit 2).
+- `tests/unit/model-verification.test.ts` (8 tests, synthetic only); boundary tests extended (Zone E list, E2 direct edges, command narrowness/hard-disable).
+- `docs/STATUS.md` updated (E2 phase/task/branch, E1 merged, authorization, three-claim separation).
+
+### Validation
+- Targeted suites green; full gates below before push.
+
+### Next action
+GPT-6 exact-head audit; owner merge decision. Real execution needs a separate owner approval + the P2 residual risk decision + a new security review.
+
+## Handoff: PP-META-I2-C3-B2B-E2-A2
+
+- **Task / phase:** C3-B2B E2 MAJOR-1/2/3 + MINOR remediation (GPT-6 audit of PR #22)
+- **From:** Implementation agent (Muse Code)
+- **To:** GPT-6 independent exact-head re-audit, then project owner
+- **Branch:** `phase/pp-meta-c3-b2b-e2-verification` (same Draft PR #22, new HEAD)
+- **State:** READY FOR RE-REVIEW. No activation, quota, authorization, credential, reservation, parser, oracle, patch-policy, pin or hand-authored-control change; the stored `c3-live-meta-001` artifact was not read, loaded, staged or executed; no provider call; no merge. Real execution stays NOT APPROVED; the P2 transient ancestor-swap residual stays unaccepted.
+
+### Completed
+- MAJOR-1: verifier binds every replay record and the baseline to the row's registered CSS/triples (`does not attest the registered candidate`, `baseline record carries adjustments`); run function refuses foreign runner records pre-persistence (`RECORD_MISMATCH`, lock released, nothing written).
+- MAJOR-2: run-time registration binding (`PROVENANCE_MISMATCH` before any runner call); persisted Zone P attestation (`source-provenance.json`, `ATTESTATION_MALFORMED`/`MISMATCH` pre-run) cross-checked by the verifier (`provenanceAttested` recomputed; equal-but-wrong mutations refused; Tier B explicitly marked with VERIFIED withheld); E1/E2 cross-section reconciliation in `verifyScoreboard`; command passes the P2 attestation and revalidates the persisted bundle before reporting.
+- MAJOR-3: exact 24-key E2 schema (additive/missing keys refused; E1 14-key schema untouched).
+- MINOR: verifier binds the presented row to the persisted `verification.json` (missing/corrupt/divergent refused).
+- Tests: 9 new batteries (auditor repros + integrated scoreboard mutations); boundary tests assert command wiring. E1 schema and boundaries preserved.
+
+### Validation
+- Targeted suites green; full gates below before push.
+
+### Next action
+GPT-6 focused re-audit of the new HEAD; owner merge decision. Real execution needs a separate owner approval + the P2 residual risk decision + a new security review.
+
+## Handoff: PP-META-I2-C3-B2B-E2-A3
+
+- **Task / phase:** C3-B2B E2 MAJOR-4/5/6 remediation (GPT-6 audit of PR #22)
+- **From:** Implementation agent (Muse Code)
+- **To:** GPT-6 independent exact-head re-audit, then project owner
+- **Branch:** `phase/pp-meta-c3-b2b-e2-verification` (same Draft PR #22, new HEAD)
+- **State:** READY FOR RE-REVIEW. No activation, quota, authorization, credential, reservation, parser, oracle, patch-policy, pin or hand-authored-control change; the stored `c3-live-meta-001` artifact was not read, loaded, staged or executed; no provider call; no merge. Real execution stays NOT APPROVED; the P2 transient ancestor-swap residual stays unaccepted.
+
+### Completed
+- MAJOR-4: runs require a validated Zone P attestation before any lock/staging/runner activity (`ATTESTATION_REQUIRED`); neither return values nor persisted files can claim VERIFIED unattested. The verifier's withhold rule remains as defense in depth for degraded bundles.
+- MAJOR-5: the reserved real run id is refused at the exported E2 verifier boundary (`REAL_ARTIFACT_DISABLED`), before any lock, file, Git or runner use — no programmatic caller can bypass the CLI gate.
+- MAJOR-6: cross-section reconciliation now requires identical candidateId, adjustments and renderedCss alongside hashes for one run id.
+- Tests: Tier-B-now-refused batteries, degraded-bundle withhold test, real-id refusal with side-effect assertions, CSS-identity reconciliation battery (internally consistent forged E1 row), command/module wiring assertions. E1 schema and MAJOR-1/2/3 fixes preserved.
+
+### Validation
+- Targeted suites green; full gates below before push.
+
+### Next action
+GPT-6 focused re-audit of the new HEAD; owner merge decision. Real execution needs a separate owner approval + the P2 residual risk decision + a new security review.
+
 <!-- HANDOFF_ENTRIES_END -->

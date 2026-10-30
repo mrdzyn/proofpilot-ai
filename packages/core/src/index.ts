@@ -11,3 +11,4 @@ export * from './candidate-stage.ts';
 export * from './patch-proposal.ts';
 export * from './candidate-coordinator.ts';
 export * from './model-proposal.ts';
+export * from './model-verification.ts';
