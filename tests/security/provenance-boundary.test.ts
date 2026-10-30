@@ -579,6 +579,7 @@ test('E2 command is narrow and hard-disabled: five explicit SHAs/ids, no env, no
   assert.match(text, /REAL_ARTIFACT_MESSAGE/, 'refusal precedes every file read, stage and Git call');
   assert.match(text, /sourceAttestation/, 'the Zone P attestation travels with the run and is persisted');
   assert.match(text, /modelVerificationProblems/, 'the command revalidates the persisted bundle before reporting');
+  assert.match(text, /reloadAndBindArtifact/, 'the command rebinds the artifact bytes immediately before the run');
 });
 
 // ---------------------------------------------------------------- mutation tests: the scanner rejects every missed form

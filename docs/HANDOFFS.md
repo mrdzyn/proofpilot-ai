@@ -1117,4 +1117,78 @@ GPT-6 focused re-audit of the new HEAD; owner merge decision. Real execution nee
 ### Next action
 GPT-6 focused re-audit of the new HEAD; owner merge decision. Real execution needs a separate owner approval + the P2 residual risk decision + a new security review.
 
+## Handoff: PP-QA01-SEC-P2-01-A1
+
+- **Task / phase:** QA-01 operator QA readiness + SEC-P2-01 P2 read-boundary security readiness
+- **From:** Implementation agent (Muse Code)
+- **To:** GPT-6 independent exact-head review, then project owner
+- **Branch:** `phase/pp-qa01-secp201-readiness` from `main` `f305da39808b55c1725fcc88ccea9634ec79cbb7` (PR #22 squash merge, audited)
+- **State:** READY FOR REVIEW. Docs plus narrow P2 reader hardening with adversarial synthetic tests. The stored `c3-live-meta-001` artifact was not read, loaded, staged or executed; no provider call; no credential reads; no deployment; no merge. Real execution stays NOT APPROVED; the SEC-P2-01 residual stays explicitly unaccepted (owner decision open).
+
+### Completed
+- Scope A: `docs/STATUS.md` refreshed (E2 merged at `f305da3`, QA-01/SEC-P2-01 active); `docs/QA-01-RUNBOOK.md` (gates, F01, PC-1, negatives, evidence, exit codes, refusal drill, failure template — all commands/outputs verified against the scripts).
+- Scope B: reader hardening (`verifyReadBinding` pinning+binding, `reloadAndBindArtifact` + `ARTIFACT_CHANGED`, command wiring); adversarial tests (pure binding battery, cross-phase substitution test); `docs/SEC-P2-01-FINDINGS.md` (defeated/threat taxonomy, determination, bounded mitigation proposal, open owner decision).
+- Scope C: `docs/C3B2B-REAL-PROPOSAL-PROCEDURE.md` (DISABLED future procedure; hard-disable intact).
+
+### Validation
+- Targeted suites green; full gates below before push.
+
+### Next action
+GPT-6 exact-head review; owner merge decision; then owner-run local QA per the runbook. Real execution needs a separate owner approval + the SEC-P2-01 residual decision + a new security review.
+
+## Handoff: PP-QA01-SEC-P2-01-A2
+
+- **Task / phase:** QA-01/SEC-P2-01 docs remediation (GPT-6 audit of PR #23: MAJOR-1, MINOR-2/3)
+- **From:** Implementation agent (Muse Code)
+- **To:** GPT-6 independent exact-head re-audit, then project owner
+- **Branch:** `phase/pp-qa01-secp201-readiness` (same Draft PR #23, new HEAD)
+- **State:** READY FOR RE-REVIEW. Documentation-only correction: stale-lock/signal guidance
+  replaced with a positive-confirmation protocol, evidence paths corrected to the real
+  persisted layout (`candidate-record.json`, nested `MODEL-<runId>/`), the real-Chromium
+  integration test separated and labeled with the no-concurrent precondition. No code, gate,
+  credential, provider, activation or trust-root change. P2 hardening and adversarial tests
+  preserved byte-identical. Real execution stays NOT APPROVED; the SEC-P2-01 residual stays
+  explicitly unaccepted.
+
+### Completed
+- MAJOR-1: procedure + runbook lock guidance rewritten (no `lsof`-empty removal, no
+  `finally` guarantee, interrupted runs inconclusive, three positive checks, manual review on
+  doubt, no auto-clean).
+- MINOR-2: exact `candidate-record.json` names and nested E2 paths in both docs.
+- MINOR-3: integration test moved out of the no-browser list with browser label and
+  no-concurrent precondition.
+- STATUS: owner QA-01 evidence recorded against `main@f305da3`, distinguished from any future
+  real execution; active handoff pointer updated.
+
+### Validation
+- Targeted suites green; full gates below before push.
+
+### Next action
+GPT-6 focused re-audit of the new HEAD; owner merge decision; then owner-run local QA per the corrected runbook.
+
+## Handoff: PP-QA01-SEC-P2-01-A3
+
+- **Task / phase:** QA-01/SEC-P2-01 docs remediation, round 2 (GPT-6 audit: MAJOR-1 residual)
+- **From:** Implementation agent (Muse Code)
+- **To:** GPT-6 independent exact-head re-audit, then project owner
+- **Branch:** `phase/pp-qa01-secp201-readiness` (same Draft PR #23, new HEAD)
+- **State:** READY FOR RE-REVIEW. Strictly documentation-only: the stale-lock protocol now
+  checks the actual staging roots (default system temp `proofpilot-stage-*` plus any
+  operator-supplied `stageRoot`) instead of evidence-dir timestamps, covers every verifier
+  entry point and child tree (no grep-only exclusion), and keeps port checks, two
+  observations, evidence preservation and mandatory manual review as supplemental. No code,
+  gate, test, provider or activation change. Real execution stays NOT APPROVED; the SEC-P2-01
+  residual stays explicitly unaccepted.
+
+### Completed
+- Procedure §6 rewritten (stage-root primary check, full entry-point coverage, positive
+  confirmation standard); runbook §7 summary matched to it. Owner QA evidence, findings,
+  disabled procedure and hard-disable untouched.
+
+### Validation
+- Doc lint + full gates below before push.
+
+### Next action
+GPT-6 focused re-audit of the new HEAD; owner merge decision; then owner-run local QA per the corrected runbook.
+
 <!-- HANDOFF_ENTRIES_END -->

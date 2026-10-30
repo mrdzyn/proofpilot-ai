@@ -16,7 +16,7 @@
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import { loadAndValidateProposalArtifact, ArtifactError } from '../packages/provenance/src/proposal-artifact.ts';
+import { loadAndValidateProposalArtifact, reloadAndBindArtifact, ArtifactError } from '../packages/provenance/src/proposal-artifact.ts';
 import { verifySourceProvenance, SourceProvenanceError } from '../packages/provenance/src/source-provenance.ts';
 import { registerModelProposal, ModelProposalError } from '../packages/core/src/model-proposal.ts';
 import {
@@ -123,6 +123,10 @@ try {
     inputSha256: artifact.inputSha256,
     artifactSha256: artifact.artifactHash,
   });
+  // Cross-phase binding: re-load the bytes immediately before the run and refuse unless they
+  // are the exact bytes validated and registered above. A substitution between validation and
+  // execution never flows downstream, however valid the replacement looks.
+  const bound = await reloadAndBindArtifact(repoRoot, runId as string, artifact.artifactHash);
   // Zone E replay path: identity-checked, three fresh stages, verdict from persisted evidence.
   // The Zone P attestation travels with the run and is persisted beside the evidence.
   const outDir = path.join(repoRoot, '.proofpilot/c3-b2b', `MODEL-${runId}-${stamp}`);
@@ -130,8 +134,8 @@ try {
     repoRoot,
     verificationSha,
     sourceSha,
-    inputSha256: artifact.inputSha256,
-    artifactSha256: artifact.artifactHash,
+    inputSha256: bound.inputSha256,
+    artifactSha256: bound.artifactHash,
     proposal: registered,
     outDir,
     lockPath: path.join(repoRoot, '.proofpilot/locks/oracle-4173.lock'),

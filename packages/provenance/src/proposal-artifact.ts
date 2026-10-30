@@ -9,7 +9,7 @@
 // of validated triples plus provenance labels; nothing here executes, stages or verifies a proposal.
 import { createHash } from 'node:crypto';
 import { constants as fsConstants } from 'node:fs';
-import { lstat, open, realpath } from 'node:fs/promises';
+import { lstat, open, realpath, stat } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { MAX_ADJUSTMENTS, type CssAdjustment } from '../../core/src/css-adjustments.ts';
 import { parseProposal } from '../../core/src/patch-proposal.ts';
@@ -20,7 +20,8 @@ export type ArtifactErrorCode =
   | 'ARTIFACT_OWNERSHIP_UNVERIFIABLE' | 'ARTIFACT_OWNERSHIP' | 'ARTIFACT_PERMISSIONS' | 'ARTIFACT_TOO_LARGE'
   | 'ARTIFACT_MALFORMED' | 'ARTIFACT_DUPLICATE_KEY' | 'ARTIFACT_PROTO_KEY' | 'ARTIFACT_MAX_DEPTH'
   | 'ARTIFACT_UNKNOWN_FIELD' | 'ARTIFACT_MISSING_FIELD' | 'ARTIFACT_BAD_TYPE' | 'ARTIFACT_BAD_VALUE'
-  | 'ARTIFACT_RUN_ID_MISMATCH' | 'ARTIFACT_GRAMMAR' | 'ARTIFACT_RENDER_MISMATCH' | 'ARTIFACT_UNSTABLE';
+  | 'ARTIFACT_RUN_ID_MISMATCH' | 'ARTIFACT_GRAMMAR' | 'ARTIFACT_RENDER_MISMATCH' | 'ARTIFACT_UNSTABLE'
+  | 'ARTIFACT_CHANGED';
 
 export class ArtifactError extends Error {
   readonly code: ArtifactErrorCode;
@@ -58,6 +59,42 @@ export type ValidatedAdjustment = { readonly selector: string; readonly property
 export type ValidatedUsage = { readonly inputTokens: number | null; readonly outputTokens: number | null; readonly totalTokens: number | null; readonly reasoningTokens: number | null; readonly videoFramesProcessed: number | null };
 
 /** Frozen validated triples plus provenance labels (strings and numbers only). */
+/**
+ * Portable identity snapshot for TOCTOU binding: device + inode pin the filesystem object,
+ * size/mode/owner/mtime pin its state. Pure data, no handles: the binding decision below is a
+ * pure function of snapshots, so adversarial orderings are unit-testable without timing.
+ */
+export type PathIdentity = { dev: number; ino: number; size: number; mode: number; uid: number; mtimeMs: number };
+export const identitySnapshotOf = (st: { dev: number; ino: number; size: number; mode: number; uid: number; mtimeMs: number }): PathIdentity =>
+  ({ dev: st.dev, ino: st.ino, size: st.size, mode: st.mode, uid: st.uid, mtimeMs: st.mtimeMs });
+
+/**
+ * Verify the post-read binding: every ancestor must still be the same filesystem object as at
+ * pre-open time (catches a directory renamed or replaced mid-read), the open descriptor must be
+ * unchanged, and the descriptor must be the same object the trusted path resolves to now
+ * (catches a swap installed after the pre-open checks and reverted before the post-read
+ * checks). Returns null when bound, otherwise the fail-closed refusal code.
+ *
+ * What this cannot do: authenticate CONTENT against a same-UID writer. A pre-installed swap, a
+ * same-path file replacement, or a direct rewrite with restored metadata passes every stat
+ * comparison by construction. Content authenticity needs an external trust root (a signature)
+ * or OS isolation (read-only snapshot, separate UID); see the SEC-P2-01 findings.
+ */
+export function verifyReadBinding(
+  pre: { ancestors: PathIdentity[]; handle: PathIdentity },
+  post: { ancestors: PathIdentity[]; handle: PathIdentity; resolved: PathIdentity | null },
+): ArtifactErrorCode | null {
+  if (pre.ancestors.length !== post.ancestors.length) return 'ARTIFACT_UNSTABLE';
+  for (let i = 0; i < pre.ancestors.length; i++) {
+    const a = pre.ancestors[i]!;
+    const b = post.ancestors[i]!;
+    if (a.dev !== b.dev || a.ino !== b.ino) return 'ARTIFACT_UNSTABLE';
+  }
+  if (!sameIdentity(pre.handle, post.handle)) return 'ARTIFACT_UNSTABLE';
+  if (post.resolved === null || !sameIdentity(post.handle, post.resolved)) return 'ARTIFACT_UNSTABLE';
+  return null;
+}
+
 export type ValidatedProposal = {
   readonly runId: string;
   readonly providerId: 'meta';
@@ -222,9 +259,7 @@ function currentUid(): number | null {
 }
 
 /** Descriptor-pinned identity: dev, inode, size, mode, owner and mtime must not change mid-read. */
-type FileIdentity = { dev: number; ino: number; size: number; mode: number; uid: number; mtimeMs: number };
-const identityOf = (st: { dev: number; ino: number; size: number; mode: number; uid: number; mtimeMs: number }): FileIdentity =>
-  ({ dev: st.dev, ino: st.ino, size: st.size, mode: st.mode, uid: st.uid, mtimeMs: st.mtimeMs });
+type FileIdentity = PathIdentity;
 const sameIdentity = (a: FileIdentity, b: FileIdentity): boolean =>
   a.dev === b.dev && a.ino === b.ino && a.size === b.size && a.mode === b.mode && a.uid === b.uid && a.mtimeMs === b.mtimeMs;
 
@@ -245,15 +280,19 @@ async function readArtifactBytes(repoRoot: string, runId: string): Promise<{ byt
     return fail('ARTIFACT_RUN_ID_INVALID', 'the repository root must be an absolute path');
   }
   // Every ancestor component must exist and must not be a symlink; otherwise the fixed path resolves elsewhere.
+  // Identities are pinned: the post-read binding refuses any ancestor renamed or replaced mid-read.
+  const preAncestors: PathIdentity[] = [];
   let dir = repoRoot;
   const anchor = await lstat(dir).catch(() => null);
   if (!anchor) return fail('ARTIFACT_NOT_FOUND', 'the repository root is missing');
   if (anchor.isSymbolicLink()) return fail('ARTIFACT_SYMLINK', 'the repository root must not be a symlink');
+  preAncestors.push(identitySnapshotOf(anchor));
   for (const part of ['.proofpilot', 'evidence', 'proposals', runId]) {
     dir = join(dir, part);
     const st = await lstat(dir).catch(() => null);
     if (!st) return fail('ARTIFACT_NOT_FOUND', `evidence path component ${part} is missing`);
     if (st.isSymbolicLink()) return fail('ARTIFACT_SYMLINK', `evidence path component ${part} must not be a symlink`);
+    preAncestors.push(identitySnapshotOf(st));
   }
   const file = artifactPathFor(repoRoot, runId);
   // Race-resistant read: a no-follow read-only descriptor pins the file; every check below runs against
@@ -276,23 +315,31 @@ async function readArtifactBytes(repoRoot: string, runId: string): Promise<{ byt
   try {
     const before = await handle.stat();
     checkDescriptorStat(before);
-    const pinned = identityOf(before);
+    const pinned = identitySnapshotOf(before);
     const bytes = await readBoundedBytes(handle, MAX_ARTIFACT_BYTES);
     if (bytes.length > MAX_ARTIFACT_BYTES) return fail('ARTIFACT_TOO_LARGE', 'the artifact exceeds 8192 bytes while reading');
     if (bytes.length !== pinned.size) return fail('ARTIFACT_UNSTABLE', 'the artifact changed while it was read');
-    const after = identityOf(await handle.stat());
+    const after = identitySnapshotOf(await handle.stat());
     if (!sameIdentity(pinned, after)) return fail('ARTIFACT_UNSTABLE', 'the artifact changed while it was read');
-    // Post-read binding: no ancestor may have become a symlink, and the resolved path must still be the
-    // expected file. This catches every persistent swap. A swap installed after the pre-open checks and
-    // fully reverted before these post-read checks is not detectable through portable Node APIs (there is
-    // no openat); that residual needs an owner risk decision, not a broader import.
+    // Post-read binding: no ancestor may have become a symlink, every ancestor must still be the
+    // same filesystem object, and the open descriptor must be the object the trusted path resolves
+    // to now. This catches mid-read ancestor interference, persistent or reverted. What remains is
+    // a same-UID writer controlling file content: a pre-installed swap, a same-path content
+    // replacement, or an in-place rewrite with restored metadata. None is detectable by stat
+    // comparisons through portable Node APIs (there is no openat); that residual needs an external
+    // trust root or OS isolation, not a broader import. See SEC-P2-01 findings.
     const components = ['.proofpilot', 'evidence', 'proposals', runId];
+    const postAncestors: PathIdentity[] = [];
+    const anchorNow = await lstat(repoRoot).catch(() => null);
+    if (!anchorNow) return fail('ARTIFACT_UNSTABLE', 'the repository root vanished while reading');
+    postAncestors.push(identitySnapshotOf(anchorNow));
     let dir = repoRoot;
     for (const part of components) {
       dir = join(dir, part);
       const st = await lstat(dir).catch(() => null);
       if (!st) return fail('ARTIFACT_UNSTABLE', `evidence path component ${part} vanished while reading`);
       if (st.isSymbolicLink()) return fail('ARTIFACT_SYMLINK', `evidence path component ${part} must not be a symlink`);
+      postAncestors.push(identitySnapshotOf(st));
     }
     const resolvedRoot = await realpath(repoRoot).catch(() => null);
     const resolvedFile = await realpath(file).catch(() => null);
@@ -300,6 +347,12 @@ async function readArtifactBytes(repoRoot: string, runId: string): Promise<{ byt
     if (!resolvedFile || resolvedFile !== expected) {
       return fail('ARTIFACT_SYMLINK', 'the artifact path does not resolve inside the repository root');
     }
+    const resolvedStat = await stat(resolvedFile).catch(() => null);
+    const binding = verifyReadBinding(
+      { ancestors: preAncestors, handle: pinned },
+      { ancestors: postAncestors, handle: after, resolved: resolvedStat ? identitySnapshotOf(resolvedStat) : null },
+    );
+    if (binding !== null) return fail(binding, 'the artifact path binding changed while it was read');
     return { bytes, path: file };
   } finally {
     await handle.close().catch(() => undefined);
@@ -472,6 +525,18 @@ function validateArtifact(doc: unknown, runId: string, artifactHash: string): Va
  * Load and validate one stored proposal artifact (sections 3.1, 3.2, 3.4). Synthetic callers only:
  * `repoRoot` is an absolute path and `runId` selects exactly one file under the fixed evidence directory.
  */
+/**
+ * Re-load and re-validate the artifact and bind it to an earlier read: the reloaded
+ * `artifactHash` must equal the hash the caller already validated and registered. A same-UID
+ * substitution between two pipeline phases (load → register → run) is refused here instead of
+ * silently flowing downstream. Each individual load still enforces the full read binding above.
+ */
+export async function reloadAndBindArtifact(repoRoot: string, runId: string, expectedHash: string): Promise<ValidatedProposal> {
+  const reloaded = await loadAndValidateProposalArtifact({ repoRoot, runId });
+  if (reloaded.artifactHash !== expectedHash) return fail('ARTIFACT_CHANGED', 'the artifact changed between validation and use');
+  return reloaded;
+}
+
 export async function loadAndValidateProposalArtifact(opts: { repoRoot: string; runId: string }): Promise<ValidatedProposal> {
   const { repoRoot, runId } = opts;
   const { bytes } = await readArtifactBytes(repoRoot, runId);

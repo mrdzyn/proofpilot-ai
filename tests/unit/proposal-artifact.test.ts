@@ -7,7 +7,7 @@ import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, symlinkSync, wr
 import { open } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
-import { ArtifactError, loadAndValidateProposalArtifact, readBoundedBytes } from '../../packages/provenance/src/proposal-artifact.ts';
+import { ArtifactError, loadAndValidateProposalArtifact, readBoundedBytes, reloadAndBindArtifact, verifyReadBinding, type PathIdentity } from '../../packages/provenance/src/proposal-artifact.ts';
 import { tempDir } from '../helpers.ts';
 import { ARTIFACT_RUN_ID, artifactFileFor, linkArtifact, validArtifactDoc, writeArtifact, writeArtifactDoc } from '../support/proposal-artifact-fixture.ts';
 
@@ -260,4 +260,50 @@ test('adjustment triples are exact, bounded and grammatical; rendered CSS must m
   const garbage = fresh();
   writeArtifactDoc(garbage.root, garbage.runId, validArtifactDoc(garbage.runId, { renderedCss: 'not css at all' }));
   assert.equal(await codeOf(garbage.load()), 'ARTIFACT_RENDER_MISMATCH');
+});
+
+test('verifyReadBinding pins ancestors, descriptor and resolved path without any timing', () => {
+  // Synthetic identity snapshots stand in for adversarial orderings no test can schedule
+  // deterministically: the decision is a pure function of before/after snapshots.
+  const ident = (over: Partial<PathIdentity> = {}): PathIdentity =>
+    ({ dev: 1, ino: 100, size: 500, mode: 0o100600, uid: 501, mtimeMs: 123.456, ...over });
+  const pre = { ancestors: [ident({ ino: 1 }), ident({ ino: 2 })], handle: ident({ ino: 10 }) };
+  const same = () => ({
+    ancestors: [ident({ ino: 1 }), ident({ ino: 2 })],
+    handle: ident({ ino: 10 }),
+    resolved: ident({ ino: 10 }) as PathIdentity | null,
+  });
+  assert.equal(verifyReadBinding(pre, same()), null, 'identical snapshots bind');
+  // An ancestor renamed or replaced mid-read (still no symlink): device/inode pin refuses.
+  const swapped = same();
+  swapped.ancestors[1] = ident({ ino: 99 });
+  assert.equal(verifyReadBinding(pre, swapped), 'ARTIFACT_UNSTABLE', 'ancestor replacement refused');
+  // An ancestor added or removed mid-read.
+  assert.equal(verifyReadBinding(pre, { ...same(), ancestors: [ident({ ino: 1 })] }), 'ARTIFACT_UNSTABLE', 'ancestor count change refused');
+  // An in-place overwrite that bumps mtime/size on the open descriptor.
+  const changed = same();
+  changed.handle = ident({ ino: 10, mtimeMs: 999.0 });
+  assert.equal(verifyReadBinding(pre, changed), 'ARTIFACT_UNSTABLE', 'descriptor change refused');
+  // The documented transient swap, now detected: installed after the pre-open checks (so the
+  // handle is already the served file) and reverted before the post-read checks (so the path
+  // resolves to the original again). Only the descriptor-to-path binding disagrees.
+  const evil = ident({ ino: 77, size: 500 });
+  const revertedPre = { ancestors: [ident({ ino: 1 }), ident({ ino: 2 })], handle: evil };
+  const revertedPost = { ancestors: [ident({ ino: 1 }), ident({ ino: 2 })], handle: evil, resolved: ident({ ino: 10 }) as PathIdentity | null };
+  assert.equal(verifyReadBinding(revertedPre, revertedPost), 'ARTIFACT_UNSTABLE', 'reverted swap refused');
+  // An unresolvable path binds to nothing.
+  assert.equal(verifyReadBinding(pre, { ...same(), resolved: null }), 'ARTIFACT_UNSTABLE', 'unresolvable path refused');
+});
+
+test('reloadAndBindArtifact refuses a same-UID substitution between validation and use', async () => {
+  const f = fresh();
+  writeArtifactDoc(f.root, f.runId);
+  const first = await f.load();
+  // No change: the rebind succeeds and returns the same validated content.
+  const bound = await reloadAndBindArtifact(f.root, f.runId, first.artifactHash);
+  assert.equal(bound.artifactHash, first.artifactHash);
+  assert.deepEqual([...bound.adjustments], [...first.adjustments]);
+  // A same-UID substitution with a different VALID artifact between the two reads is refused.
+  writeArtifactDoc(f.root, f.runId, validArtifactDoc(f.runId, { inputSha256: 'f'.repeat(64) }));
+  assert.equal(await codeOf(reloadAndBindArtifact(f.root, f.runId, first.artifactHash)), 'ARTIFACT_CHANGED');
 });
