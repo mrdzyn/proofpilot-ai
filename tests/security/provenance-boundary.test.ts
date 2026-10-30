@@ -558,6 +558,8 @@ test('E2 verifier has a minimal direct edge: grammar, stage, coordinator and the
     'no other module edge out of the E2 module',
   );
   assert.doesNotMatch(text, /import\s*\(|require\s*\(/, 'no dynamic import or require in the E2 module');
+  assert.match(text, /c3-live-meta-001/, 'the reserved real run id is refused at the execution boundary');
+  assert.match(text, /REAL_ARTIFACT_DISABLED/, 'the boundary refusal has a dedicated code');
   const c = closureOf(f);
   assert.ok(!c.files.some((x) => /inference\/src|packages\/provenance/.test(x)), 'the E2 closure reaches no inference or provenance file');
 });

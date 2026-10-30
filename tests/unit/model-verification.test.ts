@@ -576,26 +576,33 @@ test('E2 MAJOR-2: mutated provenance values no longer verify against the persist
   assert.match(problems, /source attestation: artifactHash differs/, 'artifact binding enforced');
   assert.match(problems, /source attestation: sourceFixtureTree differs/, 'anchor binding enforced');
   assert.match(problems, /provenanceAttested is true but the persisted attestation does not support/, 'attestation flag recomputed');
-  // Without an attestation the row verifies Tier B at most: honest non-VERIFIED outcomes
-  // recompute cleanly, but VERIFIED is withheld.
-  const noAttDir = tmp();
-  const noAttOut = path.join(noAttDir, 'out');
-  const tierB = await verifyRegisteredProposal(
-    runOpts(noAttDir, fakeRunner((adj) => (adj.length === 0 ? { kind: 'pass' } : { kind: 'pass' })), fakeGit(fullTrees()), undefined, { sourceAttestation: undefined }),
-  );
-  assert.equal(tierB.status, 'NOT_REPRODUCED');
-  assert.equal(tierB.provenanceAttested, false);
-  assert.deepEqual(await modelVerificationProblems(tierB, V, noAttOut), [], 'Tier B honest outcome recomputes');
-  const noAttPassDir = tmp();
-  const noAttPassOut = path.join(noAttPassDir, 'out');
-  const tierBPass = await verifyRegisteredProposal(runOpts(noAttPassDir, fakeRunner(honestPass), fakeGit(fullTrees()), undefined, { sourceAttestation: undefined }));
-  assert.equal(tierBPass.status, 'VERIFIED');
-  assert.equal(tierBPass.provenanceAttested, false);
-  assert.match(
-    (await modelVerificationProblems(tierBPass, V, noAttPassOut)).join(' | '),
-    /VERIFIED requires a persisted source attestation/,
-    'Tier B withholds VERIFIED',
-  );
+  // MAJOR-4: without an attestation the run is refused outright — no return value and no
+  // persisted file may ever claim VERIFIED. Neither honest nor passing outcomes run unattested.
+  for (const [name, script] of [
+    ['honest baseline failure', (adj: CssAdjustment[]) => (adj.length === 0 ? { kind: 'pass' as Kind } : { kind: 'pass' as Kind })],
+    ['three-pass run', honestPass],
+  ] as const) {
+    const calls: string[] = [];
+    const d = tmp();
+    await assert.rejects(
+      verifyRegisteredProposal(runOpts(d, fakeRunner(script, calls), fakeGit(fullTrees()), undefined, { sourceAttestation: undefined })),
+      /ATTESTATION_REQUIRED/,
+      `${name}: unattested runs are refused before any runner call`,
+    );
+    assert.deepEqual(calls, [], `${name}: the runner never ran`);
+    assert.ok(!existsSync(path.join(d, 'out')), `${name}: no evidence directory is created`);
+    assert.ok(!existsSync(path.join(d, 'coord.lock')), `${name}: no lock is taken`);
+  }
+  // The verifier's withhold rule is defense in depth for a degraded bundle: with the persisted
+  // attestation deleted, a VERIFIED row no longer verifies.
+  const degDir = tmp();
+  const degOut = path.join(degDir, 'out');
+  const degEntry = await verifyRegisteredProposal(runOpts(degDir, fakeRunner(honestPass), fakeGit(fullTrees())));
+  assert.equal(degEntry.status, 'VERIFIED');
+  rmSync(path.join(degOut, `MODEL-${RUN}`, 'source-provenance.json'));
+  const degProblems = (await modelVerificationProblems(degEntry, V, degOut)).join(' | ');
+  assert.match(degProblems, /provenanceAttested is true but the persisted attestation does not support/, 'degraded bundle marked');
+  assert.match(degProblems, /VERIFIED requires a persisted source attestation/, 'VERIFIED withheld for the degraded bundle');
 });
 
 test('E2 MAJOR-2: E1 and E2 rows for one run must agree on immutable provenance', async () => {
@@ -622,6 +629,60 @@ test('E2 MAJOR-2: E1 and E2 rows for one run must agree on immutable provenance'
   assert.ok(problems.some((x) => /sourceSha differs from the E1 row/.test(x)), 'source drift across sections refused');
   assert.ok(problems.some((x) => /inputSha256 differs from the E1 row/.test(x)), 'input drift across sections refused');
   assert.ok(problems.some((x) => /artifactSha256 differs from the E1 row/.test(x)), 'artifact drift across sections refused');
+});
+
+test('E2 MAJOR-5: the real run id is refused at the exported verifier boundary', async () => {
+  // Synthetic triples registered under the reserved real run id: registration is generic data
+  // and succeeds, but the E2 execution boundary refuses before any lock, file, Git or runner.
+  const real = registerModelProposal({
+    triples: PC1.map((a) => ({ ...a })),
+    renderedCss: CSS,
+    runId: 'c3-live-meta-001',
+    approvedSha: V,
+    sourceSha: SRC,
+    inputSha256: H1,
+    artifactSha256: H2,
+  });
+  const calls: string[] = [];
+  const dir = tmp();
+  await assert.rejects(
+    verifyRegisteredProposal(runOpts(dir, fakeRunner(honestPass, calls), fakeGit(fullTrees()), real)),
+    (e: unknown) => e instanceof ModelVerificationError && e.code === 'REAL_ARTIFACT_DISABLED',
+    'real run id refused with a dedicated code',
+  );
+  assert.deepEqual(calls, [], 'the runner never ran');
+  assert.ok(!existsSync(path.join(dir, 'out')), 'no evidence directory is created');
+  assert.ok(!existsSync(path.join(dir, 'coord.lock')), 'no lock is taken');
+});
+
+test('E2 MAJOR-6: E1/E2 rows for one run must agree on the CSS identity, not only hashes', async () => {
+  const dir = tmp();
+  const outDir = path.join(dir, 'out');
+  const entry = await verifyRegisteredProposal(runOpts(dir, fakeRunner(honestPass), fakeGit(fullTrees())));
+  const boardWith = (e1row: unknown, verification: unknown) => ({
+    schemaVersion: 1, label: MODEL_VERIFICATION_LABEL, complete: true, approvedSha: V,
+    createdAt: '2026-10-30T00:00:00.000Z', modelOrProviderCalls: 0, modalCalls: 0,
+    baseline: { reproduced: false, reasons: ['baseline evidence unavailable'], replay: { n: 1, evidenceDir: 'BASELINE/replay-1', recordSha256: 'x'.repeat(64) } },
+    candidates: [], nc5: nc5Of(V, []), notes: [],
+    modelProposals: [e1row],
+    modelVerifications: [verification],
+  });
+  // An internally consistent E1 row for a different patch: same run id and hashes, but
+  // re-rendered CSS and a recomputed candidate id. Hash reconciliation alone would miss it.
+  const bad = [{ selector: '.add-to-cart', property: 'pointer-events', value: 'none' }];
+  const badCss = renderCssAdjustments(bad);
+  const e1forged = {
+    ...modelProposalEntryOf(register()),
+    adjustments: bad,
+    renderedCss: badCss,
+    candidateId: modelProposalIdOf(V, RUN, badCss),
+  };
+  assert.deepEqual(modelRowProblems(e1forged, V), [], 'the forged E1 row is locally consistent');
+  writeFileSync(path.join(outDir, SCOREBOARD_FILE), JSON.stringify(boardWith(e1forged, entry)));
+  const problems = await verifyScoreboard(outDir);
+  assert.ok(problems.some((x) => /candidateId differs from the E1 row/.test(x)), 'candidate id drift refused');
+  assert.ok(problems.some((x) => /adjustments differ from the E1 row/.test(x)), 'triple drift refused');
+  assert.ok(problems.some((x) => /renderedCss differs from the E1 row/.test(x)), 'CSS drift refused');
 });
 
 // ------------------------------------------------------------ MAJOR-3 and MINOR: exact E2 schema, persisted row

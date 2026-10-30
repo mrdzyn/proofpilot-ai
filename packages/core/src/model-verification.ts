@@ -39,8 +39,10 @@ export type ModelVerificationErrorCode =
   | 'RENDER_MISMATCH'
   | 'RECORD_MISMATCH'
   | 'PROVENANCE_MISMATCH'
+  | 'ATTESTATION_REQUIRED'
   | 'ATTESTATION_MALFORMED'
-  | 'ATTESTATION_MISMATCH';
+  | 'ATTESTATION_MISMATCH'
+  | 'REAL_ARTIFACT_DISABLED';
 
 export class ModelVerificationError extends Error {
   readonly code: ModelVerificationErrorCode;
@@ -171,10 +173,11 @@ export type VerifyRegisteredProposalOptions = {
   runner?: Runner;
   stageRoot?: string;
   /**
-   * Optional Zone P source-provenance record. When supplied it is structurally validated and
-   * bound to the registration and the observed anchors before any staging, persisted beside
-   * the evidence, and cross-checked by the verifier. Without it the row verifies Tier B
-   * (replays recomputed, provenance unattested).
+   * Required Zone P source-provenance record. It is structurally validated and bound to the
+   * registration and the observed anchors before any lock, staging or runner activity,
+   * persisted beside the evidence, and cross-checked by the verifier. Unattested runs are
+   * refused outright: neither a return value nor a persisted file may ever claim VERIFIED
+   * without the attested provenance basis (MAJOR-4).
    */
   sourceAttestation?: unknown;
 };
@@ -189,6 +192,16 @@ export type VerifyRegisteredProposalOptions = {
 export async function verifyRegisteredProposal(opts: VerifyRegisteredProposalOptions): Promise<ModelVerificationEntry> {
   assertRegisteredModelProposal(opts.proposal);
   const proposal = opts.proposal;
+  // The real stored model proposal is HARD-DISABLED at the execution boundary itself, not
+  // only in the operator command: no programmatic caller can bypass the CLI gate. A future
+  // owner-authorized real run needs a separately reviewed code change and security approval.
+  // No environment flag or credential lifts this refusal.
+  if (proposal.runId === 'c3-live-meta-001') {
+    throw new ModelVerificationError(
+      'REAL_ARTIFACT_DISABLED',
+      'c3-live-meta-001 is the real stored model proposal and its execution path is HARD-DISABLED',
+    );
+  }
   const runId = proposal.runId;
   const verificationSha = sha40(opts.verificationSha, 'verificationSha');
   const sourceSha = sha40(opts.sourceSha, 'sourceSha');
@@ -201,6 +214,11 @@ export async function verifyRegisteredProposal(opts: VerifyRegisteredProposalOpt
   // can never produce a row, whatever they claim.
   if (sourceSha !== proposal.sourceSha || inputSha256 !== proposal.inputSha256 || artifactSha256 !== proposal.artifactSha256) {
     throw new ModelVerificationError('PROVENANCE_MISMATCH', 'the run labels do not match the registered proposal provenance');
+  }
+  // No attested basis, no run: unattested executions cannot return or persist VERIFIED, so
+  // they are refused before any lock, filesystem, Git or runner activity (MAJOR-4).
+  if (opts.sourceAttestation === undefined) {
+    throw new ModelVerificationError('ATTESTATION_REQUIRED', 'verification requires a validated Zone P source attestation');
   }
   if (verificationSha === sourceSha) throw new ModelVerificationError('CONFLATED', 'the source revision must not be the verification revision');
   if (!(await opts.git.commitExists(sourceSha))) throw new ModelVerificationError('UNKNOWN_SOURCE', 'the source commit is not present locally');

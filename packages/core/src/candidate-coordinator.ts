@@ -1048,10 +1048,16 @@ export async function verifyScoreboard(outDir: string): Promise<string[]> {
   {
     const boardIds = new Set(board.candidates.map((c) => c?.id));
     const handIds = new Set(board.candidates.map((c) => c?.candidateId));
-    const e1ByRun = new Map<string, { sourceSha?: unknown; inputSha256?: unknown; artifactSha256?: unknown }>();
+    const e1ByRun = new Map<string, {
+      sourceSha?: unknown; inputSha256?: unknown; artifactSha256?: unknown; candidateId?: unknown;
+      adjustments?: unknown; renderedCss?: unknown;
+    }>();
     for (const m of models) {
       if (typeof m === 'object' && m !== null) {
-        const e = m as { runId?: unknown; sourceSha?: unknown; inputSha256?: unknown; artifactSha256?: unknown };
+        const e = m as {
+          runId?: unknown; sourceSha?: unknown; inputSha256?: unknown; artifactSha256?: unknown;
+          candidateId?: unknown; adjustments?: unknown; renderedCss?: unknown;
+        };
         if (typeof e.runId === 'string') e1ByRun.set(e.runId, e);
       }
     }
@@ -1061,7 +1067,8 @@ export async function verifyScoreboard(outDir: string): Promise<string[]> {
       const where = `model-verification[${i}]`;
       for (const x of await modelVerificationProblems(row, sha, outDir)) problems.push(`${where}: ${x}`);
       const rec = (typeof row === 'object' && row !== null ? row : {}) as {
-        id?: unknown; candidateId?: unknown; runId?: unknown; sourceSha?: unknown; inputSha256?: unknown; artifactSha256?: unknown;
+        id?: unknown; candidateId?: unknown; runId?: unknown; sourceSha?: unknown; inputSha256?: unknown;
+        artifactSha256?: unknown; adjustments?: unknown; renderedCss?: unknown;
       };
       if (typeof rec.id === 'string') {
         if (boardIds.has(rec.id) || seenVerifications.has(rec.id)) {
@@ -1078,6 +1085,11 @@ export async function verifyScoreboard(outDir: string): Promise<string[]> {
           if (e1.sourceSha !== rec.sourceSha) problems.push(`${where}: sourceSha differs from the E1 row for the same run`);
           if (e1.inputSha256 !== rec.inputSha256) problems.push(`${where}: inputSha256 differs from the E1 row for the same run`);
           if (e1.artifactSha256 !== rec.artifactSha256) problems.push(`${where}: artifactSha256 differs from the E1 row for the same run`);
+          // The CSS identity must agree too: an E1 row describing a different patch under the
+          // same run id and hashes must not silently coexist with an E2 VERIFIED claim.
+          if (e1.candidateId !== rec.candidateId) problems.push(`${where}: candidateId differs from the E1 row for the same run`);
+          if (!sameJson(e1.adjustments, rec.adjustments)) problems.push(`${where}: adjustments differ from the E1 row for the same run`);
+          if (e1.renderedCss !== rec.renderedCss) problems.push(`${where}: renderedCss differs from the E1 row for the same run`);
         }
       }
     }
