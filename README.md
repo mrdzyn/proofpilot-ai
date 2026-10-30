@@ -4,23 +4,24 @@
 
 ProofPilot AI turns a short recording of a UI defect into an observed browser reproduction, a candidate patch, and an **independent** re-test against trusted acceptance checks that the patching agent can neither see nor change. A patch counts as a success only when a separate verifier has confirmed both the original failure and the corrected behaviour.
 
-Built for the Meta Global AI Developer Hackathon (Push the Frontier). Runtime model: **Muse Spark 1.3** (visual analysis) via the Meta Model API. The C3 plan (Muse Spark candidate proposals, trusted verification, scoreboard) is a draft contract pending owner approval; Muse Wonder is not a planned dependency. Baseten-hosted **Muse Spark Open** is an optional secondary provider. See [HACKATHON_CONTRIBUTIONS.md](HACKATHON_CONTRIBUTIONS.md) for provenance.
+Built for the Meta Global AI Developer Hackathon (Push the Frontier). Runtime model: **Muse Spark 1.3** via the Meta Model API (video analysis, and one gated fix-proposal call). The C3 plan is largely implemented (candidate staging, an offline scoreboard over hand-authored controls, and one executed Muse Spark proposal call whose result is accepted but **unverified**); only C3-B2B (verifying that proposal), the report UI (UI-C3-01) and a hosted sandbox (HOST-C3-01) remain drafts pending owner approval; Muse Wonder is not a planned dependency. Baseten-hosted **Muse Spark Open** is an optional secondary provider. See [HACKATHON_CONTRIBUTIONS.md](HACKATHON_CONTRIBUTIONS.md) for provenance.
 
-## Current state (through C2B)
+## Current state (through LIVE-C3-01; details in [docs/STATUS.md](docs/STATUS.md))
 
 | Capability | State |
 |---|---|
 | F01 defective sample store + trusted oracle | Implemented. The mobile oracle fails as intended and the desktop control passes. |
 | Deterministic baseline classifier + evidence hashing + observed metrics | Implemented |
-| Meta adapter (typed, validated, bounded, redacted) | Implemented. Authenticated non-billable model discovery has been observed. Real Muse Spark video inference ran twice in C2B (below); **no patch-proposal inference has been run**. |
+| Meta adapter (typed, validated, bounded, redacted) | Implemented. Authenticated non-billable model discovery has been observed. Real Muse Spark video inference ran twice in C2B (below); **one gated patch-proposal call was made and accepted as an unverified proposal** (LIVE-C3-01; [report](docs/LIVE-C3-01-EXECUTION-REPORT.md)). |
 | Baseten provider configuration | Implemented. **NOT TESTED** (no key configured). |
 | Genuine F01 mobile-defect recording (MP4) + desktop control | Implemented (`pnpm record:f01`); files stay local and gitignored |
 | Video intake: real container/size/duration/codec/decode validation, WebM→MP4, per-run consent | Implemented |
 | Muse Spark native-video integration (Files + Responses), local `Symptom` validation, cleanup | Implemented and mock tested. **Exercised live twice in C2B (agent-reported, not independently confirmed against the Meta account):** `c2b-live-smoke-001` ended `incomplete` at `max_output_tokens`; after the low-reasoning/3072-token fix, `c2b-live-smoke-002` completed (`VIDEO_ANALYZED`, schema-valid `Symptom`, model hypothesis only). Both run IDs are spent; remote files reported deleted; actual charge unverified. |
 | Product UI | Screen-map proposal only (`design/screens/`); **not approved, not built** |
-| Candidate proposals, candidate verifier, scoreboard/evidence export, static report | Not started. Draft contract `tasks/PP-META-I2-C3.md` (PR #6) is under review and not approved |
+| Candidate verification | Offline coordinator, staged oracle replays, 3-replay `VERIFIED` rule and an independently re-checked scoreboard are implemented for **hand-authored** controls (PC-1 verified 3/3). The one Muse Spark proposal (`.promo-overlay { pointer-events: none }`, `UNTRUSTED PROPOSAL — NOT VERIFIED`) has **not** been verified; verification (C3-B2B, [specification](tasks/PP-META-I2-C3-B2B.md)) is not approved. Static report UI and hosted sandbox: not approved |
+| Live proposal call | LIVE-C3-01 (one Meta attempt) was executed and its lifetime quota is **spent**; no further provider call is authorized |
 
-Nothing in this repository is currently labelled `VERIFIED`; no code path in C1 can produce that status.
+`VERIFIED` appears only for the **hand-authored** control PC-1 (C3-B1). No model-generated proposal is labelled `VERIFIED`. Hackathon submission pack: [docs/META-HACKATHON-SUBMISSION.md](docs/META-HACKATHON-SUBMISSION.md).
 
 ## Quick start
 

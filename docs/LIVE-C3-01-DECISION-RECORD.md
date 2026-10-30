@@ -1,8 +1,10 @@
-# LIVE-C3-01 decision record — **APPROVED by the repository owner for activation preparation (October 29, 2026)**
+# LIVE-C3-01 decision record — **APPROVED by the repository owner (October 29, 2026); the single approved attempt was EXECUTED and is SPENT**
 
+> **Outcome:** the one approved Meta `muse-spark-1.3` attempt (`c3-live-meta-001`, 2026-10-29T17:03:11Z) returned `PROPOSAL_ACCEPTED` (an `UNTRUSTED PROPOSAL — NOT VERIFIED`; 1,300 tokens; actual billing unverified). The lifetime quota is exhausted. Full record: `docs/LIVE-C3-01-EXECUTION-REPORT.md`. Everything below that describes the approval, its limits and the gates is the record of what was approved and is kept as written.
+>
 > **Owner decision (authoritative):** https://github.com/mrdzyn/proofpilot-ai/pull/6#issuecomment-6496850990 — posted by the repository owner (`mrdzyn`) on October 29, 2026, 12:36:38 UTC. The values in section 1 are the approved values; nothing is added to them.
 >
-> **What this approval is NOT:** it is not authorization to make a provider request now. The activation implementation is pending independent review; the activation revision pin lives only in `config/live-activation.json` and is recorded by a separate pin-only commit (`activation: null` means not recorded; that file, not this document, is authoritative); the real provider invocation is NOT AUTHORIZED YET. A real attempt may occur only after the activation implementation passes an independent exact-head audit, receives a separate merge approval, is merged and revision-pinned in a separate reviewed pin-only commit, and the owner completes the operator preflight and the per-run confirmation. **A credit balance is not permission to spend.** The token and attempt limits do not guarantee a monetary cost ceiling (acknowledged by the owner).
+> **What the approval was NOT:** at the time it was given it was not authorization to make a provider request now; a request was permitted only after the activation implementation passed independent audit (PR #14 and the CI-compatibility PR #16), was merged and revision-pinned in a separate pin-only commit (PR #17), and the owner completed the operator preflight and per-run confirmation. It never covered a second attempt. **A credit balance is not permission to spend.** The activation revision pin lives only in `config/live-activation.json` (that file, not this document, is authoritative; it is recorded by a separate pin-only commit).
 >
 > **Not approved (unchanged):** Baseten or Modal calls, additional attempts, automated retries, staging or execution of model-generated CSS, C3-B2B verification, the report UI (UI-C3-01), hosting or deployment (HOST-C3-01).
 
@@ -10,10 +12,11 @@
 
 | Item | State |
 |---|---|
-| LIVE-C3-01 owner decision | **APPROVED** for activation preparation (see the linked comment) |
-| Activation implementation (C3-LIVE-01B) | pending independent review |
-| Activation revision pin | Authoritative only in `config/live-activation.json`, recorded by a separate pin-only commit (`activation: null` = NOT RECORDED); this document deliberately does not track it |
-| Real provider invocation | **NOT AUTHORIZED YET** |
+| LIVE-C3-01 owner decision | **APPROVED** (October 29, 2026); one Meta attempt in total |
+| Activation implementation (C3-LIVE-01B) | **MERGED** (PR #14; CI-compatibility PR #16; pin-only PR #17; PR #15 closed unmerged and superseded) |
+| Activation revision pin | Authoritative only in `config/live-activation.json`, a separate pin-only commit (PR #17 pinned activation commit A2); this document deliberately does not track it |
+| Real provider invocation | **EXECUTED once** (`c3-live-meta-001`); lifetime quota **SPENT**; any further invocation is **NOT AUTHORIZED YET** (it needs a new owner decision, activation and pin; documentation commits after A2 also end eligibility, see the report) |
+| Result | `PROPOSAL_ACCEPTED`, `UNTRUSTED PROPOSAL — NOT VERIFIED`; not run through the browser, staging or the oracle |
 | C3-B2B, UI-C3-01, HOST-C3-01 | NOT APPROVED |
 
 ## Owner comment, quoted verbatim
@@ -63,7 +66,7 @@
 | Evidence and usage | A gitignored `UNTRUSTED PROPOSAL — NOT VERIFIED` artifact with hashes, request id, sanitized usage and lifecycle; **no raw provider response is stored** | Actual cost is whatever the account reports; any figure in the repo is illustrative. |
 | Evaluation of the proposal | **None automatic.** An accepted proposal is data. Running it through the staging runner and the three-replay verifier needs a separate, reviewable authorization (C3-B2B) and a reviewed change to the coordinator | Today the offline coordinator refuses every control that is not an in-code hand-authored control. |
 
-## 2. Stop conditions (any one stops the activation; none is retried automatically)
+## 2. Stop conditions (historical procedure, as written before the execution; any one stops the activation; none is retried automatically)
 
 1. The preflight (`scripts/c3-proposal-preflight.ts`) reports any technical blocker, or its input hash differs from the one the operator approved.
 2. The operator approval for this run id is missing, mismatched or older than the agreed window.
@@ -76,7 +79,7 @@
 
 After any stop the run id and slot stay spent and a **new** decision is needed for any further attempt.
 
-## 3. Prerequisites before this record can even be considered ready
+## 3. Prerequisites before this record can even be considered ready (historical checklist, as written before the execution; the boxes are not a current to-do list and the status above is authoritative)
 
 - [x] C3-B2A merged after an independent exact-head audit PASS (PR #10).
 - [ ] `docs/META-ACTIVATION-CHECKLIST.md` completed, with the zero-network preflight output attached.
@@ -86,6 +89,8 @@ After any stop the run id and slot stay spent and a **new** decision is needed f
 
 ## 4. Approval register (owner-only)
 
+> *Historical procedure, as written before the execution.* The present-tense sentences in this section (the pin being `activation: null`, no operator approval being recorded) described the state before the single approved attempt; the current facts are in the status summary above and in `docs/LIVE-C3-01-EXECUTION-REPORT.md`: the pin file is authoritative (`config/live-activation.json`, A2 pinned in PR #17), the attempt was executed once, and the operator approval and reservation records are private local files that this repository does not contain and this record does not reproduce.
+
 Two machine-read owner files exist. `config/live-authorization.json` (the decision) holds exactly one non-synthetic LIVE-C3-01 entry recorded from the owner comment below. `config/live-activation.json` (the pinned activation revision, a tree digest excluding itself; sequence in `tasks/PP-META-I2-C3-LIVE-01A.md`) is `activation: null` until a separate reviewed pin-only commit records the activation commit and its digest after the activation PR is merged; that file, not this document, is authoritative for the pin. A live attempt needs both, plus a per-run operator approval made at the pinned revision, a clean tree and a credential. No operator approval has been recorded.
 
 | Decision | Approved by / date / link | Exact values approved |
@@ -94,6 +99,7 @@ Two machine-read owner files exist. `config/live-authorization.json` (the decisi
 | Per-run operator approval design (C3-LIVE-01A implementation) | _none recorded_ (the design is implemented as code and covered by the decision above only as a requirement) | _none_ |
 | Evaluation of accepted proposals (C3-B2B) | _none recorded_ — NOT APPROVED | _none_ |
 | Activation revision pin | see `config/live-activation.json` (separate pin-only commit; `activation: null` = NOT RECORDED) | the file is authoritative |
+| Execution of the approved attempt | Executed 2026-10-29T17:03:11Z by the operator; `PROPOSAL_ACCEPTED`; quota spent (`docs/LIVE-C3-01-EXECUTION-REPORT.md`) | one attempt, 1,300 tokens, billing unverified |
 
 ## 5. What this record does not do
 

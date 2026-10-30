@@ -5,13 +5,13 @@
 ## Project
 
 - **Name:** ProofPilot AI — Meta Global AI Developer Hackathon (Push the Frontier)
-- **Current phase:** PP-META-I2-C3-LIVE-01B-CI — CI execution context and activation-state-aware tests (Draft PR awaiting independent exact-head review); it becomes the NEW activation commit A2 only after audit and the owner's separate merge approval
-- **Status:** C3-LIVE-01B (PR #14) is **merged** as activation commit A `f8f3e182212ec3f57b6502d98aacf8dee0e7df98`; the pin-only Draft PR #15 for A is **blocked** by the independent audit (hosted CI validated GitHub's synthetic merge commit with a depth-1 fetch, and legacy tests assumed an empty pin) and is superseded: this remediation PR fixes the CI execution context (exact PR head, full history, verified) and makes the real-checkout tests state-aware (unpinned → `ACTIVATION_NOT_PINNED`; validly pinned without an operator approval → `APPROVAL_MISSING`; broken lineage → `ACTIVATION_MISMATCH`/`REVISION_NOT_APPROVED`), without touching production authorization, activation-digest, provider, quota, reservation or approval code. After its audit and the owner's merge approval the squash commit is the NEW activation commit **A2**; its digest is recomputed and a new pin-only PR A2′ follows (the old A and its digest are not reused). LIVE-C3-01 is APPROVED for activation preparation (owner, October 29, 2026); the **real provider invocation is NOT AUTHORIZED**; the activation pin is authoritative only in `config/live-activation.json` (`null` = NOT RECORDED); no operator approval exists and no provider, Modal or model call was made.
-- **Primary branch:** protected `main` at `f8f3e182212ec3f57b6502d98aacf8dee0e7df98` (PR #14 squash merge = activation commit A)
-- **Working branch:** `phase/pp-meta-i2-c3-live01b-ci-compat` (Draft PR; the branch head is authoritative)
-- **Active task:** `tasks/PP-META-I2-C3-LIVE-01B-CI.md`
-- **Active handoff:** PP-META-I2-C3-LIVE-01B-CI-A1
-- **Authorization:** Both single-use live smokes are **spent**. **APPROVED:** SEC-C3-01 (F01-only closed-grammar CSS, hand-authored controls only); **LIVE-C3-01 APPROVED for activation preparation (owner, October 29, 2026, one Meta `muse-spark-1.3` attempt; see `docs/LIVE-C3-01-DECISION-RECORD.md`)**. **NOT AUTHORIZED YET:** the real provider invocation (needs the audited and merged implementation, the pinned activation revision, the real operator preflight and per-run confirmation, and the owner's separate go-ahead). **NOT APPROVED:** C3-B2B (evaluating model proposals), UI-C3-01 (report UI), HOST-C3-01 (Modal or any hosted backend), Baseten, additional attempts, automated retries. A credit balance is not permission to spend. No Meta/Baseten/Modal call, no execution of model-generated code, no deployment or merge by the agent.
+- **Current phase:** LIVE-C3-01 closure and hackathon submission documentation (docs-only Draft PR awaiting independent review); next engineering phase is the C3-B2B specification (NOT approved)
+- **Status:** **LIVE-C3-01 is COMPLETE and SPENT.** The one approved Meta `muse-spark-1.3` attempt (`c3-live-meta-001`, 2026-10-29T17:03:11Z) returned `PROPOSAL_ACCEPTED` with lifecycle `completed`, 1,300 tokens, one adjustment (`.promo-overlay` / `pointer-events` / `none`), labelled **`UNTRUSTED PROPOSAL — NOT VERIFIED`**; it has not been run through the browser, staging or the oracle. The lifetime quota is exhausted; actual billing is unverified; no retry occurred. Report: `docs/LIVE-C3-01-EXECUTION-REPORT.md`. Activation merged as PRs #14 (activation commit A), #16 (CI-compatibility = activation commit A2 `e6d1f5f03879164f67353e5c4f98da5ce5cccc1a`) and #17 (pin-only A2′, `main` = `564c56f59afc8b637dd8814078a98370e5ba2d97`); PR #15 (pin for the old A) was **closed unmerged** and superseded. This documentation PR is a non-pin-only descendant of A2, so after it merges the repository is **no longer eligible for any live attempt** (the gate refuses with `REVISION_NOT_APPROVED`); this is intended, consistent with the spent quota, and not repaired here. C3-B2B (verifying the stored proposal), UI-C3-01 and HOST-C3-01 are NOT APPROVED. The `VERIFIED` status exists only for the hand-authored control PC-1.
+- **Primary branch:** protected `main` at `564c56f59afc8b637dd8814078a98370e5ba2d97` (PR #17 squash merge = pin-only commit A2′)
+- **Working branch:** `docs/pp-meta-live-c3-01-closure-submission` (docs-only Draft PR; the branch head is authoritative)
+- **Active task:** `docs/LIVE-C3-01-EXECUTION-REPORT.md` and `docs/META-HACKATHON-SUBMISSION.md` (documentation); next specification: `tasks/PP-META-I2-C3-B2B.md` (DRAFT, NOT APPROVED)
+- **Active handoff:** PP-META-LIVE-C3-01-CLOSURE-A2
+- **Authorization:** Both single-use C2B live smokes are **spent**. **APPROVED and EXECUTED:** LIVE-C3-01 (owner decision October 29, 2026: one Meta `muse-spark-1.3` attempt in total); the attempt was made and the lifetime quota is **spent**; a further provider call is **NOT AUTHORIZED** (it needs a new owner decision, a new activation commit and a new pin-only commit). **APPROVED:** SEC-C3-01 (F01-only closed-grammar CSS, hand-authored controls only). **NOT APPROVED:** C3-B2B (evaluating the model proposal), UI-C3-01 (report UI), HOST-C3-01 (Modal or any hosted backend), Baseten, additional attempts, automated retries. A credit balance is not permission to spend. No agent reads credentials or approval records, executes model-generated code, deploys or merges.
 
 ## Completed milestones
 
@@ -64,7 +64,7 @@
 | T04 real Muse Spark video analysis | **COMPLETED (agent-reported)** |
 | PR #6 contract | MERGED (audit PASS at `6afb386`) |
 | SEC-C3-01 execution boundary (closed-grammar CSS adjustments, F01 only) | **APPROVED, bounded** (owner record in the task file). Does not certify the unimplemented C3-A validator; model candidates still blocked |
-| LIVE-C3-01 live-call quantities (Meta only, `muse-spark-1.3`, 1 attempt in total) | **APPROVED for activation preparation** (owner, October 29, 2026, https://github.com/mrdzyn/proofpilot-ai/pull/6#issuecomment-6496850990). **Real provider invocation: NOT AUTHORIZED YET**; activation revision pin NOT RECORDED (`activation: null`) so every live path still refuses. Baseten and Modal: NOT APPROVED |
+| LIVE-C3-01 live-call quantities (Meta only, `muse-spark-1.3`, 1 attempt in total) | **APPROVED (owner, October 29, 2026) and EXECUTED**; quota SPENT; result `PROPOSAL_ACCEPTED`, unverified (`docs/LIVE-C3-01-EXECUTION-REPORT.md`). Any further provider call: NOT AUTHORIZED. Baseten and Modal: NOT APPROVED |
 | UI-C3-01 one-page static report (`design/screens/PP-C3-REPORT-CONTRACT.md`) | PENDING owner design approval |
 | Five-screen product UI (`design/screens/PP-PRODUCT-SCREEN-MAP.md`) | CUT for the hackathon; stays PROPOSED and unbuilt |
 | Independently verified Docker/ARM64 or OS sandbox | **NOT VERIFIED**. Still required before any model-authored HTML, JavaScript or free-form patch executes |
@@ -73,19 +73,28 @@
 | C3-B1 offline coordinator, 3-replay VERIFIED logic, scoreboard, DID-1 (hand-authored controls) | **MERGED** (PR #9, independent PASS) |
 | C3-B2A pre-live readiness (preflight, coordinator guard, Baseten discovery procedure, LIVE-C3-01 record, Meta checklist, Modal update) | **MERGED** (PR #10, independent PASS after remediation of MAJOR-1 control provenance and MINOR-2 key-field read) |
 | C3-LIVE-01A human approval and live-activation safety gate (operator approval CLI, private single-use records, fail-closed validator, empty register, synthetic rehearsal) | **MERGED** (PR #11, independent PASS after two remediation rounds) |
-| C3-LIVE-01B0 Meta proposal integration (synthetic orchestration, scripted transport, no production runner) | **IMPLEMENTED** (mock only); independent review PENDING |
+| C3-LIVE-01B0 Meta proposal integration (synthetic orchestration, scripted transport) | **MERGED** (PR #12) |
 | C3-LIVE-01B-PREP dormant production proposal runner and Meta transport | **MERGED** (PR #13) |
-| C3-LIVE-01B activation implementation (decision recorded, quota 1, gated entry point, owner CLI, provenance gate) | **MERGED** (PR #14, independent audit; activation commit A `f8f3e18…`, superseded as the activation commit by A2 once the CI-compatibility PR #16 is merged); activation pin: see `config/live-activation.json` |
-| Real Meta invocation of the first proposal | **NOT AUTHORIZED YET** (operator gates in `tasks/PP-META-I2-C3-LIVE-01B.md`) |
-| LIVE-C3-01 first bounded Muse Spark proposal | Owner decision **APPROVED for activation preparation** (`docs/LIVE-C3-01-DECISION-RECORD.md`). **The real invocation is NOT AUTHORIZED YET**: it still needs the independently audited and separately merged activation implementation (C3-LIVE-01B, Draft PR #14), the pinned activation revision (separate pin-only commit; see `config/live-activation.json`), a real single-use operator approval, a securely injected credential and the owner's separate go-ahead |
-| C3-B2B model proposals through staging and the coordinator | NOT STARTED and **gated in code** (`assertHandAuthoredControls`); needs its own owner authorization, a reviewed change and a new provenance label |
+| C3-LIVE-01B activation implementation (decision recorded, quota 1, gated entry point, owner CLI, provenance gate) | **MERGED** (PR #14, activation commit A; superseded by A2 = PR #16 squash commit `e6d1f5f…`) |
+| C3-LIVE-01B-CI exact-head CI checkout and activation-state-aware tests | **MERGED** (PR #16 = activation commit A2) |
+| Activation pin for A2 (pin-only A2′) | **MERGED** (PR #17, `main` `564c56f…`); pin for the old A (PR #15): **CLOSED UNMERGED**, superseded |
+| Real Meta invocation of the first proposal | **DONE** (`c3-live-meta-001`, operator-run, 2026-10-29T17:03:11Z): `PROPOSAL_ACCEPTED`, `UNTRUSTED PROPOSAL — NOT VERIFIED`. Eligibility ends with this documentation merge (non-pin-only descendant of A2) |
+| LIVE-C3-01 first bounded Muse Spark proposal | **EXECUTED** (see the row above); the proposal is data only: not staged, executed or verified |
+| C3-B2B model proposals through staging and the coordinator | NOT STARTED, NOT APPROVED and **gated in code** (`assertHandAuthoredControls`). Draft specification: `tasks/PP-META-I2-C3-B2B.md`; needs the owner's separate approval and an independent security review before any model-derived adjustment executes |
+| Hackathon submission pack (`docs/META-HACKATHON-SUBMISSION.md`) | DRAFT for owner review; portal fields, video, final links: PENDING; deadline Nov 4, 2026 9 PM ET = Nov 5, 10 AM PHT |
 | C3-C scoreboard report UI, C3-D report + replay + audit, C3-E demo, C3-F submission | NOT STARTED (UI-C3-01 not approved) |
 | Baseten compatibility (`docs/BASETEN-COMPATIBILITY-PLAN.md`) | PLAN ONLY; pinned id vs public docs discrepancy and a structured-output doubt recorded; NOT TESTED |
 | Modal sandbox (`docs/MODAL-FEASIBILITY-PROPOSAL.md`) | PROPOSAL ONLY; the C3 contract forbids hosted backends; HOST-C3-01 not requested; not a verified boundary |
 | Muse Wonder as patcher | UNVERIFIED and not a dependency |
 | Baseten | NOT TESTED |
 
-## C3-LIVE-01B-CI result (local; branch `phase/pp-meta-i2-c3-live01b-ci-compat`)
+## LIVE-C3-01 execution result (operator-run, October 29, 2026; documentation PR)
+- `docs/LIVE-C3-01-EXECUTION-REPORT.md`: every fact labelled verified (read from the sanitized local artifact, recomputed read-only from the certified local evidence, or read from GitHub) or operator-reported. Input SHA-256 `4e1466e8adf1ee58b6c050e70f9720da43ddb254b255d4f754f8696a857af558`, 2,756 characters (hash and size independently recomputed); response id `7cb1e5e2-3d88-42ab-9652-fcab88b690d8`; usage 670 input / 630 output (601 reasoning) / 1,300 total; reservation slot 1; actual billing unverified.
+- The accepted adjustment equals the hand-authored PC-1 value; PC-1's `VERIFIED` is not transferred to the proposal.
+
+> **Historical records.** The milestone result sections below describe each milestone as it stood when it was written. Where they say quota 0, "hard-disabled", an empty or not-recorded activation pin, "pending review" or "LIVE-C3-01 NOT APPROVED / NOT AUTHORIZED YET", that was true then. The current state is the Project block at the top, the Open gates table and the LIVE-C3-01 execution result above: LIVE-C3-01 was executed once and its quota is spent; the activation pin in `config/live-activation.json` points at activation commit A2; any further provider call is NOT AUTHORIZED.
+
+## C3-LIVE-01B-CI result (merged PR #16 = activation commit A2; local; branch `phase/pp-meta-i2-c3-live01b-ci-compat`)
 - CI execution context, the pin-lineage check, the state-aware tests and the activation-state matrix: `tasks/PP-META-I2-C3-LIVE-01B-CI.md`. Test and CI evidence: see the Draft PR and handoff `PP-META-I2-C3-LIVE-01B-CI-A1`.
 
 ## C3-LIVE-01B result (merged PR #14, activation commit A; local; branch `phase/pp-meta-i2-c3-live01b-activation`)
@@ -95,8 +104,6 @@
 ## C3-LIVE-01B-PREP result (merged PR #13; local; branch `phase/pp-meta-i2-c3-live01b-prep`)
 - Dormant production wiring and activation plan: `tasks/PP-META-I2-C3-LIVE-01B-PREP.md`. The production path is tested by running the unmodified production code from a throwaway copy with its own register, pin and quota (fixtures exist only in the copy), with a mock `fetch`; no network, no real credential.
 - Test and CI evidence: see the Draft PR and handoff `PP-META-I2-C3-LIVE-01B-PREP-A1`.
-
-> **Historical records.** The milestone sections below describe each milestone as it stood when it was written. Where they say quota 0, "hard-disabled", or "LIVE-C3-01 NOT APPROVED", that was true then. The current state is the Project block at the top and the Open gates table: LIVE-C3-01 is APPROVED for activation preparation (owner, October 29, 2026), the real provider invocation is NOT AUTHORIZED YET, and the activation revision pin is whatever `config/live-activation.json` says (`null` = NOT RECORDED).
 
 ## C3-LIVE-01B0 result (merged PR #12; branch `phase/pp-meta-i2-c3-live01b0-proposal-integration`;  branch `phase/pp-meta-i2-c3-live01b0-proposal-integration`)
 - Orchestration, isolation and failure matrix: `tasks/PP-META-I2-C3-LIVE-01B0.md`. Synthetic and scripted only; a synthetic result is **not** an authorization and an accepted proposal is **not** verified.
@@ -204,7 +211,7 @@
 
 ## Next action
 
-1. Independent exact-head review of the C3-LIVE-01B-CI Draft PR #16 (hosted CI plus the evidence above).
-2. Owner decisions still open (LIVE-C3-01 itself is already APPROVED for activation preparation and recorded): approve the squash merge of the C3-LIVE-01B-CI Draft PR #16 after its audit (the squash commit becomes the NEW activation commit A2; PR #15's pin for the old A is retired); then the pin-only activation commit and the operator steps in `tasks/PP-META-I2-C3-LIVE-01B.md`, and a separate go-ahead for the one real request; run the Baseten discovery yourself; decide separately on C3-B2B, HOST-C3-01 (Modal) and UI-C3-01 (report), which are NOT APPROVED.
+1. Independent exact-head review of this documentation Draft PR (execution report, submission pack, C3-B2B specification, status corrections).
+2. Owner decisions still open: merge of this documentation PR (it ends live eligibility by design); whether to approve and spend the remaining days on C3-B2B (`tasks/PP-META-I2-C3-B2B.md`, requires the owner's separate approval and an independent security review) or to submit with the honest "proposal obtained, verification next" story; the demo recording and the portal fields (`docs/META-HACKATHON-SUBMISSION.md`); UI-C3-01 and HOST-C3-01 stay NOT APPROVED.
 
 Submission deadline: Nov 4, 9:00 PM EST = **Nov 5, 10:00 AM PHT**; internal target is Nov 4 PHT.
