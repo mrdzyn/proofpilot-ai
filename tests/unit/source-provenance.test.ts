@@ -31,7 +31,11 @@ const makeGit = (over: { commits?: string[]; ancestor?: boolean; trees?: Record<
   return {
     commitExists: async (sha: string) => commits.has(sha),
     isAncestor: async (a: string, d: string) => over.ancestor ?? (a === SOURCE && d === VERIF),
-    treeOf: async (rev: string, p: string) => over.trees?.[rev]?.[p] ?? `tree:${p}`,
+    treeOf: async (rev: string, p: string) => {
+      const perRev = over.trees?.[rev];
+      if (perRev && p in perRev) return perRev[p]!;
+      return p === 'fixtures/sample-store' ? TREE : `tree:${p}`;
+    },
   };
 };
 
@@ -95,8 +99,22 @@ test('unknown source commits, non-ancestors and drifted trees are refused', asyn
   const s = await setup();
   assert.equal(await codeOf(check(s, makeGit({ commits: [VERIF] }))), 'SOURCE_COMMIT_UNKNOWN');
   assert.equal(await codeOf(check(s, makeGit({ ancestor: false }))), 'SOURCE_NOT_ANCESTOR');
-  const drift = { [SOURCE]: { 'fixtures/sample-store': 't1', verifier: 'v1', 'config/patch-policy.json': 'p1' }, [VERIF]: { 'fixtures/sample-store': 't1', verifier: 'v2', 'config/patch-policy.json': 'p1' } };
+  const drift = { [SOURCE]: { 'fixtures/sample-store': TREE, verifier: 'v1', 'config/patch-policy.json': 'p1' }, [VERIF]: { 'fixtures/sample-store': TREE, verifier: 'v2', 'config/patch-policy.json': 'p1' } };
   assert.equal(await codeOf(check(s, makeGit({ trees: drift }))), 'SOURCE_IMMUTABLE');
-  const unresolvable = { [SOURCE]: { 'fixtures/sample-store': 't1', verifier: 'v1', 'config/patch-policy.json': 'p1' }, [VERIF]: { 'fixtures/sample-store': 't1', verifier: 'v1', 'config/patch-policy.json': null } };
+  const unresolvable = { [SOURCE]: { 'fixtures/sample-store': TREE, verifier: 'v1', 'config/patch-policy.json': 'p1' }, [VERIF]: { 'fixtures/sample-store': TREE, verifier: 'v1', 'config/patch-policy.json': null } };
   assert.equal(await codeOf(check(s, makeGit({ trees: unresolvable }))), 'SOURCE_IMMUTABLE');
+});
+
+test('the Git fixture trees must equal the archived baseline claim, not just each other', async () => {
+  const s = await setup();
+  // both revisions agree with each other but not with the baseline claim
+  const coherent = '4'.repeat(40);
+  const both = { [SOURCE]: { 'fixtures/sample-store': coherent }, [VERIF]: { 'fixtures/sample-store': coherent } };
+  assert.equal(await codeOf(check(s, makeGit({ trees: both }))), 'SOURCE_FIXTURE_TREE');
+  // source matches the claim but verification drifted
+  const oneSide = { [SOURCE]: { 'fixtures/sample-store': TREE }, [VERIF]: { 'fixtures/sample-store': coherent } };
+  assert.equal(await codeOf(check(s, makeGit({ trees: oneSide }))), 'SOURCE_FIXTURE_TREE');
+  // unresolvable source tree
+  const missing = { [SOURCE]: { 'fixtures/sample-store': null }, [VERIF]: { 'fixtures/sample-store': TREE } };
+  assert.equal(await codeOf(check(s, makeGit({ trees: missing }))), 'SOURCE_FIXTURE_TREE');
 });

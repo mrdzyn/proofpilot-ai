@@ -977,4 +977,23 @@ GPT-6 focused re-audit of the new HEAD; owner merge decision.
 ### Next action
 GPT-6 exact-head review; owner merge decision; E1/E2 stay unstarted.
 
+## Handoff: PP-META-I2-C3-B2B-P2-A2
+
+- **Task / phase:** C3-B2B P2 MAJOR-1/MAJOR-2 remediation (GPT-6 audit of PR #20)
+- **From:** Implementation agent (Muse Code)
+- **To:** GPT-6 independent exact-head re-audit, then project owner
+- **Branch:** `phase/pp-meta-c3-b2b-p2-validation` (same Draft PR #20, new HEAD)
+- **State:** READY FOR RE-REVIEW. No activation, quota, authorization, credential, reservation, parser, runner, registration, staging or browser change; the stored `c3-live-meta-001` artifact was not loaded or executed; no provider call; no merge.
+
+### Completed
+- MAJOR-1: `verifySourceProvenance` binds the actual Git fixture-tree ids at both revisions to the baseline claim (`SOURCE_FIXTURE_TREE`); verifier/policy stay equality anchors. Negatives cover agree-with-each-other-but-differ, one-side drift and unresolvable trees.
+- MAJOR-2: ancestor-component symlink refusal plus an `O_RDONLY|O_NOFOLLOW|O_NONBLOCK` descriptor read with pre/post `fstat` identity binding (`ARTIFACT_UNSTABLE`). Flags come from a reviewed constants-only `node:fs` carve-out (no write capability; call-site asserted); `open` added to the read-only member list, reviewed. Strict `createdAt` UTC round-trip.
+- Tests prove the three new guards fail on the pre-fix code (stash check); FIFO, oversize, tamper and timestamp batteries added. STATUS branch/authorization prose corrected (`main@31fd731`, P2 authorized).
+
+### Validation
+- Targeted suites green; full gates below before push.
+
+### Next action
+GPT-6 focused re-audit of the new HEAD; owner merge decision.
+
 <!-- HANDOFF_ENTRIES_END -->

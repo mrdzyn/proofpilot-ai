@@ -2,7 +2,8 @@
 // The real stored artifact is never read.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { chmodSync, mkdirSync, readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, symlinkSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { ArtifactError, loadAndValidateProposalArtifact } from '../../packages/provenance/src/proposal-artifact.ts';
@@ -63,6 +64,41 @@ test('the loader refuses bad paths, symlinks, non-regular files, loose modes and
   const big = fresh();
   writeArtifact(big.root, big.runId, 'x'.repeat(8 * 1024 + 1));
   assert.equal(await codeOf(big.load()), 'ARTIFACT_TOO_LARGE');
+});
+
+test('a symlink in any intermediate directory is refused before the file is read', async () => {
+  const parts = ['.proofpilot', 'evidence', 'proposals', ARTIFACT_RUN_ID];
+  for (let depth = 0; depth < parts.length; depth++) {
+    const f = fresh();
+    writeArtifactDoc(f.root, f.runId);
+    const link = path.join(f.root, ...parts.slice(0, depth + 1));
+    const stash = `${link}.real`;
+    renameSync(link, stash);
+    try {
+      symlinkSync(stash, link);
+      assert.equal(await codeOf(f.load()), 'ARTIFACT_SYMLINK', `symlink at ${parts[depth]}`);
+    } finally {
+      rmSync(link);
+      renameSync(stash, link);
+    }
+  }
+});
+
+test('a FIFO at the artifact path is refused without blocking on open', async () => {
+  const f = fresh();
+  mkdirSync(path.dirname(artifactFileFor(f.root, f.runId)), { recursive: true });
+  execFileSync('mkfifo', [artifactFileFor(f.root, f.runId)]);
+  chmodSync(artifactFileFor(f.root, f.runId), 0o600);
+  assert.equal(await codeOf(f.load()), 'ARTIFACT_NOT_REGULAR');
+});
+
+test('timestamps must be real UTC instants; the millisecond form may be omitted', async () => {
+  const f = fresh();
+  writeArtifactDoc(f.root, f.runId, validArtifactDoc(f.runId, { createdAt: '2026-02-30T00:00:00.000Z' }));
+  assert.equal(await codeOf(f.load()), 'ARTIFACT_BAD_VALUE');
+  const g = fresh();
+  writeArtifactDoc(g.root, g.runId, validArtifactDoc(g.runId, { createdAt: '2026-10-30T00:00:00Z' }));
+  assert.equal((await g.load()).createdAt, '2026-10-30T00:00:00Z');
 });
 
 test('malformed text, trailing garbage, duplicates, pollution keys and deep nesting are refused', async () => {

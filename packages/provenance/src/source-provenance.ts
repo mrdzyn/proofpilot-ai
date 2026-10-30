@@ -17,7 +17,7 @@ import { ArtifactError, type ValidatedProposal } from './proposal-artifact.ts';
 
 export type SourceProvenanceErrorCode =
   | 'SOURCE_REVISION_INVALID' | 'SOURCE_CONFLATED' | 'SOURCE_EVIDENCE' | 'SOURCE_INPUT_MISMATCH'
-  | 'SOURCE_COMMIT_UNKNOWN' | 'SOURCE_NOT_ANCESTOR' | 'SOURCE_IMMUTABLE';
+  | 'SOURCE_COMMIT_UNKNOWN' | 'SOURCE_NOT_ANCESTOR' | 'SOURCE_IMMUTABLE' | 'SOURCE_FIXTURE_TREE';
 
 export class SourceProvenanceError extends Error {
   readonly code: SourceProvenanceErrorCode;
@@ -58,8 +58,11 @@ export type SourceProvenance = {
   readonly classes: Readonly<Record<string, ProvenanceClass>>;
 };
 
-/** Paths whose Git tree/blob ids must be identical at the source and verification revisions. */
-export const IMMUTABLE_PATHS = ['fixtures/sample-store', 'verifier', 'config/patch-policy.json'] as const;
+/** The fixture tree is bound explicitly to the baseline claim below; these paths must be identical at the
+ *  source and verification revisions. */
+export const IMMUTABLE_PATHS = ['verifier', 'config/patch-policy.json'] as const;
+/** The fixture tree, bound separately to the certified baseline's claimed tree at both revisions. */
+export const FIXTURE_PATH = 'fixtures/sample-store';
 
 const SHA1 = /^[0-9a-f]{40}$/;
 
@@ -124,7 +127,17 @@ export async function verifySourceProvenance(opts: {
   if (!(await git.isAncestor(sourceHead, verificationHead))) {
     return bad('SOURCE_NOT_ANCESTOR', 'the source commit is not an ancestor of the verification revision');
   }
-  // Oracle and fixture immutability between the two anchors, by Git tree/blob ids.
+  // Fixture-tree binding: the actual Git tree at the source revision must equal the certified baseline's
+  // claimed tree, and the verification revision must match it too. Two revisions agreeing with each other
+  // is not enough; both must equal the archived claim.
+  const [sourceTree, verificationTree] = await Promise.all([git.treeOf(sourceHead, FIXTURE_PATH), git.treeOf(verificationHead, FIXTURE_PATH)]);
+  if (!sourceTree || sourceTree !== sourceFixtureTree) {
+    return bad('SOURCE_FIXTURE_TREE', 'the source revision does not contain the claimed fixture tree');
+  }
+  if (!verificationTree || verificationTree !== sourceFixtureTree) {
+    return bad('SOURCE_FIXTURE_TREE', 'the verification revision does not match the claimed fixture tree');
+  }
+  // Oracle immutability between the two anchors, by Git tree/blob ids.
   for (const p of IMMUTABLE_PATHS) {
     const [a, b] = await Promise.all([git.treeOf(sourceHead, p), git.treeOf(verificationHead, p)]);
     if (!a || !b || a !== b) return bad('SOURCE_IMMUTABLE', `path ${p} differs between the source and verification revisions`);

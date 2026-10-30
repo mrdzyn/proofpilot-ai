@@ -8,7 +8,8 @@
 // rendered CSS to equal the stored `renderedCss` byte for byte (section 3.4). Returns a frozen plain object
 // of validated triples plus provenance labels; nothing here executes, stages or verifies a proposal.
 import { createHash } from 'node:crypto';
-import { lstat, readFile, stat } from 'node:fs/promises';
+import { constants as fsConstants } from 'node:fs';
+import { lstat, open } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { MAX_ADJUSTMENTS, type CssAdjustment } from '../../core/src/css-adjustments.ts';
 import { parseProposal } from '../../core/src/patch-proposal.ts';
@@ -19,7 +20,7 @@ export type ArtifactErrorCode =
   | 'ARTIFACT_OWNERSHIP_UNVERIFIABLE' | 'ARTIFACT_OWNERSHIP' | 'ARTIFACT_PERMISSIONS' | 'ARTIFACT_TOO_LARGE'
   | 'ARTIFACT_MALFORMED' | 'ARTIFACT_DUPLICATE_KEY' | 'ARTIFACT_PROTO_KEY' | 'ARTIFACT_MAX_DEPTH'
   | 'ARTIFACT_UNKNOWN_FIELD' | 'ARTIFACT_MISSING_FIELD' | 'ARTIFACT_BAD_TYPE' | 'ARTIFACT_BAD_VALUE'
-  | 'ARTIFACT_RUN_ID_MISMATCH' | 'ARTIFACT_GRAMMAR' | 'ARTIFACT_RENDER_MISMATCH';
+  | 'ARTIFACT_RUN_ID_MISMATCH' | 'ARTIFACT_GRAMMAR' | 'ARTIFACT_RENDER_MISMATCH' | 'ARTIFACT_UNSTABLE';
 
 export class ArtifactError extends Error {
   readonly code: ArtifactErrorCode;
@@ -220,6 +221,22 @@ function currentUid(): number | null {
   }
 }
 
+/** Descriptor-pinned identity: dev, inode, size, mode, owner and mtime must not change mid-read. */
+type FileIdentity = { dev: number; ino: number; size: number; mode: number; uid: number; mtimeMs: number };
+const identityOf = (st: { dev: number; ino: number; size: number; mode: number; uid: number; mtimeMs: number }): FileIdentity =>
+  ({ dev: st.dev, ino: st.ino, size: st.size, mode: st.mode, uid: st.uid, mtimeMs: st.mtimeMs });
+const sameIdentity = (a: FileIdentity, b: FileIdentity): boolean =>
+  a.dev === b.dev && a.ino === b.ino && a.size === b.size && a.mode === b.mode && a.uid === b.uid && a.mtimeMs === b.mtimeMs;
+
+const checkDescriptorStat = (st: { isFile(): boolean; size: number; mode: number; uid: number }): void => {
+  if (!st.isFile()) return fail('ARTIFACT_NOT_REGULAR', 'the artifact must be a regular file');
+  if (st.size > MAX_ARTIFACT_BYTES) return fail('ARTIFACT_TOO_LARGE', `the artifact exceeds ${MAX_ARTIFACT_BYTES} bytes`);
+  if ((st.mode & 0o077) !== 0) return fail('ARTIFACT_PERMISSIONS', 'the artifact must not be visible to group or other');
+  const uid = currentUid();
+  if (uid === null) return fail('ARTIFACT_OWNERSHIP_UNVERIFIABLE', 'the current user cannot be determined');
+  if (st.uid !== uid) return fail('ARTIFACT_OWNERSHIP', 'the artifact is not owned by the current user');
+};
+
 async function readArtifactBytes(repoRoot: string, runId: string): Promise<{ bytes: Buffer; path: string }> {
   if (!isValidRunId(runId) || runId === '.' || runId === '..' || runId.includes('/') || runId.includes('\\')) {
     return fail('ARTIFACT_RUN_ID_INVALID', 'the run id is malformed');
@@ -227,21 +244,49 @@ async function readArtifactBytes(repoRoot: string, runId: string): Promise<{ byt
   if (typeof repoRoot !== 'string' || repoRoot.length === 0 || !isAbsolute(repoRoot)) {
     return fail('ARTIFACT_RUN_ID_INVALID', 'the repository root must be an absolute path');
   }
+  // Every ancestor component must exist and must not be a symlink; otherwise the fixed path resolves elsewhere.
+  let dir = repoRoot;
+  const anchor = await lstat(dir).catch(() => null);
+  if (!anchor) return fail('ARTIFACT_NOT_FOUND', 'the repository root is missing');
+  if (anchor.isSymbolicLink()) return fail('ARTIFACT_SYMLINK', 'the repository root must not be a symlink');
+  for (const part of ['.proofpilot', 'evidence', 'proposals', runId]) {
+    dir = join(dir, part);
+    const st = await lstat(dir).catch(() => null);
+    if (!st) return fail('ARTIFACT_NOT_FOUND', `evidence path component ${part} is missing`);
+    if (st.isSymbolicLink()) return fail('ARTIFACT_SYMLINK', `evidence path component ${part} must not be a symlink`);
+  }
   const file = artifactPathFor(repoRoot, runId);
-  const link = await lstat(file).catch(() => null);
-  if (!link) return fail('ARTIFACT_NOT_FOUND', `no proposal artifact at .proofpilot/evidence/proposals/${runId}/proposal.json`);
-  if (link.isSymbolicLink()) return fail('ARTIFACT_SYMLINK', 'the artifact must not be a symlink');
-  const st = await stat(file).catch(() => null);
-  if (!st || !st.isFile()) return fail('ARTIFACT_NOT_REGULAR', 'the artifact must be a regular file');
-  if (st.size > MAX_ARTIFACT_BYTES) return fail('ARTIFACT_TOO_LARGE', `the artifact exceeds ${MAX_ARTIFACT_BYTES} bytes`);
-  if ((st.mode & 0o077) !== 0) return fail('ARTIFACT_PERMISSIONS', 'the artifact must not be visible to group or other');
-  const uid = currentUid();
-  if (uid === null) return fail('ARTIFACT_OWNERSHIP_UNVERIFIABLE', 'the current user cannot be determined');
-  const owner = st.uid;
-  if (owner !== uid) return fail('ARTIFACT_OWNERSHIP', 'the artifact is not owned by the current user');
-  const bytes = await readFile(file).catch(() => null);
-  if (!bytes) return fail('ARTIFACT_NOT_FOUND', 'the artifact could not be read');
-  return { bytes, path: file };
+  // Race-resistant read: a no-follow read-only descriptor pins the file; every check below runs against
+  // the open descriptor, and the post-read identity must match the pre-read one. The flags come from the
+  // capability-free `fs.constants` table (the only `node:fs` use in Zone P); a platform without numeric
+  // O_NOFOLLOW cannot do the no-follow open and is refused instead of silently downgrading.
+  if (typeof fsConstants.O_RDONLY !== 'number' || typeof fsConstants.O_NOFOLLOW !== 'number' || typeof fsConstants.O_NONBLOCK !== 'number') {
+    return fail('ARTIFACT_UNSTABLE', 'this platform cannot open files without following symlinks');
+  }
+  // O_NONBLOCK keeps a FIFO at the final path from blocking the open; the descriptor stat below refuses it.
+  let handle: Awaited<ReturnType<typeof open>> | null = null;
+  try {
+    handle = await open(file, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK);
+  } catch (e) {
+    const errno = (e as NodeJS.ErrnoException)?.code;
+    if (errno === 'ELOOP') return fail('ARTIFACT_SYMLINK', 'the artifact must not be a symlink');
+    if (errno === 'EACCES') return fail('ARTIFACT_PERMISSIONS', 'the artifact is not accessible');
+    return fail('ARTIFACT_NOT_FOUND', `no proposal artifact at .proofpilot/evidence/proposals/${runId}/proposal.json`);
+  }
+  try {
+    const before = await handle.stat();
+    checkDescriptorStat(before);
+    const pinned = identityOf(before);
+    const bytes = await handle.readFile();
+    if (bytes.length !== pinned.size || bytes.length > MAX_ARTIFACT_BYTES) {
+      return fail('ARTIFACT_TOO_LARGE', 'the artifact bytes do not fit the verified size');
+    }
+    const after = identityOf(await handle.stat());
+    if (!sameIdentity(pinned, after)) return fail('ARTIFACT_UNSTABLE', 'the artifact changed while it was read');
+    return { bytes, path: file };
+  } finally {
+    await handle.close().catch(() => undefined);
+  }
 }
 
 // ---------------------------------------------------------------- exact schema validation (section 3.2)
@@ -336,7 +381,16 @@ function validateArtifact(doc: unknown, runId: string, artifactHash: string): Va
     return fail('ARTIFACT_BAD_VALUE', 'slot must be an integer at least 1');
   }
   const createdAt = boundedString(top.createdAt, MAX_STAMP_CHARS, 'createdAt');
-  if (!ISO_UTC.test(createdAt) || Number.isNaN(Date.parse(createdAt))) return fail('ARTIFACT_BAD_VALUE', 'createdAt must be an ISO-8601 UTC timestamp');
+  if (!ISO_UTC.test(createdAt)) return fail('ARTIFACT_BAD_VALUE', 'createdAt must be an ISO-8601 UTC timestamp');
+  const instant = Date.parse(createdAt);
+  if (Number.isNaN(instant)) return fail('ARTIFACT_BAD_VALUE', 'createdAt must be an ISO-8601 UTC timestamp');
+  // Strict round-trip: Date.parse normalizes impossible calendar dates, so the parsed instant must
+  // re-emit exactly the stored stamp (allowing the omitted millisecond form).
+  const roundTrip = new Date(instant).toISOString();
+  const withMillis = /\.\d+Z$/.test(createdAt) ? createdAt : createdAt.replace(/Z$/, '.000Z');
+  if (roundTrip !== createdAt && roundTrip !== withMillis) {
+    return fail('ARTIFACT_BAD_VALUE', 'createdAt is not a real UTC instant');
+  }
   if (!Array.isArray(top.adjustments) || top.adjustments.length < 1 || top.adjustments.length > MAX_ADJUSTMENTS) {
     return fail('ARTIFACT_BAD_VALUE', `adjustments must hold 1 to ${MAX_ADJUSTMENTS} entries`);
   }
