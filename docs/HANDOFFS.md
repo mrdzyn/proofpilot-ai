@@ -996,4 +996,24 @@ GPT-6 exact-head review; owner merge decision; E1/E2 stay unstarted.
 ### Next action
 GPT-6 focused re-audit of the new HEAD; owner merge decision.
 
+## Handoff: PP-META-I2-C3-B2B-P2-A3
+
+- **Task / phase:** C3-B2B P2 MAJOR-2 residual remediation — ancestor-swap window + bounded reads (GPT-6 re-audit of PR #20)
+- **From:** Implementation agent (Muse Code)
+- **To:** GPT-6 independent exact-head re-audit, then project owner
+- **Branch:** `phase/pp-meta-c3-b2b-p2-validation` (same Draft PR #20, new HEAD)
+- **State:** READY FOR RE-REVIEW. No activation, quota, authorization, credential, reservation, parser, runner, registration, staging or browser change; the stored `c3-live-meta-001` artifact was not loaded or executed; no provider call; no merge.
+
+### Completed
+- Bounded descriptor reads (`readBoundedBytes`, 8193-byte cap; deterministic unit test), post-read ancestor revalidation and realpath binding; `realpath` added to the read-only member list with a call-site assertion.
+- Alternate-tree persistent-symlink refusal test (auditor's repro as a static case); FIFO/size/timestamp suites preserved.
+- New layers verified absent pre-fix (import/policy failures on stashed pre-fix code); persistent-symlink suite guards both pre-open and post-read layers.
+- Precise residual documented: transient install-revert ancestor swaps are undetectable via portable Node APIs (no `openat`); owner risk decision requested before any execution work.
+
+### Validation
+- Targeted suites green; full gates below before push.
+
+### Next action
+GPT-6 focused re-audit of the new HEAD; owner risk decision on the residual; owner merge decision.
+
 <!-- HANDOFF_ENTRIES_END -->

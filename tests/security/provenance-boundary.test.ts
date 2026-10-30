@@ -38,8 +38,9 @@ const ALLOW_FILES = [
 const ALLOW_BUILTINS = ['node:crypto', 'node:fs/promises', 'node:path'].sort();
 /** Read-only filesystem members: a write here would break the read-only zone. `lstat` (P2, reviewed) reads
  *  metadata only and is required to refuse symlinks, which `stat` follows. `open` (P2 remediation, reviewed)
- *  is allowed only for the single no-follow read-only descriptor open asserted below. */
-const ALLOW_FS_MEMBERS = ['lstat', 'open', 'readFile', 'readdir', 'stat'].sort();
+ *  is allowed only for the single no-follow read-only descriptor open asserted below. `realpath` (P2
+ *  remediation, reviewed) resolves the read path for the post-read binding check and writes nothing. */
+const ALLOW_FS_MEMBERS = ['lstat', 'open', 'readFile', 'readdir', 'realpath', 'stat'].sort();
 
 const read = (rel: string) => readFileSync(path.join(root, rel), 'utf8');
 /** Source without comments, so prose that mentions a capability cannot trip a code-shape check. */
@@ -482,6 +483,17 @@ test('Zone P has exactly the allow-listed transitive import set: no network, pro
   assert.match(openSites[0]!, /O_RDONLY/, 'read-only');
   assert.match(openSites[0]!, /O_NOFOLLOW/, 'no-follow');
   assert.match(openSites[0]!, /O_NONBLOCK/, 'never blocks on a FIFO');
+  // `realpath` appears only for the post-read binding comparison (root and file), never as a write path.
+  const realSites: string[] = [];
+  for (const f of c.files) {
+    const text = read(f);
+    for (const m of text.matchAll(/(?<![\w$.])realpath\s*\(/g)) {
+      const end = text.indexOf(';', m.index);
+      realSites.push(`${f}: ${text.slice(m.index, end === -1 ? m.index + 80 : end)}`);
+    }
+  }
+  assert.equal(realSites.length, 2, `realpath only binds the read path: ${JSON.stringify(realSites)}`);
+  assert.ok(realSites.every((s) => s.startsWith('packages/provenance/src/proposal-artifact.ts:')));
   for (const f of c.files) {
     const text = code(read(f));
     assert.doesNotMatch(text, /process\.(env|argv|cwd|exit|stdin|stdout)/, f);

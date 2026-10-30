@@ -3,10 +3,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, symlinkSync } from 'node:fs';
+import { chmodSync, mkdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { open } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
-import { ArtifactError, loadAndValidateProposalArtifact } from '../../packages/provenance/src/proposal-artifact.ts';
+import { ArtifactError, loadAndValidateProposalArtifact, readBoundedBytes } from '../../packages/provenance/src/proposal-artifact.ts';
 import { tempDir } from '../helpers.ts';
 import { ARTIFACT_RUN_ID, artifactFileFor, linkArtifact, validArtifactDoc, writeArtifact, writeArtifactDoc } from '../support/proposal-artifact-fixture.ts';
 
@@ -90,6 +91,44 @@ test('a FIFO at the artifact path is refused without blocking on open', async ()
   execFileSync('mkfifo', [artifactFileFor(f.root, f.runId)]);
   chmodSync(artifactFileFor(f.root, f.runId), 0o600);
   assert.equal(await codeOf(f.load()), 'ARTIFACT_NOT_REGULAR');
+});
+
+test('a swapped ancestor tree serving outside bytes is refused even when the bytes validate', async () => {
+  // The auditor's repro as a static case: an alternate tree holds a schema-valid artifact for the same run.
+  const f = fresh();
+  writeArtifactDoc(f.root, f.runId);
+  const outside = tempDir('pp-outside-');
+  writeArtifactDoc(outside, f.runId, validArtifactDoc(f.runId, { inputSha256: 'd'.repeat(64) }));
+  const link = path.join(f.root, '.proofpilot');
+  renameSync(link, `${link}.real`);
+  try {
+    symlinkSync(path.join(outside, '.proofpilot'), link);
+    assert.equal(await codeOf(f.load()), 'ARTIFACT_SYMLINK');
+  } finally {
+    rmSync(link);
+    renameSync(`${link}.real`, link);
+  }
+});
+
+test('descriptor reads are bounded: a larger file yields at most 8193 bytes, never the whole file', async () => {
+  const dir = tempDir('pp-bounded-');
+  const file = path.join(dir, 'big.bin');
+  writeFileSync(file, 'y'.repeat(9000));
+  const handle = await open(file, 'r');
+  try {
+    const bytes = await readBoundedBytes(handle, 8192);
+    assert.equal(bytes.length, 8193);
+  } finally {
+    await handle.close();
+  }
+  const small = path.join(dir, 'small.bin');
+  writeFileSync(small, 'z'.repeat(100));
+  const h2 = await open(small, 'r');
+  try {
+    assert.equal((await readBoundedBytes(h2, 8192)).length, 100);
+  } finally {
+    await h2.close();
+  }
 });
 
 test('timestamps must be real UTC instants; the millisecond form may be omitted', async () => {

@@ -9,7 +9,7 @@
 // of validated triples plus provenance labels; nothing here executes, stages or verifies a proposal.
 import { createHash } from 'node:crypto';
 import { constants as fsConstants } from 'node:fs';
-import { lstat, open } from 'node:fs/promises';
+import { lstat, open, realpath } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { MAX_ADJUSTMENTS, type CssAdjustment } from '../../core/src/css-adjustments.ts';
 import { parseProposal } from '../../core/src/patch-proposal.ts';
@@ -277,16 +277,55 @@ async function readArtifactBytes(repoRoot: string, runId: string): Promise<{ byt
     const before = await handle.stat();
     checkDescriptorStat(before);
     const pinned = identityOf(before);
-    const bytes = await handle.readFile();
-    if (bytes.length !== pinned.size || bytes.length > MAX_ARTIFACT_BYTES) {
-      return fail('ARTIFACT_TOO_LARGE', 'the artifact bytes do not fit the verified size');
-    }
+    const bytes = await readBoundedBytes(handle, MAX_ARTIFACT_BYTES);
+    if (bytes.length > MAX_ARTIFACT_BYTES) return fail('ARTIFACT_TOO_LARGE', 'the artifact exceeds 8192 bytes while reading');
+    if (bytes.length !== pinned.size) return fail('ARTIFACT_UNSTABLE', 'the artifact changed while it was read');
     const after = identityOf(await handle.stat());
     if (!sameIdentity(pinned, after)) return fail('ARTIFACT_UNSTABLE', 'the artifact changed while it was read');
+    // Post-read binding: no ancestor may have become a symlink, and the resolved path must still be the
+    // expected file. This catches every persistent swap. A swap installed after the pre-open checks and
+    // fully reverted before these post-read checks is not detectable through portable Node APIs (there is
+    // no openat); that residual needs an owner risk decision, not a broader import.
+    const components = ['.proofpilot', 'evidence', 'proposals', runId];
+    let dir = repoRoot;
+    for (const part of components) {
+      dir = join(dir, part);
+      const st = await lstat(dir).catch(() => null);
+      if (!st) return fail('ARTIFACT_UNSTABLE', `evidence path component ${part} vanished while reading`);
+      if (st.isSymbolicLink()) return fail('ARTIFACT_SYMLINK', `evidence path component ${part} must not be a symlink`);
+    }
+    const resolvedRoot = await realpath(repoRoot).catch(() => null);
+    const resolvedFile = await realpath(file).catch(() => null);
+    const expected = resolvedRoot ? join(resolvedRoot, '.proofpilot', 'evidence', 'proposals', runId, 'proposal.json') : null;
+    if (!resolvedFile || resolvedFile !== expected) {
+      return fail('ARTIFACT_SYMLINK', 'the artifact path does not resolve inside the repository root');
+    }
     return { bytes, path: file };
   } finally {
     await handle.close().catch(() => undefined);
   }
+}
+
+/**
+ * Read at most `maxTotal + 1` bytes from an open descriptor, so the 8-KiB bound limits allocation even if
+ * the file grows after the pre-read stat. The extra probe byte distinguishes exact-size files from growth.
+ */
+export async function readBoundedBytes(
+  handle: { read(buffer: Buffer, offset: number, length: number, position: number): Promise<{ bytesRead: number }> },
+  maxTotal: number,
+): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  let total = 0;
+  for (;;) {
+    const want = Math.min(4096, maxTotal + 1 - total);
+    if (want <= 0) break;
+    const buf = Buffer.alloc(want);
+    const { bytesRead } = await handle.read(buf, 0, want, total);
+    if (bytesRead === 0) break;
+    chunks.push(buf.subarray(0, bytesRead));
+    total += bytesRead;
+  }
+  return Buffer.concat(chunks);
 }
 
 // ---------------------------------------------------------------- exact schema validation (section 3.2)
