@@ -4,7 +4,7 @@
 
 ProofPilot AI turns a short recording of a UI defect into an observed browser reproduction, a candidate patch, and an **independent** re-test against trusted acceptance checks that the patching agent can neither see nor change. A patch counts as a success only when a separate verifier has confirmed both the original failure and the corrected behaviour.
 
-Built for the Meta Global AI Developer Hackathon (Push the Frontier). Runtime model: **Muse Spark 1.3** (visual analysis) via the Meta Model API. The C3 plan (Muse Spark candidate proposals, trusted verification, scoreboard) is a draft contract pending owner approval; Muse Wonder is not a planned dependency. Baseten-hosted **Muse Spark Open** is an optional secondary provider. See [HACKATHON_CONTRIBUTIONS.md](HACKATHON_CONTRIBUTIONS.md) for provenance.
+Built for the Meta Global AI Developer Hackathon (Push the Frontier). Runtime model: **Muse Spark 1.3** via the Meta Model API (video analysis, and one gated fix-proposal call). The C3 plan is largely implemented (candidate staging, an offline scoreboard over hand-authored controls, and one executed Muse Spark proposal call whose result is accepted but **unverified**); only C3-B2B (verifying that proposal), the report UI (UI-C3-01) and a hosted sandbox (HOST-C3-01) remain drafts pending owner approval; Muse Wonder is not a planned dependency. Baseten-hosted **Muse Spark Open** is an optional secondary provider. See [HACKATHON_CONTRIBUTIONS.md](HACKATHON_CONTRIBUTIONS.md) for provenance.
 
 ## Current state (through LIVE-C3-01; details in [docs/STATUS.md](docs/STATUS.md))
 

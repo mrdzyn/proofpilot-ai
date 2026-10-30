@@ -10,7 +10,7 @@
 - **Primary branch:** protected `main` at `564c56f59afc8b637dd8814078a98370e5ba2d97` (PR #17 squash merge = pin-only commit A2′)
 - **Working branch:** `docs/pp-meta-live-c3-01-closure-submission` (docs-only Draft PR; the branch head is authoritative)
 - **Active task:** `docs/LIVE-C3-01-EXECUTION-REPORT.md` and `docs/META-HACKATHON-SUBMISSION.md` (documentation); next specification: `tasks/PP-META-I2-C3-B2B.md` (DRAFT, NOT APPROVED)
-- **Active handoff:** PP-META-LIVE-C3-01-CLOSURE-A1
+- **Active handoff:** PP-META-LIVE-C3-01-CLOSURE-A2
 - **Authorization:** Both single-use C2B live smokes are **spent**. **APPROVED and EXECUTED:** LIVE-C3-01 (owner decision October 29, 2026: one Meta `muse-spark-1.3` attempt in total); the attempt was made and the lifetime quota is **spent**; a further provider call is **NOT AUTHORIZED** (it needs a new owner decision, a new activation commit and a new pin-only commit). **APPROVED:** SEC-C3-01 (F01-only closed-grammar CSS, hand-authored controls only). **NOT APPROVED:** C3-B2B (evaluating the model proposal), UI-C3-01 (report UI), HOST-C3-01 (Modal or any hosted backend), Baseten, additional attempts, automated retries. A credit balance is not permission to spend. No agent reads credentials or approval records, executes model-generated code, deploys or merges.
 
 ## Completed milestones

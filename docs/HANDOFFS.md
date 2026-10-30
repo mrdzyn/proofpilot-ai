@@ -872,4 +872,18 @@ GPT-6 audit; owner decides merge (squash commit = NEW activation commit A2). The
 ### Next action
 Review and owner merge decision; then the owner chooses between C3-B2B and submitting with the honest "proposal obtained, verification next" story.
 
+## Handoff: PP-META-LIVE-C3-01-CLOSURE-A2
+
+- **Task / phase:** remediation of the independent audit of Draft PR #18 (MAJOR-1 specification consistency, MINOR-2 stale current-state prose); documentation only
+- **From:** Implementation agent (Claude Code, Claude Sonnet 5.5)
+- **To:** GPT-6 independent exact-head re-audit, then project owner
+- **State:** READY FOR RE-REVIEW. No runtime code, test, CI, configuration, pin, quota, approval, credential or private evidence touched.
+
+### Completed
+- `tasks/PP-META-I2-C3-B2B.md` (still DRAFT, NOT APPROVED): two zones with a data-only bridge (a read-only, zero-network provenance zone with a reviewed-extraction requirement and an allow-listed transitive import set, versus the staging/coordinator zone that imports no inference code); an exact allow-listed schema for the nested artifact structures; two distinct trust anchors (claimed source revision of the original proposal, recomputed with explicit parameters and labelled operator-reported where it is; and the future verification revision V, with oracle/fixture immutability checks between them), no invented binding.
+- README intro, decision record (historical sections labelled, verbatim owner quote untouched) and activation checklist (historical banner, operator steps labelled operator-reported) reconciled with the executed state.
+
+### Next action
+Re-audit; owner merge decision; then C3-B2B approval decision and the submission tasks.
+
 <!-- HANDOFF_ENTRIES_END -->

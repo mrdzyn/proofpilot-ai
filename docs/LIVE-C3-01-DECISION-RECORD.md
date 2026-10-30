@@ -66,7 +66,7 @@
 | Evidence and usage | A gitignored `UNTRUSTED PROPOSAL — NOT VERIFIED` artifact with hashes, request id, sanitized usage and lifecycle; **no raw provider response is stored** | Actual cost is whatever the account reports; any figure in the repo is illustrative. |
 | Evaluation of the proposal | **None automatic.** An accepted proposal is data. Running it through the staging runner and the three-replay verifier needs a separate, reviewable authorization (C3-B2B) and a reviewed change to the coordinator | Today the offline coordinator refuses every control that is not an in-code hand-authored control. |
 
-## 2. Stop conditions (any one stops the activation; none is retried automatically)
+## 2. Stop conditions (historical procedure, as written before the execution; any one stops the activation; none is retried automatically)
 
 1. The preflight (`scripts/c3-proposal-preflight.ts`) reports any technical blocker, or its input hash differs from the one the operator approved.
 2. The operator approval for this run id is missing, mismatched or older than the agreed window.
@@ -79,7 +79,7 @@
 
 After any stop the run id and slot stay spent and a **new** decision is needed for any further attempt.
 
-## 3. Prerequisites before this record can even be considered ready
+## 3. Prerequisites before this record can even be considered ready (historical checklist, as written before the execution; the boxes are not a current to-do list and the status above is authoritative)
 
 - [x] C3-B2A merged after an independent exact-head audit PASS (PR #10).
 - [ ] `docs/META-ACTIVATION-CHECKLIST.md` completed, with the zero-network preflight output attached.
@@ -88,6 +88,8 @@ After any stop the run id and slot stay spent and a **new** decision is needed f
 - [x] The owner recorded the approval below with exact values (October 29, 2026).
 
 ## 4. Approval register (owner-only)
+
+> *Historical procedure, as written before the execution.* The present-tense sentences in this section (the pin being `activation: null`, no operator approval being recorded) described the state before the single approved attempt; the current facts are in the status summary above and in `docs/LIVE-C3-01-EXECUTION-REPORT.md`: the pin file is authoritative (`config/live-activation.json`, A2 pinned in PR #17), the attempt was executed once, and the operator approval and reservation records are private local files that this repository does not contain and this record does not reproduce.
 
 Two machine-read owner files exist. `config/live-authorization.json` (the decision) holds exactly one non-synthetic LIVE-C3-01 entry recorded from the owner comment below. `config/live-activation.json` (the pinned activation revision, a tree digest excluding itself; sequence in `tasks/PP-META-I2-C3-LIVE-01A.md`) is `activation: null` until a separate reviewed pin-only commit records the activation commit and its digest after the activation PR is merged; that file, not this document, is authoritative for the pin. A live attempt needs both, plus a per-run operator approval made at the pinned revision, a clean tree and a credential. No operator approval has been recorded.
 
