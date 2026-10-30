@@ -24,9 +24,17 @@ export type ReplayEvidence = { record: CandidateRecord; evidenceProblems: string
 
 const sha256 = (b: string | Uint8Array) => createHash('sha256').update(b).digest('hex');
 
-/** Identity of a candidate across replays: the approved SHA plus the exact host-rendered CSS. */
-export function candidateIdOf(approvedSha: string, renderedCss: string): string {
-  return sha256(`${approvedSha}\n${renderedCss}`);
+/**
+ * Identity of a candidate across replays: the approved SHA plus the exact host-rendered CSS.
+ * Hand-authored callers pass two arguments and their ids are byte-identical to before. A stored
+ * model proposal passes a provenance tag (`model-proposal:<runId>`, via modelProposalIdOf in
+ * model-proposal.ts), so identical CSS never collides with, merges into or satisfies a
+ * hand-authored row.
+ */
+export function candidateIdOf(approvedSha: string, renderedCss: string, provenanceTag?: string): string {
+  return provenanceTag === undefined
+    ? sha256(`${approvedSha}\n${renderedCss}`)
+    : sha256(`${provenanceTag}\n${approvedSha}\n${renderedCss}`);
 }
 
 // ------------------------------------------------------------ pure decisions
@@ -254,9 +262,40 @@ export type CandidateEntry = {
   replays: ReplayEntry[];
 };
 
+/**
+ * A board that carries registered model-proposal rows must use this label instead of the
+ * hand-authored-only label, so no reader can mistake the board for model-free. The rows
+ * themselves are never `VERIFIED`: E1 registers, it never runs.
+ */
+export const MODEL_BOARD_LABEL = 'HAND-AUTHORED CONTROLS PLUS REGISTERED MODEL-PROPOSAL ROWS — NOT RUN, NOT VERIFIED';
+
+/**
+ * A registered stored-model-proposal row (C3-B2B E1). It lives in its own scoreboard section,
+ * never in `candidates`, carries the provenance-tagged identity, and claims no verdict: E1
+ * registers, it never runs. `sourceProvenance` is always the literal `operator-reported`; the
+ * row is bound to one verification revision by both `approvedSha` and the candidate id.
+ */
+export type ModelProposalEntry = {
+  id: string;
+  description: string;
+  provenance: 'model-proposal';
+  candidateId: string;
+  adjustments: CssAdjustment[];
+  renderedCss: string;
+  runId: string;
+  approvedSha: string;
+  sourceSha: string;
+  sourceProvenance: 'operator-reported';
+  inputSha256: string;
+  artifactSha256: string;
+  /** E1: always empty. Any replay here is refused until E2 authorizes execution. */
+  replays: ReplayEntry[];
+  note: string;
+};
+
 export type Scoreboard = {
   schemaVersion: 1;
-  label: 'HAND-AUTHORED CONTROLS ONLY — NO MODEL INPUT';
+  label: 'HAND-AUTHORED CONTROLS ONLY — NO MODEL INPUT' | typeof MODEL_BOARD_LABEL;
   complete: boolean;
   approvedSha: string;
   createdAt: string;
@@ -267,7 +306,86 @@ export type Scoreboard = {
   /** NC-5: the verdict logic applied to a real staged tree where the oracle PASSES (the PC-1 stage) in place of the baseline. */
   nc5: { description: string; baselineReproduced: boolean; status: CandidateStatus; neverVerified: boolean };
   notes: string[];
+  /** Optional separate section for registered model-proposal rows. Absent on pre-E1 boards. */
+  modelProposals?: ModelProposalEntry[];
 };
+
+/**
+ * Fail-closed field checks for one model-proposal row, recomputed from the persisted row and
+ * the trusted grammar. The identity, CSS and hashes are re-derived; the provenance classes are
+ * asserted literally. Cross-row separation (distinct ids, no hand-authored collision) is
+ * checked by verifyScoreboard below.
+ */
+export function modelRowProblems(m: unknown, sha: string): string[] {
+  if (typeof m !== 'object' || m === null || Array.isArray(m)) return ['model-proposal row is not an object'];
+  const p: string[] = [];
+  const r = m as Record<string, unknown>;
+  if (r.provenance !== 'model-proposal') p.push(`provenance is ${JSON.stringify(r.provenance)}, expected "model-proposal"`);
+  if (typeof r.runId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(r.runId)) {
+    p.push('runId is missing or malformed');
+  } else if (r.id !== `MODEL-${r.runId}`) {
+    p.push(`id is ${JSON.stringify(r.id)}, expected "MODEL-${r.runId}"`);
+  }
+  if (typeof r.description !== 'string' || r.description.length === 0 || r.description.length > 300) {
+    p.push('description is missing or oversized');
+  }
+  if (r.sourceProvenance !== 'operator-reported') p.push('source revision must stay labelled operator-reported, never verified');
+  if (typeof r.sourceSha !== 'string' || !/^[0-9a-f]{40}$/.test(r.sourceSha)) p.push('sourceSha is missing or malformed');
+  if (typeof r.inputSha256 !== 'string' || !/^[0-9a-f]{64}$/.test(r.inputSha256)) p.push('inputSha256 is missing or malformed');
+  if (typeof r.artifactSha256 !== 'string' || !/^[0-9a-f]{64}$/.test(r.artifactSha256)) p.push('artifactSha256 is missing or malformed');
+  if (typeof r.approvedSha !== 'string' || r.approvedSha !== sha) p.push('row is not bound to the scoreboard approved SHA');
+  const triples = r.adjustments;
+  if (!Array.isArray(triples) || triples.length === 0) {
+    p.push('adjustments must be a non-empty list');
+  } else {
+    const clean: CssAdjustment[] = [];
+    triples.forEach((t, i) => {
+      if (typeof t !== 'object' || t === null) {
+        p.push(`adjustment ${i} is not an object`);
+        return;
+      }
+      const proto: unknown = Object.getPrototypeOf(t);
+      if (proto !== Object.prototype && proto !== null) {
+        p.push(`adjustment ${i} is not plain data`);
+        return;
+      }
+      const keys = Object.keys(t);
+      if (keys.length !== 3 || !['selector', 'property', 'value'].every((k) => keys.includes(k))) {
+        p.push(`adjustment ${i} must hold exactly selector, property and value`);
+        return;
+      }
+      const rec = t as Record<string, unknown>;
+      if (typeof rec.selector !== 'string' || typeof rec.property !== 'string' || typeof rec.value !== 'string') {
+        p.push(`adjustment ${i} fields must be strings`);
+        return;
+      }
+      clean.push({ selector: rec.selector, property: rec.property, value: rec.value });
+    });
+    if (clean.length === triples.length) {
+      let rendered: string | null = null;
+      try {
+        rendered = renderCssAdjustments(clean);
+      } catch (e) {
+        p.push(`adjustments violate the closed grammar: ${(e as Error).message}`);
+      }
+      if (rendered !== null) {
+        if (r.renderedCss !== rendered) p.push('renderedCss differs from the freshly rendered bytes');
+        // The tag template is restated here (canonical: modelProposalTagOf in model-proposal.ts)
+        // so the coordinator keeps no runtime edge to the bridge module.
+        if (typeof r.runId === 'string' && r.candidateId !== candidateIdOf(sha, rendered, `model-proposal:${r.runId}`)) {
+          p.push('candidate id does not match the provenance-tagged identity');
+        }
+      }
+    }
+  }
+  if (!Array.isArray(r.replays)) {
+    p.push('replays is not a list');
+  } else if (r.replays.length > 0) {
+    p.push('model-proposal replays are not authorized before E2 (E1 registers only)');
+  }
+  if (typeof r.note !== 'string' || r.note.length === 0) p.push('note is missing');
+  return p;
+}
 
 export class UntrustedControlError extends Error {
   constructor(detail: string) {
@@ -435,6 +553,8 @@ export async function runOfflineVerification(opts: CoordinatorOptions): Promise<
 // ------------------------------------------------------------ scoreboard verification (fail closed)
 
 const TOP_KEYS = ['schemaVersion', 'label', 'complete', 'approvedSha', 'createdAt', 'modelOrProviderCalls', 'modalCalls', 'baseline', 'candidates', 'nc5', 'notes'];
+/** Top-level keys an E1 board may carry in addition to TOP_KEYS. Absent on pre-E1 boards. */
+const OPTIONAL_TOP_KEYS = ['modelProposals'];
 const SCOREBOARD_LABEL = 'HAND-AUTHORED CONTROLS ONLY — NO MODEL INPUT';
 const sameJson = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
@@ -455,11 +575,16 @@ export async function verifyScoreboard(outDir: string): Promise<string[]> {
   }
   if (board === null || typeof board !== 'object' || Array.isArray(board)) return ['scoreboard is not an object'];
   if ((board as unknown as Record<string, unknown>).did1 !== undefined) problems.push('DID-1 must not appear in the scoreboard verdicts');
-  for (const k of Object.keys(board)) if (!TOP_KEYS.includes(k) && k !== 'did1') problems.push(`unexpected scoreboard field: ${k}`);
+  for (const k of Object.keys(board)) if (!TOP_KEYS.includes(k) && !OPTIONAL_TOP_KEYS.includes(k) && k !== 'did1') problems.push(`unexpected scoreboard field: ${k}`);
   for (const k of TOP_KEYS) if (!(k in board)) problems.push(`missing scoreboard field: ${k}`);
   if (board.schemaVersion !== 1) problems.push('unsupported schema version');
   if (board.complete !== true) problems.push('scoreboard is not complete');
-  if (board.label !== SCOREBOARD_LABEL) problems.push('scoreboard label is not the hand-authored-controls label');
+  if (board.modelProposals !== undefined && !Array.isArray(board.modelProposals)) problems.push('modelProposals is not a list');
+  const models: unknown[] = Array.isArray(board.modelProposals) ? board.modelProposals : [];
+  if (models.length > 0 && board.label !== MODEL_BOARD_LABEL) {
+    problems.push('scoreboard with model-proposal rows must carry the model-rows label, never the hand-authored-only label');
+  }
+  if (models.length === 0 && board.label !== SCOREBOARD_LABEL) problems.push('scoreboard label is not the hand-authored-controls label');
   if (board.modelOrProviderCalls !== 0 || board.modalCalls !== 0) problems.push('scoreboard claims provider or Modal calls');
   if (typeof board.approvedSha !== 'string' || !/^[0-9a-f]{40}$/.test(board.approvedSha)) return [...problems, 'scoreboard approvedSha is missing or malformed'];
   if (!Array.isArray(board.candidates)) return [...problems, 'scoreboard has no candidate list'];
@@ -551,6 +676,25 @@ export async function verifyScoreboard(outDir: string): Promise<string[]> {
     if (c.expectationMet !== (expectationProblems.length === 0)) problems.push(`${where}: expectationMet does not match the evidence`);
     if (!sameJson(c.expectationProblems, expectationProblems)) problems.push(`${where}: expectationProblems do not match the evidence`);
     if (c.status === 'VERIFIED' && (replays.length !== REPLAYS_REQUIRED_FOR_VERIFIED || d.replaysPassed !== REPLAYS_REQUIRED_FOR_VERIFIED)) problems.push(`${where}: VERIFIED without 3/3 replays`);
+  }
+
+  // ---- model-proposal rows: separate section, separate ids, no verdict, no evidence ----
+  {
+    const boardIds = new Set(board.candidates.map((c) => c?.id));
+    const handIds = new Set(board.candidates.map((c) => c?.candidateId));
+    const seenModels = new Set<string>();
+    models.forEach((row, i) => {
+      const where = `model-proposal[${i}]`;
+      for (const x of modelRowProblems(row, sha)) problems.push(`${where}: ${x}`);
+      const rec = (typeof row === 'object' && row !== null ? row : {}) as { id?: unknown; candidateId?: unknown };
+      if (typeof rec.id === 'string') {
+        if (boardIds.has(rec.id) || seenModels.has(rec.id)) problems.push(`${where}: id ${JSON.stringify(rec.id)} is not separate from the board inventory`);
+        seenModels.add(rec.id);
+      }
+      if (typeof rec.candidateId === 'string' && handIds.has(rec.candidateId)) {
+        problems.push(`${where}: candidate id collides with a hand-authored row`);
+      }
+    });
   }
 
   // ---- NC-5: recomputed from the persisted PC-1 evidence, never trusted ----

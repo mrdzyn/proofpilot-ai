@@ -1016,4 +1016,24 @@ GPT-6 focused re-audit of the new HEAD; owner merge decision.
 ### Next action
 GPT-6 focused re-audit of the new HEAD; owner risk decision on the residual; owner merge decision.
 
+## Handoff: PP-META-I2-C3-B2B-E1-A1
+
+- **Task / phase:** C3-B2B slice E1 — data-only registration bridge, trusted revalidation, identity isolation, scoreboard integration (spec section 4, Zone E items)
+- **From:** Implementation agent (Muse Code)
+- **To:** GPT-6 independent exact-head audit, then project owner
+- **Branch:** `phase/pp-meta-c3-b2b-e1-registration` from `main` `2967158b4fc2622948cb4a62f8c5a9b276939d52` (PR #20 squash merge)
+- **State:** READY FOR REVIEW. No activation, quota, authorization, credential, reservation, parser, runner, staging or browser change; the stored `c3-live-meta-001` artifact was not loaded or executed; no provider call; no merge. Owner authorization covers E1 implementation and offline synthetic testing only. Executing the proposal (E2) stays NOT APPROVED; the P2 transient ancestor-swap residual stays unaccepted and must not be read as accepted by any E1 merge.
+
+### Completed
+- `packages/core/src/model-proposal.ts` (new): data-only registration (`registerModelProposal`, `assertRegisteredModelProposal`, `modelProposalIdOf`, `modelProposalEntryOf`); exact plain-triple shape checks, core-grammar revalidation, byte-identical fresh-render requirement, typed fail-closed codes, frozen identity-keyed registry.
+- `packages/core/src/candidate-coordinator.ts`: optional `provenanceTag` in `candidateIdOf` (two-arg ids unchanged); `ModelProposalEntry`, `MODEL_BOARD_LABEL`, `modelRowProblems`; `Scoreboard.modelProposals?`; `verifyScoreboard` verifies model rows separately (re-derived CSS/id/hashes, literal classes, zero replays) and keeps pre-E1 boards verifying exactly as before. `runOfflineVerification` / `assertHandAuthoredControls` untouched.
+- `tests/unit/model-proposal-registration.test.ts` (7 tests, synthetic only); boundary tests extended (Zone E file list + bridge direct-edge minimality + closure free of inference/provenance).
+- `docs/STATUS.md` updated (E1 phase/branch/task, P2 merged, residual explicitly unaccepted for execution).
+
+### Validation
+- Targeted suites green; full gates below before push.
+
+### Next action
+GPT-6 exact-head audit; owner merge decision; E2 stays unstarted.
+
 <!-- HANDOFF_ENTRIES_END -->

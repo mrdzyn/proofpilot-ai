@@ -531,10 +531,21 @@ test('the legacy live-input.ts is a pure delegation shim: one re-export, no logi
   assert.match(text, /^export \* from '\.\.\/\.\.\/provenance\/src\/provenance-input\.ts';$/m);
 });
 
-test('Zone E stays separate: staging and the coordinator import no inference or provenance code', () => {
-  for (const f of ['packages/core/src/candidate-stage.ts', 'packages/core/src/candidate-coordinator.ts']) {
+test('Zone E stays separate: staging, the coordinator and the E1 bridge import no inference or provenance code', () => {
+  for (const f of ['packages/core/src/candidate-stage.ts', 'packages/core/src/candidate-coordinator.ts', 'packages/core/src/model-proposal.ts']) {
     assert.doesNotMatch(code(read(f)), /inference\/src|packages\/provenance|provenance-input/, f);
   }
+});
+
+test('E1 bridge has a minimal direct edge: only the core grammar leaf and the single identity function', () => {
+  const f = 'packages/core/src/model-proposal.ts';
+  const text = code(read(f));
+  const specs = [...new Set([...text.matchAll(/from\s*['"]([^'"]+)['"]/g)].map((m) => m[1]!))].sort();
+  assert.deepEqual(specs, ['./candidate-coordinator.ts', './css-adjustments.ts'], 'no other module edge out of the bridge');
+  assert.doesNotMatch(text, /import\s*\(|require\s*\(/, 'no dynamic import or require in the bridge');
+  assert.doesNotMatch(text, /node:/, 'no builtin import in the bridge (identity and rendering delegate to the leaves)');
+  const c = closureOf(f);
+  assert.ok(!c.files.some((x) => /inference\/src|packages\/provenance/.test(x)), 'the bridge closure reaches no inference or provenance file');
 });
 
 // ---------------------------------------------------------------- mutation tests: the scanner rejects every missed form
