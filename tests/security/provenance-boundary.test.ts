@@ -25,6 +25,9 @@ const LEGACY_PIPELINE = 'packages/inference/src/patch-proposal.ts';
  *  to make a test pass. */
 const ALLOW_FILES = [
   'packages/provenance/src/provenance-input.ts',
+  'packages/provenance/src/proposal-artifact.ts',
+  'packages/provenance/src/source-provenance.ts',
+  'packages/core/src/patch-proposal.ts',
   'packages/core/src/symptom.ts',
   'packages/core/src/f01-baseline.ts',
   'packages/core/src/status.ts',
@@ -33,8 +36,11 @@ const ALLOW_FILES = [
   'packages/intake/src/errors.ts',
 ].sort();
 const ALLOW_BUILTINS = ['node:crypto', 'node:fs/promises', 'node:path'].sort();
-/** Read-only filesystem members: a write here would break the read-only zone. */
-const ALLOW_FS_MEMBERS = ['readFile', 'readdir', 'stat'].sort();
+/** Read-only filesystem members: a write here would break the read-only zone. `lstat` (P2, reviewed) reads
+ *  metadata only and is required to refuse symlinks, which `stat` follows. `open` (P2 remediation, reviewed)
+ *  is allowed only for the single no-follow read-only descriptor open asserted below. `realpath` (P2
+ *  remediation, reviewed) resolves the read path for the post-read binding check and writes nothing. */
+const ALLOW_FS_MEMBERS = ['lstat', 'open', 'readFile', 'readdir', 'realpath', 'stat'].sort();
 
 const read = (rel: string) => readFileSync(path.join(root, rel), 'utf8');
 /** Source without comments, so prose that mentions a capability cannot trip a code-shape check. */
@@ -58,6 +64,8 @@ type Scan = {
   namespaceImports: string[];
   /** Any `node:fs` (not `node:fs/promises`) occurrence. */
   fsModule: string[];
+  /** Constants-only `node:fs` uses (reviewed carve-out for numeric open flags). */
+  fsConstantsOnly: string[];
   /** Named members imported from `node:fs/promises` (alias-resolved). */
   fsMembers: string[];
 };
@@ -190,7 +198,7 @@ function scanSource(abs: string, label: string): { edges: string[]; scan: Scan }
   const { masked: stripped, strings } = maskStrings(text, unsupported, label);
   const dir = path.posix.dirname(label);
   const edges: string[] = [];
-  const scan: Scan = { edges, builtins: [], bare: [], dynamic: [], unsupported, defaultImports: [], namespaceImports: [], fsModule: [], fsMembers: [] };
+  const scan: Scan = { edges, builtins: [], bare: [], dynamic: [], unsupported, defaultImports: [], namespaceImports: [], fsModule: [], fsConstantsOnly: [], fsMembers: [] };
   const consumed: Array<[number, number]> = [];
   const resolveLocal = (spec: string, at: string): string | null => {
     if (!spec.startsWith('.')) return null;
@@ -201,15 +209,28 @@ function scanSource(abs: string, label: string): { edges: string[]; scan: Scan }
     return path.posix.normalize(path.posix.join(dir, spec));
   };
   const builtin = (spec: string, at: string, clause: string) => {
-    if (spec === 'node:fs') scan.fsModule.push(`${label}: ${spec} at ${at}`);
-    else scan.builtins.push(spec);
-    if (spec === 'node:fs/promises' || spec === 'node:fs') {
+    const namedMembers = (): string[] => {
+      const out: string[] = [];
       const members = clause.replace(/^\s*\{/, '').replace(/\}\s*$/, '');
       for (const part of members.split(',')) {
         const pm = part.match(/^\s*(?:type\s+)?([A-Za-z_$][\w$]*)(?:\s+as\s+[A-Za-z_$][\w$]*)?\s*$/);
         const member = pm?.[1];
-        if (member && !['as', 'type'].includes(member)) scan.fsMembers.push(member);
+        if (member && !['as', 'type'].includes(member)) out.push(member);
       }
+      return out;
+    };
+    if (spec === 'node:fs') {
+      // Reviewed carve-out: the capability-free numeric-constants table only. Any other `node:fs`
+      // member, default or namespace use stays a violation (default/namespace are flagged separately).
+      const only = namedMembers();
+      if (only.length > 0 && only.every((m) => m === 'constants')) scan.fsConstantsOnly.push(`${label}: constants-only ${spec}`);
+      else scan.fsModule.push(`${label}: ${spec} at ${at}`);
+      for (const m of only) if (m !== 'constants') scan.fsMembers.push(m);
+      return;
+    }
+    scan.builtins.push(spec);
+    if (spec === 'node:fs/promises') {
+      for (const m of namedMembers()) scan.fsMembers.push(m);
     }
   };
   const formOf = (kind: 'import' | 'export', clause: string, spec: string, at: string) => {
@@ -349,13 +370,14 @@ type Closure = {
   defaultImports: string[];
   namespaceImports: string[];
   fsModule: string[];
+  fsConstantsOnly: string[];
   fsMembers: string[];
 };
 
 /** Transitive closure of one entry file, following every enumerated edge. Missing targets are violations. */
 function closureFrom(entryLabel: string): Closure {
   const files = new Set<string>();
-  const out: Closure = { files: [], builtins: [], bare: [], dynamic: [], unsupported: [], defaultImports: [], namespaceImports: [], fsModule: [], fsMembers: [] };
+  const out: Closure = { files: [], builtins: [], bare: [], dynamic: [], unsupported: [], defaultImports: [], namespaceImports: [], fsModule: [], fsConstantsOnly: [], fsMembers: [] };
   const merge = (s: Scan) => {
     for (const x of s.builtins) if (!out.builtins.includes(x)) out.builtins.push(x);
     for (const x of s.bare) if (!out.bare.includes(x)) out.bare.push(x);
@@ -364,6 +386,7 @@ function closureFrom(entryLabel: string): Closure {
     for (const x of s.defaultImports) if (!out.defaultImports.includes(x)) out.defaultImports.push(x);
     for (const x of s.namespaceImports) if (!out.namespaceImports.includes(x)) out.namespaceImports.push(x);
     for (const x of s.fsModule) if (!out.fsModule.includes(x)) out.fsModule.push(x);
+    for (const x of s.fsConstantsOnly) if (!out.fsConstantsOnly.includes(x)) out.fsConstantsOnly.push(x);
     for (const x of s.fsMembers) if (!out.fsMembers.includes(x)) out.fsMembers.push(x);
   };
   const queue = [entryLabel];
@@ -412,11 +435,65 @@ function zonePViolations(c: Closure): string[] {
   return v;
 }
 
+/** Every Zone P production entry module; their closures are unioned for the allow-list check. */
+const ZONE_P_ENTRIES = [MODULE, 'packages/provenance/src/proposal-artifact.ts', 'packages/provenance/src/source-provenance.ts'];
+
+function zonePUnion(): { union: Closure; closures: Closure[] } {
+  const closures = ZONE_P_ENTRIES.map(closureOf);
+  const union: Closure = { files: [], builtins: [], bare: [], dynamic: [], unsupported: [], defaultImports: [], namespaceImports: [], fsModule: [], fsConstantsOnly: [], fsMembers: [] };
+  const add = (list: string[], x: string) => { if (!list.includes(x)) list.push(x); };
+  for (const c of closures) {
+    for (const f of c.files) add(union.files, f);
+    for (const b of c.builtins) add(union.builtins, b);
+    for (const b of c.bare) add(union.bare, b);
+    for (const d of c.dynamic) add(union.dynamic, d);
+    for (const u of c.unsupported) add(union.unsupported, u);
+    for (const d of c.defaultImports) add(union.defaultImports, d);
+    for (const n of c.namespaceImports) add(union.namespaceImports, n);
+    for (const f of c.fsModule) add(union.fsModule, f);
+    for (const f of c.fsConstantsOnly) add(union.fsConstantsOnly, f);
+    for (const m of c.fsMembers) add(union.fsMembers, m);
+  }
+  union.files.sort();
+  union.builtins.sort();
+  union.bare.sort();
+  union.fsMembers.sort();
+  return { union, closures };
+}
+
 test('Zone P has exactly the allow-listed transitive import set: no network, provider, credential, env, process or write capability', () => {
-  const c = closureOf(MODULE);
+  const { union: c, closures } = zonePUnion();
+  for (const entry of closures) assert.deepEqual(zonePViolations(entry), [], 'each Zone P entry is individually clean');
   assert.deepEqual(c.files, ALLOW_FILES, 'the transitive file set is exactly the allow-list (never expanded)');
   assert.deepEqual(c.builtins, ALLOW_BUILTINS, 'only crypto, read-only fs and path builtins');
   assert.deepEqual(zonePViolations(c), [], 'no bare, dynamic, unsupported, default/namespace, node:fs or write-capable fs import');
+  // Reviewed carve-out: exactly one constants-only `node:fs` use, in the artifact loader, feeding the
+  // no-follow open below. Anything else from `node:fs` is an fsModule violation (asserted in zonePViolations).
+  assert.deepEqual(c.fsConstantsOnly, ['packages/provenance/src/proposal-artifact.ts: constants-only node:fs']);
+  // The single `open(` in Zone P must be the read-only no-follow descriptor open.
+  const openSites: string[] = [];
+  for (const f of c.files) {
+    const text = read(f);
+    for (const m of text.matchAll(/(?<![\w$.])open\s*\(/g)) {
+      const end = text.indexOf(';', m.index);
+      openSites.push(`${f}: ${text.slice(m.index, end === -1 ? m.index + 80 : end)}`);
+    }
+  }
+  assert.equal(openSites.length, 1, `a single descriptor open in Zone P: ${JSON.stringify(openSites)}`);
+  assert.match(openSites[0]!, /O_RDONLY/, 'read-only');
+  assert.match(openSites[0]!, /O_NOFOLLOW/, 'no-follow');
+  assert.match(openSites[0]!, /O_NONBLOCK/, 'never blocks on a FIFO');
+  // `realpath` appears only for the post-read binding comparison (root and file), never as a write path.
+  const realSites: string[] = [];
+  for (const f of c.files) {
+    const text = read(f);
+    for (const m of text.matchAll(/(?<![\w$.])realpath\s*\(/g)) {
+      const end = text.indexOf(';', m.index);
+      realSites.push(`${f}: ${text.slice(m.index, end === -1 ? m.index + 80 : end)}`);
+    }
+  }
+  assert.equal(realSites.length, 2, `realpath only binds the read path: ${JSON.stringify(realSites)}`);
+  assert.ok(realSites.every((s) => s.startsWith('packages/provenance/src/proposal-artifact.ts:')));
   for (const f of c.files) {
     const text = code(read(f));
     assert.doesNotMatch(text, /process\.(env|argv|cwd|exit|stdin|stdout)/, f);
@@ -431,8 +508,9 @@ test('Zone P has exactly the allow-listed transitive import set: no network, pro
 
 test('the legacy live-input.ts adds no capability beyond one re-export edge', () => {
   const input = closureOf(LEGACY_INPUT);
-  assert.deepEqual(input.files, [LEGACY_INPUT, ...ALLOW_FILES].sort(), 'the shim reaches exactly the allow-list and nothing else');
-  assert.deepEqual(input.builtins, ALLOW_BUILTINS);
+  const inner = closureOf(MODULE);
+  assert.deepEqual(input.files, [LEGACY_INPUT, ...inner.files].sort(), 'the shim reaches exactly the neutral module closure and nothing else');
+  assert.deepEqual(input.builtins, inner.builtins);
   assert.deepEqual(zonePViolations(input), [], 'the shim introduces no new import form');
 });
 
@@ -447,7 +525,7 @@ test('the check discriminates, statically and dynamically: the inference pipelin
 
 test('the legacy live-input.ts is a pure delegation shim: one re-export, no logic of its own', () => {
   const c = closureOf(LEGACY_INPUT);
-  assert.deepEqual(c.files.filter((f) => f !== LEGACY_INPUT), ALLOW_FILES, 'the shim re-exports exactly the neutral module');
+  assert.deepEqual(c.files.filter((f) => f !== LEGACY_INPUT), closureOf(MODULE).files, 'the shim re-exports exactly the neutral module');
   const text = read(LEGACY_INPUT);
   assert.doesNotMatch(code(text), /\bfunction\b|\bconst\b|\bclass\b|\bimport\s*\(/);
   assert.match(text, /^export \* from '\.\.\/\.\.\/provenance\/src\/provenance-input\.ts';$/m);
