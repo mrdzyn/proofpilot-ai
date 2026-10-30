@@ -102,7 +102,7 @@ One fresh disposable stage per replay via the existing C3-0 runner under the coo
 
 ## 6. Outputs
 
-A sanitized scoreboard example for the proposal row and the controls, an execution report appendix (what happened, with the honest status whichever way it falls), and an update of the submission documents. No claim of "model-verified fix" is permitted unless section 3.7 returns `VERIFIED` for the Muse Spark row.
+A sanitized scoreboard example for the proposal row and the controls, an execution report appendix (what happened, with the honest status whichever way it falls), and an update of the submission documents. No claim of "model-verified fix" is permitted unless section 3.5 returns `VERIFIED` for the Muse Spark row.
 
 ## 7. Explicitly out of scope
 
