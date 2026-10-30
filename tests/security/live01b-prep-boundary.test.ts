@@ -33,9 +33,11 @@ test('the activation locks that remain: quota is the approved constant, the pin 
   readPinState(root);
   const tracked = execFileSync('git', ['ls-files'], { cwd: root, encoding: 'utf8' }).split('\n');
   assert.deepEqual(tracked.filter((f) => /(^|\/)\.proofpilot\/|\.consumed$|(^|\/)approvals\//.test(f)), []);
-  // the only scripts in this area; c3-live-proposal.ts is the single owner-operated call and is covered by live01b-activation-boundary.test.ts
+  // the only scripts in this area; c3-live-proposal.ts is the single owner-operated call and is covered by live01b-activation-boundary.test.ts.
+  // c3-b2b-verify-proposal.ts is the reviewed E2 verification command (exact narrow surface, no env,
+  // no execution switch, real artifact hard-disabled; covered by the E2 boundary tests).
   const scripts = readdirSync(path.join(root, 'scripts')).filter((f) => /^c3-/.test(f)).sort();
-  assert.deepEqual(scripts, ['c3-activation-digest.ts', 'c3-approve-live-run.ts', 'c3-live-proposal.ts', 'c3-live-rehearsal.ts', 'c3-offline-verification.ts', 'c3-pin-check.ts', 'c3-proposal-preflight.ts', 'c3-stage-spike.ts']);
+  assert.deepEqual(scripts, ['c3-activation-digest.ts', 'c3-approve-live-run.ts', 'c3-b2b-verify-proposal.ts', 'c3-live-proposal.ts', 'c3-live-rehearsal.ts', 'c3-offline-verification.ts', 'c3-pin-check.ts', 'c3-proposal-preflight.ts', 'c3-stage-spike.ts']);
 });
 
 test('the production runner is reachable only through the gated entry point (and the owner CLI through it): the index, the staging runner and the approval CLI cannot reach it', () => {

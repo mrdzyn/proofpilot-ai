@@ -1055,4 +1055,25 @@ GPT-6 exact-head audit; owner merge decision; E2 stays unstarted.
 ### Next action
 GPT-6 focused re-audit of the new HEAD; owner merge decision; E2 stays unstarted.
 
+## Handoff: PP-META-I2-C3-B2B-E2-A1
+
+- **Task / phase:** C3-B2B slice E2 — offline model-proposal verification pipeline
+- **From:** Implementation agent (Muse Code)
+- **To:** GPT-6 independent exact-head audit, then project owner
+- **Branch:** `phase/pp-meta-c3-b2b-e2-verification` from `main` `9499a42c97c4fa311e1001489b5bc0440a549d21` (PR #21 squash merge, audit PASS)
+- **State:** READY FOR REVIEW. No activation, quota, authorization, credential, reservation, parser, oracle, patch-policy, pin or hand-authored-control change; the stored `c3-live-meta-001` artifact was not read, loaded, staged or executed; no provider call; no merge. Owner authorization covers E2 implementation, synthetic fixtures, offline tests and a Draft PR only. Real execution stays NOT APPROVED; the P2 transient ancestor-swap residual stays unaccepted.
+
+### Completed
+- `packages/core/src/model-verification.ts` (new, Zone E): `verifyRegisteredProposal` — identity-checked registration only; exact-V binding, commit/ancestry/conflation gates, fixture/verifier/policy anchor equality; baseline gate + up to three fresh stages via the existing runner; verdict solely from `decideVerification`; namespaced `MODEL-<runId>/` evidence; `verification.json` persisted.
+- `packages/core/src/candidate-coordinator.ts`: `ModelVerificationEntry` (schemaVersion 2, kind-discriminated), `MODEL_VERIFICATION_LABEL`, `modelVerificationProblems` (identity/CSS/hashes/anchors recomputed, verdict recomputed from persisted bytes, zero replays never VERIFIED); `Scoreboard.modelVerifications?`; `verifyScoreboard` separates the sections (shared E1/E2 run id legitimate across sections, collisions with hand-authored rows refused); shared `loadReplayEvidence` hoist (hand-authored path behavior unchanged). E1 row validation untouched.
+- `scripts/c3-b2b-verify-proposal.ts` (new): five explicit params, no env reads, no execution/provider/path options, real artifact hard-refused before any read (exit 2).
+- `tests/unit/model-verification.test.ts` (8 tests, synthetic only); boundary tests extended (Zone E list, E2 direct edges, command narrowness/hard-disable).
+- `docs/STATUS.md` updated (E2 phase/task/branch, E1 merged, authorization, three-claim separation).
+
+### Validation
+- Targeted suites green; full gates below before push.
+
+### Next action
+GPT-6 exact-head audit; owner merge decision. Real execution needs a separate owner approval + the P2 residual risk decision + a new security review.
+
 <!-- HANDOFF_ENTRIES_END -->
