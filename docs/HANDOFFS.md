@@ -1117,4 +1117,23 @@ GPT-6 focused re-audit of the new HEAD; owner merge decision. Real execution nee
 ### Next action
 GPT-6 focused re-audit of the new HEAD; owner merge decision. Real execution needs a separate owner approval + the P2 residual risk decision + a new security review.
 
+## Handoff: PP-QA01-SEC-P2-01-A1
+
+- **Task / phase:** QA-01 operator QA readiness + SEC-P2-01 P2 read-boundary security readiness
+- **From:** Implementation agent (Muse Code)
+- **To:** GPT-6 independent exact-head review, then project owner
+- **Branch:** `phase/pp-qa01-secp201-readiness` from `main` `f305da39808b55c1725fcc88ccea9634ec79cbb7` (PR #22 squash merge, audited)
+- **State:** READY FOR REVIEW. Docs plus narrow P2 reader hardening with adversarial synthetic tests. The stored `c3-live-meta-001` artifact was not read, loaded, staged or executed; no provider call; no credential reads; no deployment; no merge. Real execution stays NOT APPROVED; the SEC-P2-01 residual stays explicitly unaccepted (owner decision open).
+
+### Completed
+- Scope A: `docs/STATUS.md` refreshed (E2 merged at `f305da3`, QA-01/SEC-P2-01 active); `docs/QA-01-RUNBOOK.md` (gates, F01, PC-1, negatives, evidence, exit codes, refusal drill, failure template — all commands/outputs verified against the scripts).
+- Scope B: reader hardening (`verifyReadBinding` pinning+binding, `reloadAndBindArtifact` + `ARTIFACT_CHANGED`, command wiring); adversarial tests (pure binding battery, cross-phase substitution test); `docs/SEC-P2-01-FINDINGS.md` (defeated/threat taxonomy, determination, bounded mitigation proposal, open owner decision).
+- Scope C: `docs/C3B2B-REAL-PROPOSAL-PROCEDURE.md` (DISABLED future procedure; hard-disable intact).
+
+### Validation
+- Targeted suites green; full gates below before push.
+
+### Next action
+GPT-6 exact-head review; owner merge decision; then owner-run local QA per the runbook. Real execution needs a separate owner approval + the SEC-P2-01 residual decision + a new security review.
+
 <!-- HANDOFF_ENTRIES_END -->
