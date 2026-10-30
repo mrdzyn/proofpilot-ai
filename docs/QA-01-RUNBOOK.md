@@ -166,10 +166,16 @@ Must print the `HARD-DISABLED` refusal and exit `2`, creating no evidence direct
 - An interrupted run is inconclusive — no verdict may be read from it. Keep its evidence.
 - The coordinator/oracle locks are exclusive-create *files*, not held descriptors: an empty
   `lsof <lockfile>` never authorizes deleting the lock. Delete a stale lock only after
-  positively establishing no related process remains: no matching process tree in `ps`, port
-  `4173` quiet with no Playwright/Chromium processes left, and no fresh stage-directory
-  activity across two checks a minute apart. If any check is inconclusive, stop and review
-  manually. (Full protocol: section 6 of `docs/C3B2B-REAL-PROPOSAL-PROCEDURE.md`.)
+  positively establishing no related operation remains active, using the full protocol
+  (section 6 of `docs/C3B2B-REAL-PROPOSAL-PROCEDURE.md`): every verifier entry point and child
+  tree positively excluded (`f01-baseline.ts`, `c3-offline-verification.ts`,
+  `c3-stage-spike.ts`, `c3-b2b-verify-proposal.ts`, the real-Chromium integration path, plus
+  Playwright/Chromium and the fixture server — a `ps`/`grep` sweep is triage only); no live
+  stage work in the actual staging roots (default system temp dir `proofpilot-stage-*`, plus
+  any operator-supplied `stageRoot`) across two observations a minute apart — evidence-dir
+  timestamps are not a substitute; port `4173` quiet with no browser processes left
+  (supplemental only). If any check is inconclusive, stop and review manually; never delete a
+  lock during ongoing or uncertain work.
 
 ## 8. Failure reporting template
 

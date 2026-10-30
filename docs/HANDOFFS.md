@@ -1166,4 +1166,29 @@ GPT-6 exact-head review; owner merge decision; then owner-run local QA per the r
 ### Next action
 GPT-6 focused re-audit of the new HEAD; owner merge decision; then owner-run local QA per the corrected runbook.
 
+## Handoff: PP-QA01-SEC-P2-01-A3
+
+- **Task / phase:** QA-01/SEC-P2-01 docs remediation, round 2 (GPT-6 audit: MAJOR-1 residual)
+- **From:** Implementation agent (Muse Code)
+- **To:** GPT-6 independent exact-head re-audit, then project owner
+- **Branch:** `phase/pp-qa01-secp201-readiness` (same Draft PR #23, new HEAD)
+- **State:** READY FOR RE-REVIEW. Strictly documentation-only: the stale-lock protocol now
+  checks the actual staging roots (default system temp `proofpilot-stage-*` plus any
+  operator-supplied `stageRoot`) instead of evidence-dir timestamps, covers every verifier
+  entry point and child tree (no grep-only exclusion), and keeps port checks, two
+  observations, evidence preservation and mandatory manual review as supplemental. No code,
+  gate, test, provider or activation change. Real execution stays NOT APPROVED; the SEC-P2-01
+  residual stays explicitly unaccepted.
+
+### Completed
+- Procedure §6 rewritten (stage-root primary check, full entry-point coverage, positive
+  confirmation standard); runbook §7 summary matched to it. Owner QA evidence, findings,
+  disabled procedure and hard-disable untouched.
+
+### Validation
+- Doc lint + full gates below before push.
+
+### Next action
+GPT-6 focused re-audit of the new HEAD; owner merge decision; then owner-run local QA per the corrected runbook.
+
 <!-- HANDOFF_ENTRIES_END -->

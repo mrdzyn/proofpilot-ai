@@ -94,17 +94,31 @@ bundle before anything is reported.
   an exclusive-create *file*, not a held file descriptor — `lsof <lockfile>` showing nothing
   does **not** mean no run is active, because the lock file sits on disk with no open
   descriptor for most of the run. Delete a stale lock **only after positively establishing
-  that no relevant process remains**, all of these:
-  1. No coordinator/command process tree is alive: `ps aux | grep -E 'c3-b2b-verify-proposal|candidate|playwright' | grep -v grep` shows no related process (verify PIDs, do not
-     match blindly on `node`).
-  2. The oracle port is quiet: nothing listens on `4173` (e.g. `lsof -i :4173` empty **and**
-     no `PLAYWRIGHT`/`chromium` processes remain from step 1 — either check alone is
-     insufficient).
-  3. No stage directories show fresh activity (`ls -lt` on the latest evidence dir is stable
-     across two checks a minute apart).
+  that no related operation remains active**, all of these:
+  1. No verifier entry point or child process tree is alive. Check **every** local entry point
+     that can hold a lock or a stage — `f01-baseline.ts`, `c3-offline-verification.ts`,
+     `c3-stage-spike.ts`, `c3-b2b-verify-proposal.ts`, and the real-Chromium integration path
+     (`node --test tests/integration/c3-b1-coordinator.test.ts`) — plus their children
+     (Playwright/Chromium, the fixture server). A `ps`/`grep` sweep is triage only, never
+     proof on its own: enumerate each exact command line, verify PIDs individually, and do
+     not match blindly on `node`. If any candidate process cannot be positively excluded,
+     preserve the lock and require manual review.
+  2. No live stage work exists. Stages are created as `proofpilot-stage-*` directories in the
+     staging root — the default system temporary directory (`os.tmpdir()`, i.e. `$TMPDIR` on
+     macOS/Linux) unless a caller supplies another `stageRoot` — and an active run maintains
+     one for the bulk of its runtime. List the staging root (and any operator-supplied
+     `stageRoot`) for `proofpilot-stage-*` entries and check for new entries or changing
+     mtimes across two observations a minute apart. Evidence-directory timestamps may be an
+     additional signal but are **not a substitute**: stage work happens outside the evidence
+     tree. If any stage directory appears, changes, or cannot be accounted for, preserve the
+     lock and require manual review.
+  3. The oracle port is quiet: nothing listens on `4173` **and** no Playwright/Chromium
+     processes remain from step 1. Port checks are supplemental — between stages the port can
+     be quiet while the coordinator is still active — never sufficient alone.
   If any check is inconclusive, stop and require manual operator review — do not remove the
-  lock. When all three pass, remove only the specific stale lock file, then re-run from
-  scratch (a new timestamped directory is created automatically).
+  lock. When all three positively pass, remove only the specific stale lock file, then re-run
+  from scratch (a new timestamped directory is created automatically). Never delete a lock
+  during ongoing or uncertain work.
 - **Rollback:** there is nothing to roll back in the repository — verification writes only
   gitignored evidence. To void a run, keep the evidence directory and record the void reason
   next to it. Filenames never collide across runs. Locks are never auto-cleaned by any

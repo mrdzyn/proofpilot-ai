@@ -10,7 +10,7 @@
 - **Primary branch:** protected `main` at `f305da39808b55c1725fcc88ccea9634ec79cbb7` (PR #22 squash merge)
 - **Working branch:** `phase/pp-qa01-secp201-readiness` (QA-01 + SEC-P2-01 Draft PR; the branch head is authoritative)
 - **Active task:** QA-01 operator runbook + SEC-P2-01 read-boundary hardening (user task specification; C3-B2B context in `tasks/PP-META-I2-C3-B2B.md`)
-- **Active handoff:** PP-QA01-SEC-P2-01-A2
+- **Active handoff:** PP-QA01-SEC-P2-01-A3
 - **Authorization:** Both single-use C2B live smokes are **spent**. **APPROVED and EXECUTED:** LIVE-C3-01 (owner decision October 29, 2026: one Meta `muse-spark-1.3` attempt in total); the attempt was made and the lifetime quota is **spent**; a further provider call is **NOT AUTHORIZED** (it needs a new owner decision, a new activation commit and a new pin-only commit). **APPROVED:** SEC-C3-01 (F01-only closed-grammar CSS, hand-authored controls only). **APPROVED (implementation only):** C3-B2B P1/P2/E1/E2 (all merged) and QA-01 + SEC-P2-01 (runbook, read-boundary hardening, findings, disabled future procedure, on a Draft PR) with synthetic fixtures and offline automated tests in bounded Draft PRs. **NOT APPROVED:** accessing, loading, staging or executing the real stored proposal (`c3-live-meta-001`) in any form — a separate pending owner decision from the implementation approval, plus the SEC-P2-01 residual owner decision before any real execution; UI-C3-01 (report UI), HOST-C3-01 (Modal or any hosted backend), Baseten, additional attempts, automated retries. A credit balance is not permission to spend. No agent reads credentials or approval records, executes model-generated code, deploys or merges.
 
 ## Completed milestones
