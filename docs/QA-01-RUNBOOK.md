@@ -73,7 +73,7 @@ inconclusive, the scoreboard failed re-verification, or the DID-1 demonstration 
 Evidence to inspect: `.proofpilot/c3-b1/<runId>/scoreboard.json` — `baseline.reproduced: true`,
 `candidates` contains all six hand-authored controls with `provenance: hand-authored-control`,
 PC-1 has `status: VERIFIED`, `replaysPassed: 3`, three `replay-N` entries each with
-`evidenceDir: PC-1/replay-N`. Per replay, open `PC-1/replay-N/record.json`:
+`evidenceDir: PC-1/replay-N`. Per replay, open `PC-1/replay-N/candidate-record.json`:
 `outcome: ORACLE_PASS`, `label: PC-1`, `approvedSha` equals the run SHA, `manifest.approvedSha`
 equals the run SHA, `mobile`/`desktop` both `passed` with `cartCountAfter: 1`, exactly one
 `nonce` distinct across the three replays, `integrityAfterRun: intact`, `stageRemoved: true`,
@@ -85,7 +85,6 @@ Run each file directly; all tests must pass:
 
 ```sh
 node --test tests/unit/candidate-coordinator.test.ts
-node --test tests/integration/c3-b1-coordinator.test.ts
 node --test tests/security/provenance-boundary.test.ts
 node --test tests/security/live01b-prep-boundary.test.ts
 node --test tests/unit/model-proposal-registration.test.ts
@@ -93,6 +92,20 @@ node --test tests/unit/model-verification.test.ts
 node --test tests/unit/proposal-artifact.test.ts
 node --test tests/unit/source-provenance.test.ts
 ```
+
+These suites use fake runners and synthetic evidence; they never launch a browser.
+
+### Real-Chromium integration (local only, never concurrent with another verifier run)
+
+```sh
+node --test tests/integration/c3-b1-coordinator.test.ts
+```
+
+This file runs a real Chromium oracle, fresh PC-1 stages and DID-1 (it is local-only by
+design). Preconditions, in addition to section 0: no other verifier run is in progress, nothing
+listens on port 4173, and no verifier lock file exists (`.proofpilot/locks/`). A concurrent
+browser verifier would contend for the oracle port and the stage/coordinator locks and can
+invalidate both runs — serialize all browser runs.
 
 What they prove (spot-check at least one per family in the report):
 
@@ -113,7 +126,7 @@ What they prove (spot-check at least one per family in the report):
 
 ## 5. Playwright results primer
 
-A passing replay record (`record.json`) always shows:
+A passing replay record (`candidate-record.json`) always shows:
 
 - `outcome: ORACLE_PASS`, `oracleRan: true`, `oracleExitCode: 0`
 - `mobile.status` / `desktop.status`: `passed`; `hitTestTarget: add-to-cart`; `cartCountAfter: 1`
@@ -145,14 +158,27 @@ node scripts/c3-b2b-verify-proposal.ts --run-id c3-live-meta-001 --source-sha <4
 Must print the `HARD-DISABLED` refusal and exit `2`, creating no evidence directory.
 (The E2 Draft PR merged with this drill as an automated test.)
 
-## 7. Failure reporting template
+## 7. Interrupted runs and stale locks (all browser commands)
+
+- Prefer a clean exit over signals. An abrupt `Ctrl-C`/`kill` is not guaranteed to run the
+  commands' `finally` cleanup: a lock file may be left behind and the detached oracle process
+  group may survive.
+- An interrupted run is inconclusive — no verdict may be read from it. Keep its evidence.
+- The coordinator/oracle locks are exclusive-create *files*, not held descriptors: an empty
+  `lsof <lockfile>` never authorizes deleting the lock. Delete a stale lock only after
+  positively establishing no related process remains: no matching process tree in `ps`, port
+  `4173` quiet with no Playwright/Chromium processes left, and no fresh stage-directory
+  activity across two checks a minute apart. If any check is inconclusive, stop and review
+  manually. (Full protocol: section 6 of `docs/C3B2B-REAL-PROPOSAL-PROCEDURE.md`.)
+
+## 8. Failure reporting template
 
 For any deviation, record and attach:
 
 1. Exact command line and working directory (`pwd`, `git log --oneline -1`, `git status -sb`).
 2. Exit code and the full terminal output (or the last 60 lines plus the first 20).
 3. The evidence directory (`outDir` printed by the command) — `scoreboard.json` /
-   `verification.json` plus the failing replay's `record.json`.
+   `verification.json` plus the failing replay's `candidate-record.json`.
 4. Which expectation from sections 2–6 was violated, quoted verbatim.
 5. Whether the failure reproduces on a second run with a fresh output directory
    (do not delete the first run's evidence).

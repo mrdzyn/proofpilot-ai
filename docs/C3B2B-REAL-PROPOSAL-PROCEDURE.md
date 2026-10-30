@@ -70,25 +70,47 @@ bundle before anything is reported.
   (`NOT_REPRODUCED`, `ORACLE_PASS`, `PATCH_FAILED`, `INCONCLUSIVE`) with the reason printed.
 - Exit `2` means refused before completing (bad arguments, failed provenance/registration gate,
   busy lock, evidence that failed independent revalidation). Exit 2 never claims a verdict.
-- Evidence: `.proofpilot/c3-b2b/MODEL-c3-live-meta-001-<stamp>/` — `verification.json`,
-  `source-provenance.json`, `baseline/replay-1/`, `replay-1/` … `replay-3/`, each with
-  `record.json` and the six required evidence files. Re-verify independently from these bytes;
-  never from terminal output alone.
+- Evidence: `.proofpilot/c3-b2b/MODEL-c3-live-meta-001-<stamp>/` — everything the run
+  persists sits one level down under `MODEL-c3-live-meta-001/`:
+  `MODEL-c3-live-meta-001/verification.json`, `MODEL-c3-live-meta-001/source-provenance.json`,
+  `MODEL-c3-live-meta-001/baseline/replay-1/candidate-record.json` and
+  `MODEL-c3-live-meta-001/replay-1/` … `replay-3/`, each with `candidate-record.json` plus
+  the six required evidence files. Re-verify independently from these bytes; never from
+  terminal output alone.
 
 ## 6. Stop / rollback procedure
 
-- **Stop:** `Ctrl-C` or `kill <pid>`. The coordinator lock is released by the run function's
-  cleanup; per-replay stage locks are released by the stage runner.
-- **Stale lock:** if a killed run leaves `.proofpilot/locks/c3-b1-coordinator.lock` behind, the
-  next run refuses with a busy error. Confirm no verifier process is alive
-  (`lsof .proofpilot/locks/c3-b1-coordinator.lock`, empty output), then remove only that lock
-  file. Never remove evidence directories to "clean up".
+- **Stop:** prefer a clean exit over signals — let the command finish the current replay if at
+  all possible. If it must be stopped, `Ctrl-C` or `kill <pid>` requests termination, but an
+  abrupt SIGINT/SIGTERM/SIGKILL is **not guaranteed to run the JavaScript `finally` cleanup**:
+  locks may be left behind and the detached oracle process group (`node` + Playwright +
+  fixture server) may survive the parent. A pathname check alone is never sufficient.
+- **Interrupted evidence is invalid:** any run that did not exit by itself is inconclusive,
+  whatever its partial output says. No verdict — VERIFIED or otherwise — may be read from an
+  interrupted run. Keep the evidence directory untouched (it is the audit trail); never delete
+  evidence to "clean up".
+- **Stale lock:** a killed run may leave `.proofpilot/locks/c3-b1-coordinator.lock` (and/or the
+  oracle lock) behind, and the next run will refuse with a busy error. The coordinator lock is
+  an exclusive-create *file*, not a held file descriptor — `lsof <lockfile>` showing nothing
+  does **not** mean no run is active, because the lock file sits on disk with no open
+  descriptor for most of the run. Delete a stale lock **only after positively establishing
+  that no relevant process remains**, all of these:
+  1. No coordinator/command process tree is alive: `ps aux | grep -E 'c3-b2b-verify-proposal|candidate|playwright' | grep -v grep` shows no related process (verify PIDs, do not
+     match blindly on `node`).
+  2. The oracle port is quiet: nothing listens on `4173` (e.g. `lsof -i :4173` empty **and**
+     no `PLAYWRIGHT`/`chromium` processes remain from step 1 — either check alone is
+     insufficient).
+  3. No stage directories show fresh activity (`ls -lt` on the latest evidence dir is stable
+     across two checks a minute apart).
+  If any check is inconclusive, stop and require manual operator review — do not remove the
+  lock. When all three pass, remove only the specific stale lock file, then re-run from
+  scratch (a new timestamped directory is created automatically).
 - **Rollback:** there is nothing to roll back in the repository — verification writes only
-  gitignored evidence. To void a run, keep the evidence directory (it is the audit trail) and
-  record the void reason next to it; start a new run (a new timestamped directory is created
-  automatically). Filenames never collide across runs.
+  gitignored evidence. To void a run, keep the evidence directory and record the void reason
+  next to it. Filenames never collide across runs. Locks are never auto-cleaned by any
+  command; every stale lock requires the positive-confirmation protocol above.
 - **Failure behavior:** any refusal or non-VERIFIED verdict ends the procedure. Do not re-run
-  with altered parameters to chase VERIFIED; file the outcome (section 7 of the QA runbook)
+  with altered parameters to chase VERIFIED; file the outcome (section 8 of the QA runbook)
   and return to the owner for a new decision.
 
 ## 7. What this procedure must never become
