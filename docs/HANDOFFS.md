@@ -1076,4 +1076,25 @@ GPT-6 focused re-audit of the new HEAD; owner merge decision; E2 stays unstarted
 ### Next action
 GPT-6 exact-head audit; owner merge decision. Real execution needs a separate owner approval + the P2 residual risk decision + a new security review.
 
+## Handoff: PP-META-I2-C3-B2B-E2-A2
+
+- **Task / phase:** C3-B2B E2 MAJOR-1/2/3 + MINOR remediation (GPT-6 audit of PR #22)
+- **From:** Implementation agent (Muse Code)
+- **To:** GPT-6 independent exact-head re-audit, then project owner
+- **Branch:** `phase/pp-meta-c3-b2b-e2-verification` (same Draft PR #22, new HEAD)
+- **State:** READY FOR RE-REVIEW. No activation, quota, authorization, credential, reservation, parser, oracle, patch-policy, pin or hand-authored-control change; the stored `c3-live-meta-001` artifact was not read, loaded, staged or executed; no provider call; no merge. Real execution stays NOT APPROVED; the P2 transient ancestor-swap residual stays unaccepted.
+
+### Completed
+- MAJOR-1: verifier binds every replay record and the baseline to the row's registered CSS/triples (`does not attest the registered candidate`, `baseline record carries adjustments`); run function refuses foreign runner records pre-persistence (`RECORD_MISMATCH`, lock released, nothing written).
+- MAJOR-2: run-time registration binding (`PROVENANCE_MISMATCH` before any runner call); persisted Zone P attestation (`source-provenance.json`, `ATTESTATION_MALFORMED`/`MISMATCH` pre-run) cross-checked by the verifier (`provenanceAttested` recomputed; equal-but-wrong mutations refused; Tier B explicitly marked with VERIFIED withheld); E1/E2 cross-section reconciliation in `verifyScoreboard`; command passes the P2 attestation and revalidates the persisted bundle before reporting.
+- MAJOR-3: exact 24-key E2 schema (additive/missing keys refused; E1 14-key schema untouched).
+- MINOR: verifier binds the presented row to the persisted `verification.json` (missing/corrupt/divergent refused).
+- Tests: 9 new batteries (auditor repros + integrated scoreboard mutations); boundary tests assert command wiring. E1 schema and boundaries preserved.
+
+### Validation
+- Targeted suites green; full gates below before push.
+
+### Next action
+GPT-6 focused re-audit of the new HEAD; owner merge decision. Real execution needs a separate owner approval + the P2 residual risk decision + a new security review.
+
 <!-- HANDOFF_ENTRIES_END -->

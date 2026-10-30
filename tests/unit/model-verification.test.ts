@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {
@@ -15,6 +15,7 @@ import {
   MODEL_VERIFICATION_LABEL,
   modelProposalEntryOf,
   modelProposalIdOf,
+  modelRowProblems,
   modelVerificationProblems,
   nc5Of,
   registerModelProposal,
@@ -116,6 +117,37 @@ const register = () => registerModelProposal({
   artifactSha256: H2,
 });
 
+/** A synthetic Zone P source attestation mirroring the SourceProvenance shape and classes. */
+const attestationFor = (over: Record<string, unknown> = {}) => ({
+  sourceHead: SRC,
+  verificationHead: V,
+  sourceFixtureTree: FIXTURE_TREE,
+  sourceAnalysisId: 'synthetic-e2',
+  inputSha256: H1,
+  artifactInputSha256: H1,
+  artifactHash: H2,
+  baselineRunId: 'synthetic',
+  recordingSet: 'synthetic',
+  videoSha256: '0'.repeat(64),
+  ancestryOk: true,
+  treesEqual: true,
+  classes: {
+    sourceHead: 'operator-reported',
+    sourceFixtureTree: 'operator-reported',
+    sourceAnalysisId: 'operator-reported',
+    verificationHead: 'operator-reported',
+    inputSha256: 'recomputed',
+    artifactInputSha256: 'local-file',
+    artifactHash: 'local-file',
+    baselineRunId: 'recomputed',
+    recordingSet: 'recomputed',
+    videoSha256: 'recomputed',
+    ancestryOk: 'local-git',
+    treesEqual: 'local-git',
+  },
+  ...over,
+});
+
 const runOpts = (
   root: string,
   runner: Runner,
@@ -134,6 +166,7 @@ const runOpts = (
   coordinatorLockPath: path.join(root, 'coord.lock'),
   git,
   runner,
+  sourceAttestation: attestationFor(),
   ...over,
 });
 
@@ -165,6 +198,8 @@ test('E2 verifies a registered synthetic proposal through three fresh replays wi
   const file = path.join(dir, 'out', `MODEL-${RUN}`, VERIFICATION_FILE);
   assert.ok(existsSync(file), 'the verification file is persisted');
   assert.deepEqual(JSON.parse(readFileSync(file, 'utf8')).candidateId, entry.candidateId);
+  assert.equal(entry.provenanceAttested, true, 'the persisted attestation supports the row');
+  assert.ok(existsSync(path.join(dir, 'out', `MODEL-${RUN}`, 'source-provenance.json')), 'the source attestation is persisted');
   // Independent revalidation from the persisted bytes: no row problem.
   assert.deepEqual(await modelVerificationProblems(entry, V, path.join(dir, 'out')), []);
 });
@@ -418,4 +453,214 @@ test('E2 command refuses malformed input and missing artifacts without staging',
   const help = runCli(['--help']);
   assert.equal(help.status, 0, 'help exits cleanly');
   assert.match(help.output, /--run-id.*--source-sha.*--verification-sha/s, 'usage lists the narrow surface');
+});
+
+// ------------------------------------------------------------ MAJOR-1: replay CSS binding
+
+test('E2 MAJOR-1: replay records must attest the registered candidate, never another patch', async () => {
+  const dir = tmp();
+  const outDir = path.join(dir, 'out');
+  const entry = await verifyRegisteredProposal(runOpts(dir, fakeRunner(honestPass), fakeGit(fullTrees())));
+  // The auditor's repro: a row claiming a different patch cannot use this evidence.
+  const bad = [{ selector: '.add-to-cart', property: 'pointer-events', value: 'none' }];
+  const badCss = renderCssAdjustments(bad);
+  const forged = {
+    ...entry,
+    adjustments: bad,
+    renderedCss: badCss,
+    candidateId: modelProposalIdOf(V, RUN, badCss),
+  };
+  const rowProblems = (await modelVerificationProblems(forged, V, outDir)).join(' | ');
+  assert.match(rowProblems, /does not attest the registered candidate/, 'each replay is bound to the row CSS');
+  // Integrated scoreboard path: the mutation is reported on the row.
+  const board = {
+    schemaVersion: 1, label: MODEL_VERIFICATION_LABEL, complete: true, approvedSha: V,
+    createdAt: '2026-10-30T00:00:00.000Z', modelOrProviderCalls: 0, modalCalls: 0,
+    baseline: { reproduced: false, reasons: ['baseline evidence unavailable'], replay: { n: 1, evidenceDir: 'BASELINE/replay-1', recordSha256: 'x'.repeat(64) } },
+    candidates: [], nc5: nc5Of(V, []), notes: [], modelVerifications: [forged],
+  };
+  writeFileSync(path.join(outDir, SCOREBOARD_FILE), JSON.stringify(board));
+  const boardProblems = await verifyScoreboard(outDir);
+  assert.ok(
+    boardProblems.some((x) => /model-verification\[0\].*does not attest the registered candidate/.test(x)),
+    `scoreboard rejects the CSS-swapped row: ${boardProblems.join(' | ')}`,
+  );
+});
+
+test('E2 MAJOR-1: a runner attesting another patch is refused before anything persists', async () => {
+  const dir = tmp();
+  const calls: string[] = [];
+  const lying = fakeRunner((_adj, isBase) => (isBase
+    ? { kind: 'fail-baseline-sig' as Kind }
+    : { kind: 'pass' as Kind, over: { renderedCss: renderCssAdjustments([{ selector: '.add-to-cart', property: 'pointer-events', value: 'none' }]) } }), calls);
+  await assert.rejects(
+    verifyRegisteredProposal(runOpts(dir, lying, fakeGit(fullTrees()))),
+    /RECORD_MISMATCH/,
+    'runner record for another patch is refused',
+  );
+  assert.ok(!existsSync(path.join(dir, 'out', `MODEL-${RUN}`, VERIFICATION_FILE)), 'no verification is persisted');
+  assert.ok(!existsSync(path.join(dir, 'coord.lock')), 'the lock is released');
+});
+
+test('E2 MAJOR-1: a baseline carrying adjustments is refused by the verifier', async () => {
+  const dir = tmp();
+  const outDir = path.join(dir, 'out');
+  const entry = await verifyRegisteredProposal(runOpts(dir, fakeRunner(honestPass), fakeGit(fullTrees())));
+  const bPath = path.join(outDir, `MODEL-${RUN}`, 'baseline', 'replay-1', RECORD_FILE);
+  const raw = JSON.parse(readFileSync(bPath, 'utf8')) as CandidateRecord;
+  raw.adjustments = [...PC1];
+  raw.renderedCss = CSS;
+  writeFileSync(bPath, JSON.stringify(raw));
+  assert.match(
+    (await modelVerificationProblems(entry, V, outDir)).join(' | '),
+    /baseline record carries adjustments/,
+    'a patched baseline is refused',
+  );
+});
+
+// ------------------------------------------------------------ MAJOR-2: provenance binding
+
+test('E2 MAJOR-2: run labels must equal the registered proposal before any runner call', async () => {
+  const git = fakeGit(fullTrees());
+  for (
+    const [name, over, re] of [
+      ['different input hash', { inputSha256: '0'.repeat(64) }, /PROVENANCE_MISMATCH/],
+      ['different artifact hash', { artifactSha256: '0'.repeat(64) }, /PROVENANCE_MISMATCH/],
+      ['different source revision', { sourceSha: V }, /PROVENANCE_MISMATCH/],
+    ] as const
+  ) {
+    const calls: string[] = [];
+    await assert.rejects(verifyRegisteredProposal(runOpts(tmp(), fakeRunner(honestPass, calls), git, undefined, over)), re, name);
+    assert.deepEqual(calls, [], `${name}: the runner never ran`);
+  }
+});
+
+test('E2 MAJOR-2: malformed or foreign attestations are refused before any runner call', async () => {
+  const git = fakeGit(fullTrees());
+  for (
+    const [name, att, re] of [
+      ['non-object attestation', 'x', /ATTESTATION_MALFORMED/],
+      ['bad input hash', attestationFor({ inputSha256: 'zz' }), /ATTESTATION_MALFORMED/],
+      ['ancestry not certified', attestationFor({ ancestryOk: false }), /ATTESTATION_MALFORMED/],
+      ['wrong class', attestationFor({ classes: { ...attestationFor().classes, inputSha256: 'operator-reported' } }), /ATTESTATION_MALFORMED/],
+      ['attestation for another input', attestationFor({ inputSha256: '0'.repeat(64) }), /ATTESTATION_MISMATCH/],
+      ['attestation for another artifact', attestationFor({ artifactHash: '0'.repeat(64) }), /ATTESTATION_MISMATCH/],
+      ['attestation for another source', attestationFor({ sourceHead: V }), /ATTESTATION_MISMATCH/],
+    ] as const
+  ) {
+    const calls: string[] = [];
+    await assert.rejects(
+      verifyRegisteredProposal(runOpts(tmp(), fakeRunner(honestPass, calls), git, undefined, { sourceAttestation: att as never })), re, name,
+    );
+    assert.deepEqual(calls, [], `${name}: the runner never ran`);
+  }
+});
+
+test('E2 MAJOR-2: mutated provenance values no longer verify against the persisted attestation', async () => {
+  const dir = tmp();
+  const outDir = path.join(dir, 'out');
+  const entry = await verifyRegisteredProposal(runOpts(dir, fakeRunner(honestPass), fakeGit(fullTrees())));
+  assert.deepEqual(await modelVerificationProblems(entry, V, outDir), [], 'attested baseline verifies');
+  // The auditor's test 2: well-formed but wrong provenance values plus an equal-but-wrong tree id.
+  const mutated = {
+    ...entry,
+    sourceSha: V,
+    inputSha256: '0'.repeat(64),
+    artifactSha256: '1'.repeat(64),
+    fixtureTreeSource: OTHER_TREE,
+    fixtureTreeVerification: OTHER_TREE,
+  };
+  const problems = (await modelVerificationProblems(mutated, V, outDir)).join(' | ');
+  assert.match(problems, /source attestation: sourceHead differs/, 'source binding enforced');
+  assert.match(problems, /source attestation: inputSha256 differs/, 'input binding enforced');
+  assert.match(problems, /source attestation: artifactHash differs/, 'artifact binding enforced');
+  assert.match(problems, /source attestation: sourceFixtureTree differs/, 'anchor binding enforced');
+  assert.match(problems, /provenanceAttested is true but the persisted attestation does not support/, 'attestation flag recomputed');
+  // Without an attestation the row verifies Tier B at most: honest non-VERIFIED outcomes
+  // recompute cleanly, but VERIFIED is withheld.
+  const noAttDir = tmp();
+  const noAttOut = path.join(noAttDir, 'out');
+  const tierB = await verifyRegisteredProposal(
+    runOpts(noAttDir, fakeRunner((adj) => (adj.length === 0 ? { kind: 'pass' } : { kind: 'pass' })), fakeGit(fullTrees()), undefined, { sourceAttestation: undefined }),
+  );
+  assert.equal(tierB.status, 'NOT_REPRODUCED');
+  assert.equal(tierB.provenanceAttested, false);
+  assert.deepEqual(await modelVerificationProblems(tierB, V, noAttOut), [], 'Tier B honest outcome recomputes');
+  const noAttPassDir = tmp();
+  const noAttPassOut = path.join(noAttPassDir, 'out');
+  const tierBPass = await verifyRegisteredProposal(runOpts(noAttPassDir, fakeRunner(honestPass), fakeGit(fullTrees()), undefined, { sourceAttestation: undefined }));
+  assert.equal(tierBPass.status, 'VERIFIED');
+  assert.equal(tierBPass.provenanceAttested, false);
+  assert.match(
+    (await modelVerificationProblems(tierBPass, V, noAttPassOut)).join(' | '),
+    /VERIFIED requires a persisted source attestation/,
+    'Tier B withholds VERIFIED',
+  );
+});
+
+test('E2 MAJOR-2: E1 and E2 rows for one run must agree on immutable provenance', async () => {
+  const dir = tmp();
+  const outDir = path.join(dir, 'out');
+  const entry = await verifyRegisteredProposal(runOpts(dir, fakeRunner(honestPass), fakeGit(fullTrees())));
+  const e1row = modelProposalEntryOf(register());
+  const boardWith = (verification: unknown) => ({
+    schemaVersion: 1, label: MODEL_VERIFICATION_LABEL, complete: true, approvedSha: V,
+    createdAt: '2026-10-30T00:00:00.000Z', modelOrProviderCalls: 0, modalCalls: 0,
+    baseline: { reproduced: false, reasons: ['baseline evidence unavailable'], replay: { n: 1, evidenceDir: 'BASELINE/replay-1', recordSha256: 'x'.repeat(64) } },
+    candidates: [], nc5: nc5Of(V, []), notes: [],
+    modelProposals: [e1row],
+    modelVerifications: [verification],
+  });
+  writeFileSync(path.join(outDir, SCOREBOARD_FILE), JSON.stringify(boardWith(entry)));
+  assert.ok(
+    !(await verifyScoreboard(outDir)).some((x) => x.includes('model-verification[') || x.includes('model-proposal[')),
+    'agreeing sections verify together',
+  );
+  const drifted = { ...entry, sourceSha: V, inputSha256: '0'.repeat(64), artifactSha256: '1'.repeat(64) };
+  writeFileSync(path.join(outDir, SCOREBOARD_FILE), JSON.stringify(boardWith(drifted)));
+  const problems = await verifyScoreboard(outDir);
+  assert.ok(problems.some((x) => /sourceSha differs from the E1 row/.test(x)), 'source drift across sections refused');
+  assert.ok(problems.some((x) => /inputSha256 differs from the E1 row/.test(x)), 'input drift across sections refused');
+  assert.ok(problems.some((x) => /artifactSha256 differs from the E1 row/.test(x)), 'artifact drift across sections refused');
+});
+
+// ------------------------------------------------------------ MAJOR-3 and MINOR: exact E2 schema, persisted row
+
+test('E2 MAJOR-3: the versioned row rejects additive and missing keys; E1 schema untouched', async () => {
+  const dir = tmp();
+  const outDir = path.join(dir, 'out');
+  const entry = await verifyRegisteredProposal(runOpts(dir, fakeRunner(honestPass), fakeGit(fullTrees())));
+  const extra = { ...entry, verified: true, evidenceFinalized: true, attestation: { forged: true } };
+  assert.match(
+    (await modelVerificationProblems(extra, V, outDir)).join(' | '),
+    /unexpected model-verification field: verified/,
+    'additive verdict-adjacent keys refused',
+  );
+  const dropped = JSON.parse(JSON.stringify(entry)) as Record<string, unknown>;
+  delete dropped.reason;
+  delete dropped.provenanceAttested;
+  const droppedProblems = (await modelVerificationProblems(dropped, V, outDir)).join(' | ');
+  assert.match(droppedProblems, /missing model-verification field: reason/, 'removed keys refused');
+  assert.match(droppedProblems, /missing model-verification field: provenanceAttested/, 'removed attestation flag refused');
+  // The E1 14-key schema still accepts its canonical row and refuses additive keys.
+  const e1 = modelProposalEntryOf(register());
+  assert.deepEqual(modelRowProblems(e1, V), [], 'E1 schema unchanged');
+  assert.ok(modelRowProblems({ ...e1, verified: true }, V).some((x) => /unexpected model-proposal field: verified/.test(x)), 'E1 still refuses additive keys');
+});
+
+test('E2 MINOR: the presented row is bound to the persisted verification.json', async () => {
+  const dir = tmp();
+  const outDir = path.join(dir, 'out');
+  const entry = await verifyRegisteredProposal(runOpts(dir, fakeRunner(honestPass), fakeGit(fullTrees())));
+  const file = path.join(outDir, `MODEL-${RUN}`, VERIFICATION_FILE);
+  rmSync(file);
+  assert.match((await modelVerificationProblems(entry, V, outDir)).join(' | '), /persisted verification.json is missing/, 'missing file refused');
+  writeFileSync(file, JSON.stringify({ ...entry, status: 'INCONCLUSIVE' }));
+  assert.match(
+    (await modelVerificationProblems({ ...entry, status: 'INCONCLUSIVE' }, V, outDir)).join(' | '),
+    /row says INCONCLUSIVE but the evidence gives VERIFIED/,
+    'a file-only downgrade still recomputes the verdict from replay evidence',
+  );
+  writeFileSync(file, '{not json');
+  assert.match((await modelVerificationProblems(entry, V, outDir)).join(' | '), /persisted verification.json is not JSON/, 'corrupt file refused');
 });

@@ -36,7 +36,11 @@ export type ModelVerificationErrorCode =
   | 'NOT_ANCESTOR'
   | 'ANCHOR_UNRESOLVABLE'
   | 'ANCHOR_DRIFT'
-  | 'RENDER_MISMATCH';
+  | 'RENDER_MISMATCH'
+  | 'RECORD_MISMATCH'
+  | 'PROVENANCE_MISMATCH'
+  | 'ATTESTATION_MALFORMED'
+  | 'ATTESTATION_MISMATCH';
 
 export class ModelVerificationError extends Error {
   readonly code: ModelVerificationErrorCode;
@@ -68,6 +72,67 @@ const MODEL_IMMUTABLE_PATHS = ['verifier', 'config/patch-policy.json'] as const;
 
 /** Evidence file written beside the namespaced replays. */
 export const VERIFICATION_FILE = 'verification.json';
+/** Persisted Zone P source attestation, written beside the namespaced replays when supplied. */
+export const ATTESTATION_FILE = 'source-provenance.json';
+
+/**
+ * The persisted Zone P source-provenance record (structural subset). The run function validates
+ * this shape and binds every value to the registration and the Git-observed anchors before any
+ * staging; the verifier cross-checks the persisted file against the presented row.
+ */
+export type SourceAttestation = {
+  sourceHead: string;
+  verificationHead: string;
+  sourceFixtureTree: string;
+  inputSha256: string;
+  artifactInputSha256: string;
+  artifactHash: string;
+  ancestryOk: boolean;
+  treesEqual: boolean;
+  classes: Record<string, string>;
+};
+
+const EXPECTED_CLASSES: Record<string, string> = {
+  sourceHead: 'operator-reported',
+  sourceFixtureTree: 'operator-reported',
+  sourceAnalysisId: 'operator-reported',
+  verificationHead: 'operator-reported',
+  inputSha256: 'recomputed',
+  artifactInputSha256: 'local-file',
+  artifactHash: 'local-file',
+  ancestryOk: 'local-git',
+  treesEqual: 'local-git',
+};
+
+function readAttestation(a: unknown): SourceAttestation {
+  const malformed = (detail: string): never => {
+    throw new ModelVerificationError('ATTESTATION_MALFORMED', `source attestation ${detail}`);
+  };
+  if (typeof a !== 'object' || a === null || Array.isArray(a)) malformed('is not an object');
+  const o = a as Record<string, unknown>;
+  const hex = (k: string, bits: 40 | 64): string => {
+    const v = o[k];
+    const re = bits === 40 ? /^[0-9a-f]{40}$/ : /^[0-9a-f]{64}$/;
+    if (typeof v !== 'string' || !re.test(v)) malformed(`field ${k} is missing or malformed`);
+    return v as string;
+  };
+  const att: SourceAttestation = {
+    sourceHead: hex('sourceHead', 40),
+    verificationHead: hex('verificationHead', 40),
+    sourceFixtureTree: hex('sourceFixtureTree', 40),
+    inputSha256: hex('inputSha256', 64),
+    artifactInputSha256: hex('artifactInputSha256', 64),
+    artifactHash: hex('artifactHash', 64),
+    ancestryOk: o.ancestryOk as boolean,
+    treesEqual: o.treesEqual as boolean,
+    classes: (typeof o.classes === 'object' && o.classes !== null && !Array.isArray(o.classes) ? o.classes : {}) as Record<string, string>,
+  };
+  if (att.ancestryOk !== true || att.treesEqual !== true) malformed('does not certify ancestry and tree equality');
+  for (const [k, v] of Object.entries(EXPECTED_CLASSES)) {
+    if (att.classes[k] !== v) malformed(`class ${k} is not ${JSON.stringify(v)}`);
+  }
+  return att;
+}
 
 const SHA40 = /^[0-9a-f]{40}$/;
 const SHA64 = /^[0-9a-f]{64}$/;
@@ -105,6 +170,13 @@ export type VerifyRegisteredProposalOptions = {
   git: ModelGit;
   runner?: Runner;
   stageRoot?: string;
+  /**
+   * Optional Zone P source-provenance record. When supplied it is structurally validated and
+   * bound to the registration and the observed anchors before any staging, persisted beside
+   * the evidence, and cross-checked by the verifier. Without it the row verifies Tier B
+   * (replays recomputed, provenance unattested).
+   */
+  sourceAttestation?: unknown;
 };
 
 /**
@@ -125,6 +197,11 @@ export async function verifyRegisteredProposal(opts: VerifyRegisteredProposalOpt
   if (verificationSha !== proposal.approvedSha) {
     throw new ModelVerificationError('SHA_MISMATCH', 'the verification revision does not match the registration binding');
   }
+  // The run labels must be the registered proposal's labels: valid-format but different hashes
+  // can never produce a row, whatever they claim.
+  if (sourceSha !== proposal.sourceSha || inputSha256 !== proposal.inputSha256 || artifactSha256 !== proposal.artifactSha256) {
+    throw new ModelVerificationError('PROVENANCE_MISMATCH', 'the run labels do not match the registered proposal provenance');
+  }
   if (verificationSha === sourceSha) throw new ModelVerificationError('CONFLATED', 'the source revision must not be the verification revision');
   if (!(await opts.git.commitExists(sourceSha))) throw new ModelVerificationError('UNKNOWN_SOURCE', 'the source commit is not present locally');
   if (!(await opts.git.commitExists(verificationSha))) throw new ModelVerificationError('UNKNOWN_VERIFICATION', 'the verification revision is not present locally');
@@ -141,6 +218,20 @@ export async function verifyRegisteredProposal(opts: VerifyRegisteredProposalOpt
     if (atSource[i] !== atVerification[i]) {
       throw new ModelVerificationError('ANCHOR_DRIFT', `anchor ${anchorPaths[i]} differs between the source and verification revisions`);
     }
+  }
+  const attestation = opts.sourceAttestation === undefined ? null : readAttestation(opts.sourceAttestation);
+  if (attestation !== null) {
+    const mismatch = (detail: string): never => {
+      throw new ModelVerificationError('ATTESTATION_MISMATCH', `source attestation ${detail}`);
+    };
+    // The attestation is bound to this exact run: the registered provenance, the verification
+    // revision and the Git-observed anchors. A well-formed attestation for another bundle is refused.
+    if (attestation.sourceHead !== sourceSha) mismatch('names a different source revision');
+    if (attestation.verificationHead !== verificationSha) mismatch('names a different verification revision');
+    if (attestation.sourceFixtureTree !== atSource[0]) mismatch('names a different fixture tree');
+    if (attestation.inputSha256 !== inputSha256) mismatch('recomputed a different input');
+    if (attestation.artifactInputSha256 !== inputSha256) mismatch('artifact answers a different input');
+    if (attestation.artifactHash !== artifactSha256) mismatch('names a different artifact');
   }
   // Belt-and-braces re-render: the frozen registered triples must still render to the bound CSS.
   let rendered: string;
@@ -168,9 +259,23 @@ export async function verifyRegisteredProposal(opts: VerifyRegisteredProposalOpt
     await mkdir(opts.outDir, { recursive: true, mode: 0o700 });
     const base = { repoRoot: opts.repoRoot, approvedSha: verificationSha, lockPath: opts.lockPath, stageRoot: opts.stageRoot };
 
+    // The runner must attest the requested candidate: a record for a different patch is refused
+    // before any evidence is finalized or persisted, so a faulty runner can never produce a
+    // VERIFIED-looking bundle for the wrong CSS.
+    const normTriples = (xs: unknown): string => {
+      if (!Array.isArray(xs)) return 'not-a-list';
+      return JSON.stringify(xs.map((x) => {
+        const o = ((x ?? {}) as Record<string, unknown>);
+        return [o.selector, o.property, o.value];
+      }));
+    };
     const run = async (n: number, dir: string, adjustments: CssAdjustment[]) => {
       const evidenceDir = path.join(modelDir, dir);
       const record = await runner({ ...base, label: `MODEL-${runId}`, adjustments, evidenceDir });
+      const wantCss = renderCssAdjustments(adjustments);
+      if (normTriples(record.adjustments) !== normTriples(adjustments) || record.renderedCss !== wantCss) {
+        throw new ModelVerificationError('RECORD_MISMATCH', `replay ${n} record does not attest the requested candidate`);
+      }
       const finalizedVerdict = record.outcome === 'ORACLE_PASS' || record.outcome === 'PATCH_FAILED';
       const evidence: ReplayEvidence = {
         record,
@@ -210,6 +315,7 @@ export async function verifyRegisteredProposal(opts: VerifyRegisteredProposalOpt
       artifactSha256,
       fixtureTreeSource: atSource[0]!,
       fixtureTreeVerification: atVerification[0]!,
+      provenanceAttested: attestation !== null,
       baseline: { reproduced: gate.reproduced, reasons: gate.reasons, replay: b.entry },
       replays: entries,
       replaysRequired: REPLAYS_REQUIRED_FOR_VERIFIED,
@@ -223,6 +329,11 @@ export async function verifyRegisteredProposal(opts: VerifyRegisteredProposalOpt
     await mkdir(modelDir, { recursive: true });
     await writeFile(`${file}.tmp`, JSON.stringify(entry, null, 2) + '\n', { mode: 0o600 });
     await rename(`${file}.tmp`, file);
+    if (attestation !== null) {
+      const attFile = path.join(modelDir, ATTESTATION_FILE);
+      await writeFile(`${attFile}.tmp`, JSON.stringify(attestation, null, 2) + '\n', { mode: 0o600 });
+      await rename(`${attFile}.tmp`, attFile);
+    }
     return entry;
   } finally {
     await rm(opts.coordinatorLockPath, { force: true });

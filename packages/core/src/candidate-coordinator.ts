@@ -298,8 +298,11 @@ export async function modelVerificationProblems(m: unknown, sha: string, root: s
   if (typeof m !== 'object' || m === null || Array.isArray(m)) return ['model verification is not an object'];
   const p: string[] = [];
   const r = m as Record<string, unknown>;
+  for (const k of Object.keys(r)) if (!MODEL_VERIFICATION_KEYS.includes(k)) p.push(`unexpected model-verification field: ${k}`);
+  for (const k of MODEL_VERIFICATION_KEYS) if (!(k in r)) p.push(`missing model-verification field: ${k}`);
   if (r.kind !== 'model-proposal-verification') p.push(`kind is ${JSON.stringify(r.kind)}, expected "model-proposal-verification"`);
   if (r.schemaVersion !== 2) p.push('unsupported model-verification schema version');
+  if (typeof r.provenanceAttested !== 'boolean') p.push('provenanceAttested must be a boolean');
   if (r.provenance !== 'model-proposal') p.push(`provenance is ${JSON.stringify(r.provenance)}, expected "model-proposal"`);
   if (typeof r.runId !== 'string' || !RUN_ID.test(r.runId)) {
     p.push('runId is missing or malformed');
@@ -321,11 +324,12 @@ export async function modelVerificationProblems(m: unknown, sha: string, root: s
     p.push('fixture anchor drifted between the source and verification revisions (a changed oracle is a different experiment)');
   }
   let rendered: string | null = null;
+  let clean: CssAdjustment[] | null = null;
   const triples = r.adjustments;
   if (!Array.isArray(triples) || triples.length === 0) {
     p.push('adjustments must be a non-empty list');
   } else {
-    const clean: CssAdjustment[] = [];
+    const list: CssAdjustment[] = [];
     triples.forEach((t, i) => {
       if (typeof t !== 'object' || t === null) {
         p.push(`adjustment ${i} is not an object`);
@@ -346,9 +350,10 @@ export async function modelVerificationProblems(m: unknown, sha: string, root: s
         p.push(`adjustment ${i} fields must be strings`);
         return;
       }
-      clean.push({ selector: rec.selector, property: rec.property, value: rec.value });
+      list.push({ selector: rec.selector, property: rec.property, value: rec.value });
     });
-    if (clean.length === triples.length) {
+    if (list.length === triples.length) {
+      clean = list;
       try {
         rendered = renderCssAdjustments(clean);
       } catch (e) {
@@ -374,6 +379,66 @@ export async function modelVerificationProblems(m: unknown, sha: string, root: s
   const runId = typeof r.runId === 'string' && RUN_ID.test(r.runId) ? r.runId : null;
   if (runId === null || !baseline || !Array.isArray(r.replays)) return p;
   // ---- evidence phase: recompute everything from the persisted bytes under root ----
+  // The presented row is bound to the persisted verification.json byte for byte: independent
+  // revalidation reads the saved record, never trusts the caller's object alone.
+  const persistedRaw = await readFile(path.join(root, `MODEL-${runId}`, VERIFICATION_FILE), 'utf8').catch(() => null);
+  if (persistedRaw === null) {
+    p.push('persisted verification.json is missing');
+  } else {
+    let persisted: unknown = null;
+    try {
+      persisted = JSON.parse(persistedRaw);
+    } catch {
+      p.push('persisted verification.json is not JSON');
+    }
+    if (persisted !== null && !sameJson(persisted, m)) p.push('persisted verification.json differs from the presented row');
+  }
+  // The source attestation (written by the Zone P provenance check at run time) is the
+  // independently inspectable basis for the row's provenance values. Without a matching
+  // attestation the row verifies at most Tier B: replays recomputed, provenance unattested.
+  let attested = false;
+  const attRaw = await readFile(path.join(root, `MODEL-${runId}`, ATTESTATION_FILE), 'utf8').catch(() => null);
+  if (attRaw !== null) {
+    let att: unknown = null;
+    try {
+      att = JSON.parse(attRaw);
+    } catch {
+      p.push('source attestation is not JSON');
+    }
+    if (att !== null) {
+      const a = att as Record<string, unknown>;
+      const classes = (typeof a.classes === 'object' && a.classes !== null ? a.classes : {}) as Record<string, unknown>;
+      let good = true;
+      const holds = (cond: boolean, msg: string): boolean => {
+        if (!cond) p.push(`source attestation: ${msg}`);
+        return cond;
+      };
+      good = holds(a.sourceHead === r.sourceSha, 'sourceHead differs from the row') && good;
+      good = holds(a.verificationHead === r.verificationSha, 'verificationHead differs from the row') && good;
+      good = holds(a.sourceFixtureTree === r.fixtureTreeSource, 'sourceFixtureTree differs from the row') && good;
+      good = holds(a.inputSha256 === r.inputSha256, 'inputSha256 differs from the row') && good;
+      good = holds(a.artifactInputSha256 === r.inputSha256, 'artifact input hash differs from the recomputed input') && good;
+      good = holds(a.artifactHash === r.artifactSha256, 'artifactHash differs from the row') && good;
+      good = holds(a.ancestryOk === true, 'ancestry is not certified') && good;
+      good = holds(a.treesEqual === true, 'tree equality is not certified') && good;
+      good = holds(classes.sourceHead === 'operator-reported', 'sourceHead class is not operator-reported') && good;
+      good = holds(classes.verificationHead === 'operator-reported', 'verificationHead class is not operator-reported') && good;
+      good = holds(classes.inputSha256 === 'recomputed', 'inputSha256 class is not recomputed') && good;
+      good = holds(classes.artifactInputSha256 === 'local-file', 'artifact input class is not local-file') && good;
+      good = holds(classes.artifactHash === 'local-file', 'artifactHash class is not local-file') && good;
+      good = holds(classes.ancestryOk === 'local-git', 'ancestry class is not local-git') && good;
+      good = holds(classes.treesEqual === 'local-git', 'tree-equality class is not local-git') && good;
+      attested = good;
+    }
+  }
+  if (r.provenanceAttested !== attested) {
+    p.push(`provenanceAttested is ${String(r.provenanceAttested)} but the persisted attestation ${attested ? 'supports' : 'does not support'} the row provenance`);
+  }
+  // Without an attested source basis the row verifies at most Tier B: the replays are
+  // recomputed, but VERIFIED is withheld until the provenance is attested.
+  if (!attested && r.status === 'VERIFIED') {
+    p.push('VERIFIED requires a persisted source attestation binding the provenance (Tier B rows verify replays only)');
+  }
   if (!baseline.replay || typeof baseline.replay !== 'object') {
     p.push('baseline replay is missing');
     return p;
@@ -384,6 +449,10 @@ export async function modelVerificationProblems(m: unknown, sha: string, root: s
   }
   const b = await loadReplayEvidence(root, bEntry, p);
   if (b && b.record.label !== `MODEL-${runId}`) p.push(`baseline record is labelled ${JSON.stringify(b.record.label)}, expected "MODEL-${runId}"`);
+  // The baseline stage must carry no adjustments: the verified baseline is the unmodified oracle run.
+  if (b && (!Array.isArray(b.record.adjustments) || b.record.adjustments.length !== 0 || b.record.renderedCss !== '')) {
+    p.push('baseline record carries adjustments (the baseline stage must be unmodified)');
+  }
   const gate = b ? baselineGate(b, sha) : { reproduced: false, reasons: ['baseline evidence unavailable'] };
   if (gate.reproduced !== baseline.reproduced) p.push('baseline verdict does not match its evidence');
   if (!sameJson(gate.reasons, baseline.reasons)) p.push('baseline reasons do not match its evidence');
@@ -402,6 +471,26 @@ export async function modelVerificationProblems(m: unknown, sha: string, root: s
     if (evd) {
       replays.push(evd);
       if (evd.record.label !== `MODEL-${runId}`) p.push(`replay record is labelled ${JSON.stringify(evd.record.label)}, expected "MODEL-${runId}"`);
+      // Every replay must attest the registered candidate itself: evidence for a different patch
+      // can never verify this row, however internally consistent the row looks.
+      if (rendered !== null && clean !== null) {
+        const gotRaw: unknown = evd.record.adjustments;
+        if (!Array.isArray(gotRaw)) {
+          p.push('replay record adjustments are not a list');
+        } else {
+          const got = gotRaw.map((x) => {
+            const o = ((x ?? {}) as Record<string, unknown>);
+            return [o.selector, o.property, o.value];
+          });
+          const want = clean.map((a) => [a.selector, a.property, a.value]);
+          if (JSON.stringify(got) !== JSON.stringify(want) || evd.record.renderedCss !== rendered) {
+            p.push('replay record does not attest the registered candidate (adjustments or CSS differ from the row)');
+          }
+        }
+        if (evd.record.manifest?.candidateCss?.sha256 === undefined) {
+          p.push('replay record has no staged candidate CSS hash');
+        }
+      }
     }
   }
   if (replays.length !== entries.length) {
@@ -594,6 +683,12 @@ export type ModelVerificationEntry = {
   artifactSha256: string;
   fixtureTreeSource: string;
   fixtureTreeVerification: string;
+  /**
+   * True only when a persisted source attestation (produced by the Zone P provenance check)
+   * exists beside the evidence and agrees with every provenance value in this row. Recomputed
+   * by the verifier from disk; never trusted from the presented row alone.
+   */
+  provenanceAttested: boolean;
   baseline: { reproduced: boolean; reasons: string[]; replay: ReplayEntry };
   replays: ReplayEntry[];
   replaysRequired: number;
@@ -610,6 +705,16 @@ export const MODEL_VERIFICATION_LABEL = 'HAND-AUTHORED CONTROLS PLUS MODEL-PROPO
 const RUN_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const SHA40 = /^[0-9a-f]{40}$/;
 const SHA64 = /^[0-9a-f]{64}$/;
+
+/**
+ * Exact E2 row shape (versioned by `schemaVersion: 2` + `kind`). Additive fields would let a
+ * row smuggle verdict-adjacent claims past the field checks, so any unknown key is refused and
+ * every known key is required. The E1 14-key schema is untouched.
+ */
+const MODEL_VERIFICATION_KEYS = ['schemaVersion', 'kind', 'id', 'provenance', 'candidateId', 'adjustments', 'renderedCss', 'runId', 'verificationSha', 'sourceSha', 'sourceProvenance', 'inputSha256', 'artifactSha256', 'fixtureTreeSource', 'fixtureTreeVerification', 'provenanceAttested', 'baseline', 'replays', 'replaysRequired', 'replaysAttempted', 'replaysPassed', 'status', 'reason', 'complete'];
+/** Persisted beside the namespaced replays by the run function; the verifier binds the presented row to these bytes. */
+const VERIFICATION_FILE = 'verification.json';
+const ATTESTATION_FILE = 'source-provenance.json';
 
 export class UntrustedControlError extends Error {
   constructor(detail: string) {
@@ -936,17 +1041,28 @@ export async function verifyScoreboard(outDir: string): Promise<string[]> {
 
   // ---- model-verification rows: discriminated E2 evidence, verdicts recomputed, never inherited ----
   // The same run id legitimately appears in both model sections (E1 registration row plus E2
-  // verification row for one proposal), so separation is enforced within this section and
-  // against hand-authored rows — never by equating the two model sections.
+  // verification row for one proposal), so id separation is enforced within this section and
+  // against hand-authored rows — never by equating the two sections. But immutable identity
+  // and hashes must agree across sections: differing labels for one run never silently coexist
+  // with an E2 claim. This is metadata reconciliation, not cross-provenance replay inheritance.
   {
     const boardIds = new Set(board.candidates.map((c) => c?.id));
     const handIds = new Set(board.candidates.map((c) => c?.candidateId));
+    const e1ByRun = new Map<string, { sourceSha?: unknown; inputSha256?: unknown; artifactSha256?: unknown }>();
+    for (const m of models) {
+      if (typeof m === 'object' && m !== null) {
+        const e = m as { runId?: unknown; sourceSha?: unknown; inputSha256?: unknown; artifactSha256?: unknown };
+        if (typeof e.runId === 'string') e1ByRun.set(e.runId, e);
+      }
+    }
     const seenVerifications = new Set<string>();
     for (let i = 0; i < verifications.length; i++) {
       const row = verifications[i];
       const where = `model-verification[${i}]`;
       for (const x of await modelVerificationProblems(row, sha, outDir)) problems.push(`${where}: ${x}`);
-      const rec = (typeof row === 'object' && row !== null ? row : {}) as { id?: unknown; candidateId?: unknown };
+      const rec = (typeof row === 'object' && row !== null ? row : {}) as {
+        id?: unknown; candidateId?: unknown; runId?: unknown; sourceSha?: unknown; inputSha256?: unknown; artifactSha256?: unknown;
+      };
       if (typeof rec.id === 'string') {
         if (boardIds.has(rec.id) || seenVerifications.has(rec.id)) {
           problems.push(`${where}: id ${JSON.stringify(rec.id)} is not separate from the board inventory`);
@@ -955,6 +1071,14 @@ export async function verifyScoreboard(outDir: string): Promise<string[]> {
       }
       if (typeof rec.candidateId === 'string' && handIds.has(rec.candidateId)) {
         problems.push(`${where}: candidate id collides with a hand-authored row (model verification never inherits PC-1)`);
+      }
+      if (typeof rec.runId === 'string') {
+        const e1 = e1ByRun.get(rec.runId);
+        if (e1) {
+          if (e1.sourceSha !== rec.sourceSha) problems.push(`${where}: sourceSha differs from the E1 row for the same run`);
+          if (e1.inputSha256 !== rec.inputSha256) problems.push(`${where}: inputSha256 differs from the E1 row for the same run`);
+          if (e1.artifactSha256 !== rec.artifactSha256) problems.push(`${where}: artifactSha256 differs from the E1 row for the same run`);
+        }
       }
     }
   }

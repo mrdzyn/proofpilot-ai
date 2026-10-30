@@ -575,6 +575,8 @@ test('E2 command is narrow and hard-disabled: five explicit SHAs/ids, no env, no
   assert.match(text, /c3-live-meta-001/, ' the real run id is named');
   assert.match(text, /HARD-DISABLED/, 'the hard-disable names itself');
   assert.match(text, /REAL_ARTIFACT_MESSAGE/, 'refusal precedes every file read, stage and Git call');
+  assert.match(text, /sourceAttestation/, 'the Zone P attestation travels with the run and is persisted');
+  assert.match(text, /modelVerificationProblems/, 'the command revalidates the persisted bundle before reporting');
 });
 
 // ---------------------------------------------------------------- mutation tests: the scanner rejects every missed form

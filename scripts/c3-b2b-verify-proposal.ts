@@ -25,7 +25,7 @@ import {
   VERIFICATION_FILE,
   type ModelGit,
 } from '../packages/core/src/model-verification.ts';
-import { CoordinatorBusyError } from '../packages/core/src/index.ts';
+import { CoordinatorBusyError, modelVerificationProblems } from '../packages/core/src/index.ts';
 
 const REAL_ARTIFACT_RUN_ID = 'c3-live-meta-001';
 const REAL_ARTIFACT_MESSAGE =
@@ -124,6 +124,8 @@ try {
     artifactSha256: artifact.artifactHash,
   });
   // Zone E replay path: identity-checked, three fresh stages, verdict from persisted evidence.
+  // The Zone P attestation travels with the run and is persisted beside the evidence.
+  const outDir = path.join(repoRoot, '.proofpilot/c3-b2b', `MODEL-${runId}-${stamp}`);
   entry = await verifyRegisteredProposal({
     repoRoot,
     verificationSha,
@@ -131,18 +133,25 @@ try {
     inputSha256: artifact.inputSha256,
     artifactSha256: artifact.artifactHash,
     proposal: registered,
-    outDir: path.join(repoRoot, '.proofpilot/c3-b2b', `MODEL-${runId}-${stamp}`),
+    outDir,
     lockPath: path.join(repoRoot, '.proofpilot/locks/oracle-4173.lock'),
     coordinatorLockPath: path.join(repoRoot, '.proofpilot/locks/c3-b1-coordinator.lock'),
     git: modelGit,
+    sourceAttestation: provenance,
   });
+  // Never report a certified verification from the in-memory row alone: revalidate the
+  // persisted bundle (verification.json, attestation, replay evidence) before printing.
+  const revalidation = await modelVerificationProblems(entry, verificationSha as string, outDir);
+  if (revalidation.length > 0) {
+    fail(2, `refused: persisted evidence failed independent revalidation: ${revalidation.join('; ')}`);
+  }
   console.log(`\n=== C3-B2B model verification ${runId} at ${verificationSha} ===`);
   console.log(`baseline: ${entry.baseline.reproduced ? 'REPRODUCED' : `NOT REPRODUCED: ${entry.baseline.reasons.join('; ')}`}`);
   console.log(`replays: ${entry.replaysPassed}/${entry.replaysAttempted} passed, verdict ${entry.status}${entry.reason ? ` (${entry.reason})` : ''}`);
   console.log(`candidate: ${entry.candidateId} (provenance-tagged; never inherits PC-1)`);
   console.log(`anchors: source fixture ${entry.fixtureTreeSource}, verification fixture ${entry.fixtureTreeVerification}`);
   console.log(`provenance: source ${provenance.classes.sourceHead}, input ${provenance.classes.inputSha256}`);
-  console.log(`evidence: ${path.join(repoRoot, '.proofpilot/c3-b2b', `MODEL-${runId}-${stamp}`, `MODEL-${runId}`, VERIFICATION_FILE)}`);
+  console.log(`evidence: ${path.join(outDir, `MODEL-${runId}`, VERIFICATION_FILE)}`);
 } catch (e) {
   if (e instanceof ArtifactError || e instanceof SourceProvenanceError || e instanceof ModelProposalError || e instanceof ModelVerificationError) {
     fail(2, `refused: ${e.message}`);
