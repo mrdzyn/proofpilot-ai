@@ -270,6 +270,25 @@ export type CandidateEntry = {
 export const MODEL_BOARD_LABEL = 'HAND-AUTHORED CONTROLS PLUS REGISTERED MODEL-PROPOSAL ROWS — NOT RUN, NOT VERIFIED';
 
 /**
+ * Exact E1 row shape. Additive verdict fields (`status`, `replaysPassed`, ...) would let a
+ * consumer present a fake model verdict with zero replays, so any unknown key is refused and
+ * every known key is required. (Canonical: produced by `modelProposalEntryOf` in
+ * model-proposal.ts, which must emit byte-identical text and is pinned by unit tests.)
+ */
+const MODEL_ROW_KEYS = ['id', 'description', 'provenance', 'candidateId', 'adjustments', 'renderedCss', 'runId', 'approvedSha', 'sourceSha', 'sourceProvenance', 'inputSha256', 'artifactSha256', 'replays', 'note'];
+export const MODEL_ROW_NOTE = 'E1 registration only: no replay has run and this row claims no verdict.';
+export const modelRowDescriptionOf = (runId: string, n: number): string =>
+  `Stored model proposal ${runId}: ${n} adjustment(s), registered for isolated verification; never run, never verified`;
+/**
+ * Verdict language that must never appear in a permitted free-text field. Status literals are
+ * matched case-sensitively (the canonical texts legitimately contain lowercase "verified" in
+ * "never verified"); passed-replay phrases are matched case-insensitively.
+ */
+const VERDICT_LITERAL = /\bVERIFIED\b|\bORACLE_PASS\b|\bPATCH_FAILED\b|\bPATCH_REJECTED\b/;
+const VERDICT_PHRASE = /\bpassed\b|\b3\s*\/\s*3\b/i;
+const carriesVerdictLanguage = (s: string): boolean => VERDICT_LITERAL.test(s) || VERDICT_PHRASE.test(s);
+
+/**
  * A registered stored-model-proposal row (C3-B2B E1). It lives in its own scoreboard section,
  * never in `candidates`, carries the provenance-tagged identity, and claims no verdict: E1
  * registers, it never runs. `sourceProvenance` is always the literal `operator-reported`; the
@@ -320,14 +339,28 @@ export function modelRowProblems(m: unknown, sha: string): string[] {
   if (typeof m !== 'object' || m === null || Array.isArray(m)) return ['model-proposal row is not an object'];
   const p: string[] = [];
   const r = m as Record<string, unknown>;
+  for (const k of Object.keys(r)) if (!MODEL_ROW_KEYS.includes(k)) p.push(`unexpected model-proposal field: ${k}`);
+  for (const k of MODEL_ROW_KEYS) if (!(k in r)) p.push(`missing model-proposal field: ${k}`);
   if (r.provenance !== 'model-proposal') p.push(`provenance is ${JSON.stringify(r.provenance)}, expected "model-proposal"`);
   if (typeof r.runId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(r.runId)) {
     p.push('runId is missing or malformed');
   } else if (r.id !== `MODEL-${r.runId}`) {
     p.push(`id is ${JSON.stringify(r.id)}, expected "MODEL-${r.runId}"`);
   }
-  if (typeof r.description !== 'string' || r.description.length === 0 || r.description.length > 300) {
+  // Canonical free text only (recomputed when possible): a row must carry the exact producer
+  // strings, and no verdict language may appear in either text field, so neither field can
+  // launder a model result the replays never produced.
+  const canonicalDescription =
+    typeof r.runId === 'string' && Array.isArray(r.adjustments) ? modelRowDescriptionOf(r.runId, r.adjustments.length) : null;
+  if (typeof r.description !== 'string') {
     p.push('description is missing or oversized');
+  } else {
+    if (canonicalDescription !== null && r.description !== canonicalDescription) {
+      p.push('description is not the canonical E1 registration text (free-text verdict claims are refused)');
+    }
+    if (r.description.length === 0 || r.description.length > 300 || carriesVerdictLanguage(r.description)) {
+      p.push('description is missing, oversized or carries verdict language');
+    }
   }
   if (r.sourceProvenance !== 'operator-reported') p.push('source revision must stay labelled operator-reported, never verified');
   if (typeof r.sourceSha !== 'string' || !/^[0-9a-f]{40}$/.test(r.sourceSha)) p.push('sourceSha is missing or malformed');
@@ -384,6 +417,10 @@ export function modelRowProblems(m: unknown, sha: string): string[] {
     p.push('model-proposal replays are not authorized before E2 (E1 registers only)');
   }
   if (typeof r.note !== 'string' || r.note.length === 0) p.push('note is missing');
+  else {
+    if (r.note !== MODEL_ROW_NOTE) p.push('note is not the canonical E1 registration text (free-text verdict claims are refused)');
+    if (carriesVerdictLanguage(r.note)) p.push('note carries verdict language');
+  }
   return p;
 }
 

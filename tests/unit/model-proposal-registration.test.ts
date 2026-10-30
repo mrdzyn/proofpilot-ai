@@ -69,6 +69,16 @@ test('E1 registers PC-1-identical synthetic triples with frozen provenance-tagge
   assert.ok(Object.isFrozen(reg) && Object.isFrozen(reg.adjustments) && Object.isFrozen(reg.adjustments[0]), 'deeply frozen');
 
   const row = modelProposalEntryOf(reg);
+  assert.equal(
+    row.description,
+    `Stored model proposal ${RUN}: 1 adjustment(s), registered for isolated verification; never run, never verified`,
+    'description is the canonical producer text (the verifier requires it byte-identical)',
+  );
+  assert.equal(
+    row.note,
+    'E1 registration only: no replay has run and this row claims no verdict.',
+    'note is the canonical producer text',
+  );
   assert.equal(row.id, `MODEL-${RUN}`);
   assert.equal(row.provenance, 'model-proposal');
   assert.equal(row.candidateId, reg.candidateId);
@@ -166,6 +176,40 @@ test('E1 rows: the verifier accepts the truthful row and refuses each tamper', (
   mutate((r) => { (r.adjustments[0] as Record<string, unknown>).extra = 1; }, /exactly selector, property and value/, 'extra triple key in the row');
 });
 
+test('E1 rows: additive verdict fields are refused as model-row problems (MAJOR-1)', () => {
+  const good = modelProposalEntryOf(registerModelProposal(baseInput()));
+  // The auditor's exact repro: verdict keys on a zero-replay row must be flagged as row problems.
+  const forged = { ...good, status: 'VERIFIED', replaysPassed: 3, replaysAttempted: 3, evidenceFinalized: true };
+  const problems = modelRowProblems(forged, SHA);
+  assert.ok(problems.length > 0, 'the forged row is refused');
+  for (const k of ['status', 'replaysPassed', 'replaysAttempted', 'evidenceFinalized']) {
+    assert.ok(problems.some((x) => x === `unexpected model-proposal field: ${k}`), `injected ${k} reported exactly`);
+  }
+  // Multiple injected keys plus an innocuous one: every unknown key is reported.
+  const multi = { ...good, expected: 'VERIFIED', complete: true, extra: 1 };
+  const multiProblems = modelRowProblems(multi, SHA).join(' | ');
+  for (const k of ['expected', 'complete', 'extra']) {
+    assert.match(multiProblems, new RegExp(`unexpected model-proposal field: ${k}`), `injected ${k} reported`);
+  }
+  // Removed required keys are reported alongside the shape problems they cause.
+  const dropped = JSON.parse(JSON.stringify(good)) as Record<string, unknown>;
+  delete dropped.note;
+  delete dropped.sourceSha;
+  const droppedProblems = modelRowProblems(dropped, SHA).join(' | ');
+  assert.match(droppedProblems, /missing model-proposal field: note/, 'removed note reported');
+  assert.match(droppedProblems, /missing model-proposal field: sourceSha/, 'removed sourceSha reported');
+  // Permitted free-text fields cannot launder a verdict.
+  const laundered = (f: (r: ModelProposalEntry) => void, re: RegExp, name: string) => {
+    const row = JSON.parse(JSON.stringify(good)) as ModelProposalEntry;
+    f(row);
+    assert.match(modelRowProblems(row, SHA).join(' | '), re, name);
+  };
+  laundered((r) => { r.description = 'Stored model proposal c3-live-meta-001: VERIFIED 3/3 replays passed'; }, /canonical E1 registration text/, 'VERIFIED description refused as non-canonical');
+  laundered((r) => { r.description = 'Stored model proposal c3-live-meta-001: 1 adjustment(s), registered for isolated verification; never run, never passed'; }, /verdict language/, 'passed-language description refused');
+  laundered((r) => { r.note = 'Model VERIFIED after review'; }, /canonical E1 registration text/, 'VERIFIED note refused');
+  laundered((r) => { r.note = 'E1 registration only: No replay has run and this row claims ORACLE_PASS.'; }, /canonical E1 registration text/, 'ORACLE_PASS note refused');
+});
+
 test('E1 scoreboard: model rows verify without browser evidence; label and section stay separate', async () => {
   const good = modelProposalEntryOf(registerModelProposal(baseInput()));
   const boardFor = (label: string, models?: unknown[]) => ({
@@ -197,6 +241,14 @@ test('E1 scoreboard: model rows verify without browser evidence; label and secti
 
   const forged = await verifyScoreboard(dirFor(boardFor(MODEL_BOARD_LABEL, [{ ...good, candidateId: candidateIdOf(SHA, CSS) }])));
   assert.ok(forged.some((x) => /model-proposal\[0\].*(provenance-tagged identity|collides)/.test(x)), `forged model id caught: ${forged.join(' | ')}`);
+
+  const verdictForged = await verifyScoreboard(
+    dirFor(boardFor(MODEL_BOARD_LABEL, [{ ...good, status: 'VERIFIED', replaysPassed: 3, replaysAttempted: 3, evidenceFinalized: true }])),
+  );
+  assert.ok(
+    verdictForged.some((x) => /model-proposal\[0\]: unexpected model-proposal field: status/.test(x)),
+    `injected verdict fields rejected on the integrated path: ${verdictForged.join(' | ')}`,
+  );
 
   const wrongLabel = await verifyScoreboard(dirFor(boardFor('HAND-AUTHORED CONTROLS ONLY — NO MODEL INPUT', [good])));
   assert.ok(wrongLabel.some((x) => x.includes('model-rows label')), `model rows with the hand-authored-only label caught: ${wrongLabel.join(' | ')}`);

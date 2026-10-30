@@ -16,7 +16,7 @@
 // assertHandAuthoredControls still refuses everything not in the in-code trusted set, including
 // objects produced here.
 import { CssAdjustmentError, renderCssAdjustments, MAX_ADJUSTMENTS, type CssAdjustment } from './css-adjustments.ts';
-import { candidateIdOf, type ModelProposalEntry } from './candidate-coordinator.ts';
+import { candidateIdOf, MODEL_ROW_NOTE, modelRowDescriptionOf, type ModelProposalEntry } from './candidate-coordinator.ts';
 
 export type ModelProposalErrorCode =
   | 'NOT_A_LIST'
@@ -190,7 +190,9 @@ export function modelProposalEntryOf(reg: unknown): ModelProposalEntry {
   assertRegisteredModelProposal(reg);
   return {
     id: `MODEL-${reg.runId}`,
-    description: `Stored model proposal ${reg.runId}: ${reg.adjustments.length} adjustment(s), registered for isolated verification; never run, never verified`,
+    // Canonical text shared with the verifier (MODEL_ROW_NOTE / modelRowDescriptionOf): the only
+    // strings a truthful row may carry, so free text can never launder a verdict.
+    description: modelRowDescriptionOf(reg.runId, reg.adjustments.length),
     provenance: 'model-proposal',
     candidateId: reg.candidateId,
     adjustments: reg.adjustments.map((a) => ({ ...a })),
@@ -202,7 +204,7 @@ export function modelProposalEntryOf(reg: unknown): ModelProposalEntry {
     inputSha256: reg.inputSha256,
     artifactSha256: reg.artifactSha256,
     replays: [],
-    note: 'E1 registration only: no replay has run and this row claims no verdict.',
+    note: MODEL_ROW_NOTE,
   };
 }
 
