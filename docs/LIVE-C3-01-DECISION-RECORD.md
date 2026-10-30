@@ -4,7 +4,7 @@
 >
 > **Owner decision (authoritative):** https://github.com/mrdzyn/proofpilot-ai/pull/6#issuecomment-6496850990 — posted by the repository owner (`mrdzyn`) on October 29, 2026, 12:36:38 UTC. The values in section 1 are the approved values; nothing is added to them.
 >
-> **What the approval was NOT:** at the time it was given it was not authorization to make a provider request now; a request was permitted only after the activation implementation passed independent audit (PR #14 and the CI-compatibility PR #16), was merged and revision-pinned in a separate pin-only commit (PR #17), and the owner completed the operator preflight and per-run confirmation. It never covered a second attempt. The activation revision pin lives only in `config/live-activation.json` (that file, not this document, is authoritative; it is recorded by a separate pin-only commit).
+> **What the approval was NOT:** at the time it was given it was not authorization to make a provider request now; a request was permitted only after the activation implementation passed independent audit (PR #14 and the CI-compatibility PR #16), was merged and revision-pinned in a separate pin-only commit (PR #17), and the owner completed the operator preflight and per-run confirmation. It never covered a second attempt. **A credit balance is not permission to spend.** The activation revision pin lives only in `config/live-activation.json` (that file, not this document, is authoritative; it is recorded by a separate pin-only commit).
 >
 > **Not approved (unchanged):** Baseten or Modal calls, additional attempts, automated retries, staging or execution of model-generated CSS, C3-B2B verification, the report UI (UI-C3-01), hosting or deployment (HOST-C3-01).
 
