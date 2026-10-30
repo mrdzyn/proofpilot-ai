@@ -912,4 +912,29 @@ Re-audit; owner merge decision; then C3-B2B approval decision and the submission
 ### Next action
 GPT-6 exact-head review; owner merge decision; separate owner decision on P2 and on executing the real proposal.
 
+## Handoff: PP-META-I2-C3-B2B-P1-A2
+
+- **Task / phase:** C3-B2B P1 MAJOR-1 remediation — fail-closed import scanner (GPT-6 audit of PR #19)
+- **From:** Implementation agent (Muse Code)
+- **To:** GPT-6 independent exact-head re-audit, then project owner
+- **Branch:** `phase/pp-meta-c3-b2b-p1-provenance-extraction` (same Draft PR #19, new HEAD)
+- **State:** READY FOR RE-REVIEW. Test-only change plus one strictly-needed production micro-change (see below). No activation, quota, authorization, credential, reservation, parser or runner change; the stored proposal was not loaded or executed; no provider call; no merge.
+
+### Completed
+- `tests/security/provenance-boundary.test.ts` rewritten around a complete fail-closed scanner (placeholder masking of comments/strings/templates with `${}` kept as code; every remaining `import`/`export`/`require` keyword consumed or recorded; missing targets and unterminated literals are violations). Policy: exact file allow-list (unchanged, never expanded), permitted builtins, read-only fs members, zero dynamic imports, zero unsupported forms, blanket default/namespace ban, `node:fs` ban. Nine mutation tests (double-quoted, side-effect, literal/computed/template dynamic, aliased write-capable fs, default/namespace, `require()`, import attributes, type-only positive, comment/string trap) plus the preserved pipeline negative control.
+- `packages/provenance/src/provenance-input.ts`: the single default import (`node:path`) converted to named imports so the blanket ban holds; behavior re-verified (all provenance/equivalence suites green, golden hash unchanged). No other production file touched.
+- `tests/unit/provenance-equivalence.test.ts`: pinned golden request hash for the deterministic builder.
+
+### Validation
+- `pnpm lint` clean; `pnpm typecheck` clean; `pnpm test:security` full suite PASS (14/14 boundary tests).
+- `pnpm test:unit`: all P1 suites pass including the golden test; only the pre-existing sandbox port-bind (`EPERM`) coordinator/stage failures, already proven identical on the untouched base.
+- Targeted evidence: 14 boundary + 10 unit tests green (9 pre-existing P1 unit + 1 golden).
+
+### Continuation notes
+- TypeScript 7 here is the native port with no compiler JS API, so the audit's preferred AST analysis was implemented as an equivalently complete fail-closed source parser (stated in the test header); every missed form from the audit is a mutation test.
+- STOP after remediation: no P2/E1/E2, no real proposal execution.
+
+### Next action
+GPT-6 focused re-audit of the new HEAD; owner merge decision.
+
 <!-- HANDOFF_ENTRIES_END -->

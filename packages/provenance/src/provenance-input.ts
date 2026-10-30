@@ -10,7 +10,7 @@
 // stages or verifies a proposal.
 import { createHash } from 'node:crypto';
 import { readFile, readdir, stat } from 'node:fs/promises';
-import path from 'node:path';
+import { basename, isAbsolute, join, relative, sep } from 'node:path';
 import { assessSymptom, parseSymptom } from '../../core/src/symptom.ts';
 import type { Symptom } from '../../core/src/symptom.ts';
 import { certifyF01Baseline, classifyF01Baseline, extractOracleResults, F01_MOBILE_TEST, F01_OBSERVATION_ATTACHMENT } from '../../core/src/f01-baseline.ts';
@@ -146,26 +146,26 @@ const readJson = async (file: string): Promise<unknown> => JSON.parse(await read
 
 async function listFiles(dir: string): Promise<string[]> {
   const entries = await readdir(dir, { withFileTypes: true, recursive: true });
-  return entries.filter((e) => e.isFile()).map((e) => path.relative(dir, path.join(e.parentPath, e.name)).split(path.sep).join('/'));
+  return entries.filter((e) => e.isFile()).map((e) => relative(dir, join(e.parentPath, e.name)).split(sep).join('/'));
 }
 
 /** A relative path under `dir` with no traversal; anything else is evidence tampering. */
 function inside(dir: string, rel: string): string {
-  if (typeof rel !== 'string' || rel.length === 0 || path.isAbsolute(rel) || rel.split(/[\\/]/).includes('..')) return fail('BASELINE_TAMPERED', 'an evidence path escapes its run directory');
-  return path.join(dir, rel);
+  if (typeof rel !== 'string' || rel.length === 0 || isAbsolute(rel) || rel.split(/[\\/]/).includes('..')) return fail('BASELINE_TAMPERED', 'an evidence path escapes its run directory');
+  return join(dir, rel);
 }
 
 export async function loadCertifiedBaselineFacts(opts: { repoRoot: string; head: string; fixtureTree: string }): Promise<{ facts: TrustedReproductionFacts; runId: string }> {
   const { repoRoot, head, fixtureTree } = opts;
   if (!SHA1.test(head) || !SHA1.test(fixtureTree)) return fail('BASELINE_REVISION', 'the current revision or fixture tree is not a full Git object id');
-  const runsDir = path.join(repoRoot, '.proofpilot/runs');
+  const runsDir = join(repoRoot, '.proofpilot/runs');
   const names = (await readdir(runsDir).catch(() => [] as string[])).filter((n) => BASELINE_DIR.test(n)).sort().reverse();
   let sawRevision = false;
   for (const name of names) {
-    const runDir = path.join(runsDir, name);
+    const runDir = join(runsDir, name);
     let summary: Record<string, any>;
     try {
-      const raw = await readJson(path.join(runDir, 'baseline-summary.json'));
+      const raw = await readJson(join(runDir, 'baseline-summary.json'));
       if (!isRecord(raw)) continue;
       summary = raw;
     } catch {
@@ -201,7 +201,7 @@ async function verifyBaselineRun(runDir: string, name: string, summary: Record<s
   if (!recorded.has('oracle-report.json')) fail('BASELINE_TAMPERED', 'the oracle report is not among the recorded artifacts');
 
   // 2. re-derive the verdict from the oracle report and its observation attachments; the summary's own verdict is not trusted
-  const report = JSON.parse(await readFile(path.join(runDir, 'oracle-report.json'), 'utf8'));
+  const report = JSON.parse(await readFile(join(runDir, 'oracle-report.json'), 'utf8'));
   const results = extractOracleResults(report);
   for (const r of results) {
     const att = r.attachments.find((a) => a.name === F01_OBSERVATION_ATTACHMENT && a.path);
@@ -209,9 +209,9 @@ async function verifyBaselineRun(runDir: string, name: string, summary: Record<s
       r.observation = null;
       continue;
     }
-    const marker = att.path.split(path.sep).join('/').lastIndexOf('/test-results/');
-    const rel = path.isAbsolute(att.path) ? (att.path.startsWith(runDir + path.sep) ? path.relative(runDir, att.path) : marker >= 0 ? att.path.split(path.sep).join('/').slice(marker + 1) : '') : att.path;
-    if (!recorded.has(rel.split(path.sep).join('/'))) fail('BASELINE_TAMPERED', 'an observation attachment is outside the recorded artifact set');
+    const marker = att.path.split(sep).join('/').lastIndexOf('/test-results/');
+    const rel = isAbsolute(att.path) ? (att.path.startsWith(runDir + sep) ? relative(runDir, att.path) : marker >= 0 ? att.path.split(sep).join('/').slice(marker + 1) : '') : att.path;
+    if (!recorded.has(rel.split(sep).join('/'))) fail('BASELINE_TAMPERED', 'an observation attachment is outside the recorded artifact set');
     r.observation = JSON.parse(await readFile(inside(runDir, rel), 'utf8')) as F01Observation;
   }
   const classification = classifyF01Baseline(results);
@@ -229,7 +229,7 @@ export async function loadCertifiedProposalInput(opts: { repoRoot: string; head:
   const { facts, runId: baselineRunId } = await loadCertifiedBaselineFacts({ repoRoot, head, fixtureTree });
 
   // the video analysis: LIVE evidence only, a completed Meta response, a valid clip
-  const file = path.join(repoRoot, '.proofpilot/analysis', analysisId, 'analysis.json');
+  const file = join(repoRoot, '.proofpilot/analysis', analysisId, 'analysis.json');
   const doc = await readJson(file).catch(() => null);
   if (!isRecord(doc)) return fail('ANALYSIS_MISSING', `no analysis record at .proofpilot/analysis/${analysisId}/analysis.json`);
   if (doc.schemaVersion !== 1 || !isRecord(doc.result)) return fail('ANALYSIS_INVALID', 'the analysis record has an unexpected shape');
@@ -242,14 +242,14 @@ export async function loadCertifiedProposalInput(opts: { repoRoot: string; head:
   if (typeof videoSha !== 'string' || !SHA256.test(videoSha) || typeof duration !== 'number' || !Number.isFinite(duration) || duration <= 0) return fail('ANALYSIS_INVALID', 'the analysis does not identify its video');
 
   // the video is bound to a certified exact-SHA mobile-defect recording of THIS fixture
-  const recRoot = path.join(repoRoot, '.proofpilot/recordings');
+  const recRoot = join(repoRoot, '.proofpilot/recordings');
   let recordingSet: string | null = null;
   for (const set of (await readdir(recRoot).catch(() => [] as string[])).filter((n) => RECORDING_DIR.test(n)).sort().reverse()) {
-    const meta = await readJson(path.join(recRoot, set, 'mobile-defect/recording.json')).catch(() => null);
+    const meta = await readJson(join(recRoot, set, 'mobile-defect/recording.json')).catch(() => null);
     if (!isRecord(meta) || !isRecord(meta.video) || meta.video.sha256 !== videoSha) continue;
     const src = meta.source;
     if (meta.kind !== 'mobile-defect' || meta.outcomeAsExpected !== true || !isRecord(src) || src.certifiedExactSha !== true || src.fixtureTree !== fixtureTree) return fail('RECORDING_NOT_CERTIFIED', 'the recording of this video is not a certified exact-SHA recording of the current fixture');
-    const mp4 = await readFile(path.join(recRoot, set, 'mobile-defect', path.basename(String(meta.video.path)))).catch(() => null);
+    const mp4 = await readFile(join(recRoot, set, 'mobile-defect', basename(String(meta.video.path)))).catch(() => null);
     if (!mp4 || sha256(mp4) !== videoSha || mp4.length !== meta.video.bytes) return fail('RECORDING_TAMPERED', 'the recorded video file is missing or changed');
     recordingSet = set;
     break;

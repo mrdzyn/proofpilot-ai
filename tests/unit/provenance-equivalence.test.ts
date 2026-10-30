@@ -6,8 +6,9 @@ import path from 'node:path';
 import * as neutral from '../../packages/provenance/src/provenance-input.ts';
 import * as legacyInput from '../../packages/inference/src/live-input.ts';
 import * as legacyBarrel from '../../packages/inference/src/index.ts';
-import { tempDir } from '../helpers.ts';
-import { edit, writeEvidence } from '../support/live-evidence.ts';
+import { parseSymptom } from '../../packages/core/src/index.ts';
+import { tempDir, validSymptom } from '../helpers.ts';
+import { edit, MOBILE_OBS, writeEvidence } from '../support/live-evidence.ts';
 
 const HEAD = 'c'.repeat(40);
 const TREE = 'd'.repeat(40);
@@ -17,6 +18,15 @@ test('the legacy path re-exports the exact neutral objects (delegation, not reim
     assert.strictEqual((legacyInput as Record<string, unknown>)[name], (neutral as Record<string, unknown>)[name], `live-input.ts ${name}`);
     assert.strictEqual((legacyBarrel as Record<string, unknown>)[name], (neutral as Record<string, unknown>)[name], `inference index ${name}`);
   }
+});
+
+test('the deterministic request builder is pinned: a fixed symptom and facts yield one golden hash', () => {
+  const symptom = parseSymptom(validSymptom(), { videoDurationSec: 10 });
+  const facts = neutral.trustedFactsFromBaseline(MOBILE_OBS, true);
+  const req = neutral.buildProposalRequest({ symptom, facts });
+  assert.equal(req.chars, 1942);
+  assert.equal(req.inputSha256, 'b7525d94da063e4e014db685b5b6bda4b12ab98716443934e1b081a0c1be5f6d');
+  assert.deepEqual(legacyBarrel.buildProposalRequest({ symptom, facts }), req, 'the legacy path builds the identical golden request');
 });
 
 test('the owner CLI still wires the same two provenance functions from the same two modules', async () => {
