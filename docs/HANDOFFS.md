@@ -853,4 +853,23 @@ GPT-6 re-audit; the owner separately decides merge and the later operational ste
 ### Next action
 GPT-6 audit; owner decides merge (squash commit = NEW activation commit A2). Then recompute A2's digest and prepare a new pin-only Draft PR A2'. PR #15 (pin for the old A) must stay unmerged and be retired.
 
+## Handoff: PP-META-LIVE-C3-01-CLOSURE-A1
+
+- **Task / phase:** LIVE-C3-01 closure, hackathon documentation and submission readiness (documentation only)
+- **From:** Implementation agent (Claude Code, Claude Sonnet 5.5)
+- **To:** GPT-6 independent review, then project owner
+- **Branch:** `docs/pp-meta-live-c3-01-closure-submission` from `main` `564c56f59afc8b637dd8814078a98370e5ba2d97`
+- **State:** READY FOR REVIEW. Documentation only; no `config/`, `packages/`, `scripts/`, tests, workflows, fixtures, verifier or staging change; pin, quota and approvals untouched.
+
+### Completed
+- `docs/LIVE-C3-01-EXECUTION-REPORT.md` (facts labelled verified / recomputed / operator-reported; the stored artifact read read-only; input hash and size independently recomputed; stored adjustment re-validated), `docs/META-HACKATHON-SUBMISSION.md`, draft `tasks/PP-META-I2-C3-B2B.md` (NOT APPROVED), `docs/STATUS.md`, decision record, activation checklist and README corrected.
+- Consequence recorded: merging this PR makes the repository a non-pin-only descendant of A2, so it is no longer eligible for any live attempt (intended; not repaired).
+
+### Open items for the reviewer / owner
+- Operator-reported facts (HEAD, reservation settled / exhausted, no retry) rest on the operator's word; the owner may attach the private terminal transcript out of band.
+- Submission portal fields, video, final links: PENDING. C3-B2B: owner decision and independent security review.
+
+### Next action
+Review and owner merge decision; then the owner chooses between C3-B2B and submitting with the honest "proposal obtained, verification next" story.
+
 <!-- HANDOFF_ENTRIES_END -->

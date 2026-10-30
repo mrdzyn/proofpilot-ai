@@ -55,6 +55,8 @@ Run it yourself (no network, no secrets read): `node scripts/c3-proposal-preflig
 
 State: LIVE-C3-01 **APPROVED for activation preparation** by the owner on October 29, 2026 (https://github.com/mrdzyn/proofpilot-ai/pull/6#issuecomment-6496850990). Activation implementation: pending independent review (Draft PR). Activation revision pin: see `config/live-activation.json` (`null` = NOT RECORDED). Real provider invocation: **NOT AUTHORIZED YET**. C3-B2B, UI-C3-01 and HOST-C3-01: NOT APPROVED.
 
+> **Update (2026-10-29/30):** every step below was carried out for the one approved attempt: audit and merge of PRs #14 and #16, pin-only PR #17, operator preflight, approval, credential injection, one request (`c3-live-meta-001`, `PROPOSAL_ACCEPTED`, `UNTRUSTED PROPOSAL — NOT VERIFIED`). The lifetime quota is **spent**. The checklist is retained as the record of the procedure; **it grants nothing**. A further attempt would need a new owner decision, a new activation commit and a new pin-only commit. See `docs/LIVE-C3-01-EXECUTION-REPORT.md`.
+
 - [x] C3-LIVE-01A, C3-LIVE-01B0 and C3-LIVE-01B-PREP merged after independent PASS (PRs #11, #12, #13).
 - [x] Owner recorded the LIVE-C3-01 decision (Meta only, `api.meta.ai`, `muse-spark-1.3`, 1 attempt in total, input <= 12,000 characters, output <= 3,072 tokens including reasoning, text only, strict JSON, low reasoning, no retries, no fallback, uncertain results spend the attempt, mandatory single-use operator authorization).
 - [ ] C3-LIVE-01B Draft PR: independent GPT-6 exact-head audit PASS.
