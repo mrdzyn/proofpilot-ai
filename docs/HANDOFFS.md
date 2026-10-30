@@ -954,4 +954,27 @@ GPT-6 focused re-audit of the new HEAD; owner merge decision.
 ### Next action
 GPT-6 focused re-audit of the new HEAD; owner merge decision.
 
+## Handoff: PP-META-I2-C3-B2B-P2-A1
+
+- **Task / phase:** C3-B2B slice P2 — artifact validation + source provenance (specification sections 3.1–3.4)
+- **From:** Implementation agent (Muse Code)
+- **To:** GPT-6 independent exact-head review, then project owner
+- **Branch:** `phase/pp-meta-c3-b2b-p2-validation` from `main` `31fd73141a8e0bbdf4cd61bf228308bd59855d67` (PR #19 squash merge)
+- **State:** READY FOR REVIEW. No activation, quota, authorization, credential, reservation, parser, runner, registration, staging or browser change; the stored `c3-live-meta-001` artifact was not loaded or executed; no provider call; no merge. Owner authorization covers P2 implementation and offline synthetic testing only.
+
+### Completed
+- `packages/provenance/src/proposal-artifact.ts` (new): read-only loader (run-id grammar, fixed evidence path, symlink/regular/permission/ownership/size refusals) + fail-closed structural pre-scan (depth 3, duplicate and pollution keys) + exact 21-key schema validation with typed codes + canonical rebuild through the host grammar with byte-identical `renderedCss`; frozen output.
+- `packages/provenance/src/source-provenance.ts` (new): explicit source-revision parameters, certified-evidence recomputation (conflated revisions refused), local commit/ancestry/tree-blob checks via an injected narrow `SourceGit` interface, per-field provenance classes.
+- `tests/security/provenance-boundary.test.ts`: Zone P entries unioned (two new modules + the core parser leaf; `lstat` added to the read-only member list, reviewed); shim/negative-control/Zone E assertions preserved.
+- `tests/unit/proposal-artifact.test.ts` (6), `tests/unit/source-provenance.test.ts` (5) and `tests/support/proposal-artifact-fixture.ts` (synthetic shape mirroring the real sanitized artifact); `docs/STATUS.md` updated.
+- Prerequisite confirmed: PR #19 squash-merged, P2 branch starts clean at `31fd731`.
+
+### Validation
+- `pnpm lint` clean; `pnpm typecheck` clean; `pnpm test:security` 134/134 PASS (16/16 boundary).
+- `pnpm test:unit` 336/352 PASS (11 new P2 tests); only the 16 pre-existing sandbox port-bind (`EPERM`) coordinator/stage failures, already proven identical on the untouched base.
+- No E1/E2: no registration, staging, browser or scoreboard work; ownership refusal lacks a negative mutation (needs privileges).
+
+### Next action
+GPT-6 exact-head review; owner merge decision; E1/E2 stay unstarted.
+
 <!-- HANDOFF_ENTRIES_END -->

@@ -25,6 +25,9 @@ const LEGACY_PIPELINE = 'packages/inference/src/patch-proposal.ts';
  *  to make a test pass. */
 const ALLOW_FILES = [
   'packages/provenance/src/provenance-input.ts',
+  'packages/provenance/src/proposal-artifact.ts',
+  'packages/provenance/src/source-provenance.ts',
+  'packages/core/src/patch-proposal.ts',
   'packages/core/src/symptom.ts',
   'packages/core/src/f01-baseline.ts',
   'packages/core/src/status.ts',
@@ -33,8 +36,9 @@ const ALLOW_FILES = [
   'packages/intake/src/errors.ts',
 ].sort();
 const ALLOW_BUILTINS = ['node:crypto', 'node:fs/promises', 'node:path'].sort();
-/** Read-only filesystem members: a write here would break the read-only zone. */
-const ALLOW_FS_MEMBERS = ['readFile', 'readdir', 'stat'].sort();
+/** Read-only filesystem members: a write here would break the read-only zone. `lstat` (P2, reviewed) reads
+ *  metadata only and is required to refuse symlinks, which `stat` follows. */
+const ALLOW_FS_MEMBERS = ['lstat', 'readFile', 'readdir', 'stat'].sort();
 
 const read = (rel: string) => readFileSync(path.join(root, rel), 'utf8');
 /** Source without comments, so prose that mentions a capability cannot trip a code-shape check. */
@@ -412,8 +416,34 @@ function zonePViolations(c: Closure): string[] {
   return v;
 }
 
+/** Every Zone P production entry module; their closures are unioned for the allow-list check. */
+const ZONE_P_ENTRIES = [MODULE, 'packages/provenance/src/proposal-artifact.ts', 'packages/provenance/src/source-provenance.ts'];
+
+function zonePUnion(): { union: Closure; closures: Closure[] } {
+  const closures = ZONE_P_ENTRIES.map(closureOf);
+  const union: Closure = { files: [], builtins: [], bare: [], dynamic: [], unsupported: [], defaultImports: [], namespaceImports: [], fsModule: [], fsMembers: [] };
+  const add = (list: string[], x: string) => { if (!list.includes(x)) list.push(x); };
+  for (const c of closures) {
+    for (const f of c.files) add(union.files, f);
+    for (const b of c.builtins) add(union.builtins, b);
+    for (const b of c.bare) add(union.bare, b);
+    for (const d of c.dynamic) add(union.dynamic, d);
+    for (const u of c.unsupported) add(union.unsupported, u);
+    for (const d of c.defaultImports) add(union.defaultImports, d);
+    for (const n of c.namespaceImports) add(union.namespaceImports, n);
+    for (const f of c.fsModule) add(union.fsModule, f);
+    for (const m of c.fsMembers) add(union.fsMembers, m);
+  }
+  union.files.sort();
+  union.builtins.sort();
+  union.bare.sort();
+  union.fsMembers.sort();
+  return { union, closures };
+}
+
 test('Zone P has exactly the allow-listed transitive import set: no network, provider, credential, env, process or write capability', () => {
-  const c = closureOf(MODULE);
+  const { union: c, closures } = zonePUnion();
+  for (const entry of closures) assert.deepEqual(zonePViolations(entry), [], 'each Zone P entry is individually clean');
   assert.deepEqual(c.files, ALLOW_FILES, 'the transitive file set is exactly the allow-list (never expanded)');
   assert.deepEqual(c.builtins, ALLOW_BUILTINS, 'only crypto, read-only fs and path builtins');
   assert.deepEqual(zonePViolations(c), [], 'no bare, dynamic, unsupported, default/namespace, node:fs or write-capable fs import');
@@ -431,8 +461,9 @@ test('Zone P has exactly the allow-listed transitive import set: no network, pro
 
 test('the legacy live-input.ts adds no capability beyond one re-export edge', () => {
   const input = closureOf(LEGACY_INPUT);
-  assert.deepEqual(input.files, [LEGACY_INPUT, ...ALLOW_FILES].sort(), 'the shim reaches exactly the allow-list and nothing else');
-  assert.deepEqual(input.builtins, ALLOW_BUILTINS);
+  const inner = closureOf(MODULE);
+  assert.deepEqual(input.files, [LEGACY_INPUT, ...inner.files].sort(), 'the shim reaches exactly the neutral module closure and nothing else');
+  assert.deepEqual(input.builtins, inner.builtins);
   assert.deepEqual(zonePViolations(input), [], 'the shim introduces no new import form');
 });
 
@@ -447,7 +478,7 @@ test('the check discriminates, statically and dynamically: the inference pipelin
 
 test('the legacy live-input.ts is a pure delegation shim: one re-export, no logic of its own', () => {
   const c = closureOf(LEGACY_INPUT);
-  assert.deepEqual(c.files.filter((f) => f !== LEGACY_INPUT), ALLOW_FILES, 'the shim re-exports exactly the neutral module');
+  assert.deepEqual(c.files.filter((f) => f !== LEGACY_INPUT), closureOf(MODULE).files, 'the shim re-exports exactly the neutral module');
   const text = read(LEGACY_INPUT);
   assert.doesNotMatch(code(text), /\bfunction\b|\bconst\b|\bclass\b|\bimport\s*\(/);
   assert.match(text, /^export \* from '\.\.\/\.\.\/provenance\/src\/provenance-input\.ts';$/m);
