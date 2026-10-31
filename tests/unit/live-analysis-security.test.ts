@@ -107,7 +107,7 @@ test('L-PAIR-1: 2-minute pairing expiration and five-failure lockout', () => {
   now += 120_000;
   assert.deepEqual(auth.pair(expired), { ok: false, code: 'PAIR_EXPIRED' });
   const valid = auth.issueTerminalCode();
-  for (let n = 0; n < 4; n++) assert.deepEqual(auth.pair('00000000') .ok ? null : { ok: false }, { ok: false });
+  for (let n = 0; n < 4; n++) assert.deepEqual(auth.pair('not-a-code'), { ok: false, code: 'PAIR_INVALID' });
   assert.deepEqual(auth.pair('bad'), { ok: false, code: 'PAIR_LOCKED' });
   assert.deepEqual(auth.pair(valid), { ok: false, code: 'PAIR_LOCKED' });
   now += 60_001;
