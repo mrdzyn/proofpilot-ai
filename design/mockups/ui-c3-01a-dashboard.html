@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ProofPilot AI — Local Demo Dashboard (design mockup)</title>
+<style>
+  :root{
+    --bg:#FFFFFF; --bg-subtle:#F7F8FA; --surface-muted:#F1F3F5;
+    --ink:#111111; --ink-2:#3D4148; --ink-muted:#5B6068; --ink-inv:#FFFFFF;
+    --line:#D8DCE1; --line-strong:#9AA1AB; --focus:#0E87AD;
+    --accent:#22C6F0; --accent-ink:#0B6E87;
+    --ok:#047857; --warn:#92400E; --err:#B91C1C; --info:#0E87AD;
+    --model-wash:#FFFBEB; --model-line:#D9A441;
+    --ev-wash:#ECFDF5; --ev-line:#0E9F6E;
+    --sans:system-ui,-apple-system,"Segoe UI",sans-serif;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+    font-size:16px;line-height:1.55}
+  .wrap{max-width:1080px;margin:0 auto;padding:32px 24px 64px}
+  .skip{position:absolute;left:-9999px}
+  .skip:focus{left:16px;top:16px;background:var(--ink);color:var(--ink-inv);
+    padding:8px 16px;border-radius:4px}
+  a{color:var(--accent-ink)}
+  :focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+  .mockbar{background:var(--ink);color:var(--ink-inv);font-size:14px;
+    padding:10px 24px}
+  .mockbar .wrap{padding-top:0;padding-bottom:0}
+  header.hero{padding:40px 0 8px;border-bottom:2px solid var(--ink)}
+  header.hero p.kicker{margin:0 0 8px;font-size:14px;letter-spacing:.02em;
+    color:var(--ink-2)}
+  header.hero h1{margin:0 0 8px;font-size:36px;line-height:1.15;font-weight:700;
+    letter-spacing:-.01em}
+  header.hero p.tag{margin:0 0 16px;font-size:18px;color:var(--ink-2)}
+  .idline{font-family:var(--mono);font-size:13px;color:var(--ink-2)}
+  .idline strong{color:var(--ink)}
+  .localbadge{display:inline-block;margin-left:12px;padding:2px 10px;
+    border:1.5px solid var(--ink);border-radius:999px;font-size:12px;
+    font-weight:600;letter-spacing:.04em;vertical-align:middle}
+  section.zone{margin-top:40px;border:1px solid var(--line);border-radius:8px;
+    overflow:hidden}
+  .zone-head{padding:16px 20px;border-bottom:1px solid var(--line)}
+  .zone-head h2{margin:0 0 4px;font-size:20px;font-weight:600}
+  .zone-head p{margin:0;font-size:14px;color:var(--ink-2)}
+  .zone-body{padding:20px;display:grid;gap:20px}
+  @media(min-width:1024px){.zone-body.cols{grid-template-columns:1fr 1fr}}
+  .zone.model .zone-head{background:var(--model-wash);
+    border-bottom:1px solid var(--model-line)}
+  .zone.evidence .zone-head{background:var(--ev-wash);
+    border-bottom:1px solid var(--ev-line)}
+  .chip{display:inline-block;padding:2px 10px;border-radius:999px;font-size:13px;
+    font-weight:600;border:1.5px solid var(--line-strong);margin:0 8px 8px 0}
+  .chip.warn{border-color:var(--model-line);background:var(--model-wash);
+    color:var(--warn)}
+  .chip.ok{border-color:var(--ev-line);background:var(--ev-wash);color:var(--ok)}
+  .chip.bad{border-color:var(--err);color:var(--err)}
+  .chip.info{border-color:var(--info);color:var(--info)}
+  .chip.neutral{border-color:var(--line-strong);color:var(--ink-2)}
+  table{border-collapse:collapse;width:100%;font-size:14px}
+  caption{text-align:left;font-weight:600;padding-bottom:8px}
+  th,td{text-align:left;padding:8px 10px;border-top:1px solid var(--line);
+    vertical-align:top}
+  th[scope=row]{font-weight:600;white-space:nowrap}
+  .mono{font-family:var(--mono);font-size:13px;word-break:break-all}
+  pre.code{background:var(--ink);color:#F5F5F5;padding:16px 20px;border-radius:8px;
+    font-family:var(--mono);font-size:14px;overflow-x:auto;margin:0}
+  .videoframe{background:#000;border-radius:8px;aspect-ratio:390/844;max-height:420px;
+    width:100%;display:flex;align-items:center;justify-content:center;color:#fff;
+    font-size:14px;text-align:center;padding:16px}
+  @media(min-width:1024px){.videoframe{aspect-ratio:16/10;max-height:none}}
+  .field label{display:block;font-weight:600;margin-bottom:6px}
+  .field input[type=file]{display:block;margin-bottom:6px}
+  .hint{font-size:13px;color:var(--ink-muted);margin:0}
+  .note{border-left:3px solid var(--accent);padding:8px 12px;background:var(--bg-subtle);
+    font-size:14px;margin:0}
+  .limitations{margin-top:40px;border-top:2px solid var(--ink);padding-top:16px;
+    font-size:14px;color:var(--ink-2)}
+  footer{margin-top:24px;font-size:13px;color:var(--ink-muted)}
+  @media(prefers-reduced-motion:reduce){*{transition:none !important}}
+</style>
+</head>
+<body>
+<div class="mockbar"><div class="wrap" style="padding:10px 0">
+  DESIGN MOCKUP — static, self-contained, no network. Controls are illustrative;
+  values are reviewed historical records, not live data.
+</div></div>
+<div class="wrap">
+<a class="skip" href="#main">Skip to dashboard content</a>
+<header class="hero">
+  <p class="kicker">Meta Global AI Developer Hackathon · Push the Frontier</p>
+  <h1>ProofPilot AI — Local Demo Dashboard</h1>
+  <p class="tag">Don&rsquo;t just fix the bug. Prove it&rsquo;s fixed.</p>
+  <p class="idline"><strong>main@b841740</strong> · F01 synthetic fixture ·
+    historical record · <span class="localbadge">LOCAL ONLY</span></p>
+</header>
+<main id="main">
+
+<section class="zone" aria-labelledby="z1">
+  <div class="zone-head"><h2 id="z1">1 · F01 Recording</h2>
+    <p>Owner-selected local MP4. Never uploaded. <span class="chip neutral">SYNTHETIC FIXTURE</span></p></div>
+  <div class="zone-body cols">
+    <div>
+      <div class="videoframe" role="img" aria-label="Placeholder for the owner-selected mobile defect clip: two taps on Add to cart, cart stays 0">
+        Mobile defect clip plays here<br>(owner file pick, 390&times;844)
+      </div>
+    </div>
+    <div>
+      <div class="field">
+        <label for="mp4">Recording file</label>
+        <input type="file" id="mp4" accept="video/mp4,.mp4" aria-describedby="mp4hint">
+        <p class="hint" id="mp4hint">MP4 · H.264 · &le; 30 s · &le; 25 MB. Validated locally before display.</p>
+      </div>
+      <table>
+        <caption>Clip metadata (historical certified set f01-20261027T122211Z-df375a)</caption>
+        <tr><th scope="row">Mobile defect</th><td><span class="mono">f01-mobile-defect.mp4</span><br>390&times;844 · 10.04 s · SHA-256 <span class="mono">e9df68b1&hellip;05eeafdf</span></td></tr>
+        <tr><th scope="row">Desktop control</th><td><span class="mono">f01-desktop-control.mp4</span><br>1280&times;800 · 7.32 s · SHA-256 <span class="mono">e565e8bf&hellip;1976d</span></td></tr>
+        <tr><th scope="row">Observed</th><td>Mobile: tap received by <span class="mono">promo-overlay</span>, cart stays 0. Desktop: cart becomes 1.</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section class="zone model" aria-labelledby="z2">
+  <div class="zone-head"><h2 id="z2">2 · Muse Spark Analysis</h2>
+    <p><span class="chip warn">&#9888; UNTRUSTED MODEL HYPOTHESIS</span> Strictly validated text. Never a verdict.</p></div>
+  <div class="zone-body cols">
+    <div>
+      <p><span class="chip neutral">Analysis 1 of 2 · INCOMPLETE · discarded</span></p>
+      <table>
+        <caption>Run c2b-live-smoke-001 (historical)</caption>
+        <tr><th scope="row">Provider status</th><td><span class="mono">incomplete (max_output_tokens)</span></td></tr>
+        <tr><th scope="row">Local result</th><td>ANALYSIS_FAILED / RESPONSE_NOT_COMPLETED</td></tr>
+        <tr><th scope="row">Usage</th><td>2773 in / 1500 out (1113 reasoning) / 4273 total</td></tr>
+      </table>
+    </div>
+    <div>
+      <p><span class="chip warn">&#9888; Analysis 2 of 2 · VIDEO_ANALYZED</span></p>
+      <table>
+        <caption>Run c2b-live-smoke-002 (historical)</caption>
+        <tr><th scope="row">Symptom</th><td>Two Add-to-cart taps (~3.3 s, ~6.4 s); cart count unchanged; no feedback. Page URL not visible; tap registration uncertain — the model lists its own uncertainties.</td></tr>
+        <tr><th scope="row">Usage</th><td>2773 in / 1129 out (665 reasoning) / 3902 total</td></tr>
+        <tr><th scope="row">Remote file</th><td>Reported deleted</td></tr>
+      </table>
+      <p class="note">Consistent with F01, but does not establish the overlay as root cause and proves no fix.</p>
+    </div>
+  </div>
+</section>
+
+<section class="zone model" aria-labelledby="z3">
+  <div class="zone-head"><h2 id="z3">3 · Proposed Correction</h2>
+    <p><span class="chip warn">&#9888; UNTRUSTED &mdash; NOT VERIFIED</span> Third and final Meta attempt. Documented text only — never loaded from the artifact store.</p></div>
+  <div class="zone-body">
+    <div>
+<pre class="code">.promo-overlay {
+  pointer-events: none;
+}</pre>
+    </div>
+    <div>
+      <table>
+        <caption>Proposal record (from the reviewed execution report, §2)</caption>
+        <tr><th scope="row">Adjustments</th><td>Exactly one: selector <span class="mono">.promo-overlay</span> · property <span class="mono">pointer-events</span> · value <span class="mono">none</span></td></tr>
+        <tr><th scope="row">Tokens</th><td>1,300 total (670 in / 630 out, 601 reasoning)</td></tr>
+        <tr><th scope="row">Response</th><td><span class="mono">7cb1e5e2&hellip;b690d8</span> · input 2,756 chars · SHA-256 <span class="mono">4e1466e8&hellip;f558</span></td></tr>
+        <tr><th scope="row">Status</th><td>Accepted by the closed-grammar validator. Never staged, never run in a browser, never verified. Equal in value to hand-authored PC-1 — that equality transfers no verification.</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section class="zone evidence" aria-labelledby="z4">
+  <div class="zone-head"><h2 id="z4">4 · Independent Verification</h2>
+    <p>Trusted oracle evidence. The model never judges. <span class="chip neutral">HAND-AUTHORED CONTROLS ONLY &mdash; NO MODEL INPUT</span></p></div>
+  <div class="zone-body cols">
+    <div>
+      <table>
+        <caption>Certified F01 baseline (trusted oracle, exact clean SHA)</caption>
+        <tr><th scope="row">Verdict</th><td><span class="chip bad">&#10006; REPRODUCED</span> mobile fails by interception, desktop passes</td></tr>
+        <tr><th scope="row">Certification</th><td>exact-SHA certified: YES · <span class="mono">modelOrProviderCalls: 0</span></td></tr>
+      </table>
+      <p><span class="chip ok">&#10004; PC-1 VERIFIED 3/3</span> hand-authored correct fix · three fresh stages · three distinct nonces · oracle exit 0 each</p>
+      <table>
+        <caption>Negative controls (fail exactly as they should)</caption>
+        <tr><th scope="row">NC-1 · NC-1b · NC-3</th><td><span class="chip bad">&#10006; PATCH_FAILED</span></td></tr>
+        <tr><th scope="row">NC-6 · NC-7</th><td><span class="chip neutral">&#9632; INCONCLUSIVE</span> injected faults (tamper / busy port)</td></tr>
+        <tr><th scope="row">NC-5</th><td><span class="chip neutral">NOT_REPRODUCED</span> · never VERIFIED</td></tr>
+      </table>
+    </div>
+    <div>
+      <div class="field">
+        <label for="evjson">Owner-imported evidence (optional)</label>
+        <input type="file" id="evjson" accept=".json,application/json" aria-describedby="evhint">
+        <p class="hint" id="evhint">Scoreboard or baseline JSON. Checked against the import allowlist first; unknown keys or model-claimed VERIFIED rows are refused with a typed error. Imported rows keep their file verdict and are labelled “imported evidence”.</p>
+      </div>
+      <p class="note">Historical example shown: run <span class="mono">c3-b1-20261028T084508Z-e27b62</span> at <span class="mono">bb64b73</span>. Owner QA evidence: F01 REPRODUCED, PC-1 VERIFIED 3/3, DID-1 PASS, zero provider calls (against <span class="mono">main@f305da3</span>).</p>
+    </div>
+  </div>
+</section>
+
+<section class="zone" aria-labelledby="z5">
+  <div class="zone-head"><h2 id="z5">5 · Evidence &amp; Security</h2>
+    <p>Read-only inspection states. What is shown, what is refused, and what remains open.</p></div>
+  <div class="zone-body cols">
+    <div>
+      <table>
+        <caption>Run identity and availability</caption>
+        <tr><th scope="row">Commit</th><td><span class="mono">main@b841740</span> (PR #24)</td></tr>
+        <tr><th scope="row">CI</th><td>Common validation + Stack validation green on merged PRs #19–#24</td></tr>
+        <tr><th scope="row">Replays</th><td>PC-1: 3 attempted, 3 passed · baseline gate certified</td></tr>
+        <tr><th scope="row">Lifetime quota</th><td>Spent. Repository refuses further live attempts by construction.</td></tr>
+      </table>
+    </div>
+    <div>
+      <table>
+        <caption>Limitations and refusals</caption>
+        <tr><th scope="row">Real proposal</th><td><span class="chip bad">&#9940; HARD-DISABLED</span> executing <span class="mono">c3-live-meta-001</span> needs a separate owner decision, enrollment, and security review — none granted.</td></tr>
+        <tr><th scope="row">Residuals</th><td>Same-UID writer residual and unsigned-artifact origin NOT accepted (owner decision open).</td></tr>
+        <tr><th scope="row">Billing</th><td>Actual account charge unverified. Token counts are not costs.</td></tr>
+        <tr><th scope="row">Sandbox</th><td>Staging harness is a spike, not a sandbox. No model HTML/JS ever runs.</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section class="limitations" aria-label="Limitations">
+  <p><strong>Limitations.</strong> Synthetic fixture only — no customer data, no real shop.
+  A model hypothesis is not a verdict. The model&rsquo;s value equalling PC-1 proves nothing
+  about the model and transfers no verification. Portal video rules and submission fields
+  are verified separately in the signed-in event portal.</p>
+</section>
+<footer>ProofPilot AI · UI-C3-01A design mockup · values are reviewed historical records · no network, no backend, no secrets on this page</footer>
+</main>
+</div>
+</body>
+</html>

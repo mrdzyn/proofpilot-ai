@@ -1,6 +1,14 @@
 # PP-C3 Static Report — design contract
 
-- **Status:** PROPOSED. **Human design approval: PENDING** (see `tasks/PP-META-I2-C3.md`, decision UI-C3-01). Nothing here authorizes implementation.
+> **Direction revision (UI-C3-01A, owner-approved direction change, recorded explicitly):**
+> the static-report direction below is retained as history but is no longer the demo
+> direction. The owner revised UI-C3-01 toward a local-first single-page dashboard; the
+> current contract is `design/screens/PP-DASHBOARD-CONTRACT.md` (task
+> `tasks/UI-C3-01A-LOCAL-DEMO-DASHBOARD.md`). Its honesty rules (§§data/security,
+> zone separation, `VERIFIED`-only-on-3/3) are inherited by the dashboard. This file is
+> otherwise unchanged.
+>
+> - **Status:** PROPOSED (superseded for the demo; never approved, never built). Nothing here authorizes implementation.
 - **Replaces:** the five-screen product UI for the hackathon (`design/screens/PP-PRODUCT-SCREEN-MAP.md` stays proposed and unbuilt).
 - **Follows:** `AGENTS.md` design-first sequence, `docs/DESIGN-SYSTEM.md`, `docs/ACCESSIBILITY.md`.
 

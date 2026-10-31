@@ -1299,4 +1299,53 @@ enrollment, merge or residual-risk acceptance.
 GPT-6 exact-head re-audit of the new HEAD; owner merge decision. No real execution,
 enrollment, merge or residual-risk acceptance.
 
+## Handoff: UI-C3-01A-C1
+
+- **Task / phase:** UI-C3-01A local demo dashboard, Phase A design
+  (`tasks/UI-C3-01A-LOCAL-DEMO-DASHBOARD.md`; design-only, no shell/wiring/deps)
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** Project owner (human visual approval), then GPT-6 review of the Draft PR
+- **Branch:** `design/ui-c3-01a-dashboard` (from `main@b841740`; separate from PR #25)
+- **Implementation head:** `TBD-on-commit` (design docs only; filled at commit time)
+- **PR:** NEW Draft PR (not #25; number filled at creation)
+- **State:** READY FOR OWNER VISUAL APPROVAL (design gate); no shell until approved
+
+### Completed
+- Task contract with explicit design-direction revision (static report → dashboard).
+- `PP-DASHBOARD-CONTRACT.md` (5 zones, McKinsey/Apple restraint, black/white/cyan
+  #22C6F0, honesty rules inherited) + revision header in `PP-C3-REPORT-CONTRACT.md`
+  (history preserved, not silently replaced).
+- `PP-DASHBOARD-SCREEN-MAP.md`, `PP-DASHBOARD-STATE-MATRIX.md`,
+  `PP-DASHBOARD-SECURITY.md` (boundaries + shell-phase acceptance tests T-*).
+- Static self-contained mockup `design/mockups/ui-c3-01a-dashboard.html` (no
+  external refs, no scripts; historical reviewed values only, labelled as such).
+- `design/tokens/pp-dashboard.json`, `PP-DASHBOARD-COMPONENTS.md`,
+  `PP-DASHBOARD-DATA-IMPORT.md` (allowlist schemas, provenance classes, text-only
+  rendering, no-network invariant), `PP-DASHBOARD-COMPONENT-STRUCTURE.md`
+  (React+Vite+Tailwind vs framework-free as an explicit owner decision),
+  `PP-DASHBOARD-DEMO-WORKFLOW.md`.
+- `docs/STATUS.md` moved to UI-C3-01A (incl. correcting the stale SEC-P2-02/primary-
+  branch lines to the merged PR #24 reality, verified: PR #24 MERGED, CI SUCCESS).
+
+### Validation
+- `git diff --check` — PASS; `pnpm lint` — 204 files, 0 problems; tokens JSON parses.
+- Internal links resolve; mockup has no external refs/scripts; every hardcoded
+  historical value traces to STATUS/LIVE-SMOKE/execution-report sources.
+- Hosted CI: see the NEW Draft PR checks (required gates green before any next step).
+
+### Continuation notes
+- Architectural decisions requiring owner approval at the design gate: (1) stack
+  choice A vs B; (2) single light theme only (dark deferred); (3) no run history
+  beyond per-file import; (4) owner-confirmed portal fields still PENDING.
+- UI design gate: design approval pending — building the React shell before approval
+  is explicitly out of scope.
+- No provider/Modal/Baseten calls, no artifact access/enrollment/staging/execution,
+  no quota/activation/oracle/verifier/trust-root/gate changes, no fabricated
+  results, no residual-risk acceptance, no merge/publish/deploy.
+
+### Next action
+Owner: visual approval (or change requests) in a reviewable record. Then: GPT-6
+review of the Draft PR, owner merge decision, and only then a separately scoped
+shell phase.
+
 <!-- HANDOFF_ENTRIES_END -->
