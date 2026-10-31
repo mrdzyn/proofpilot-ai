@@ -1497,6 +1497,17 @@ call). STOP before implementation or any live provider call.
 GPT-6 third review of PR #28; owner decisions D1–D7 and D9 (D8 recorded).
 STOP before implementation or any live provider call.
 
+## Handoff: UI-C3-02-I1-C1 (merged via PR #29 as `821171a`)
+
+- **Task:** `tasks/UI-C3-02-I1-OFFLINE-CONFIG.md`; owner-authorized **offline-only** implementation kickoff.
+- **Branch:** `feat/ui-c3-02-i1-offline-config` from `main@2bbe696` (PR #28 docs-only merge).
+- **Target PR:** Draft, independent of unmerged dashboard PRs #26 and #27.
+- **Files:** pure `packages/live-analysis/src/config.ts`, offline unit test `tests/unit/live-analysis-config.test.ts`, task contract, STATUS and this append-only handoff.
+- **Boundary:** no runtime companion, browser changes, provider transport, environment/credential reads, quota or model approval, historical proposal access, deployment or merge.
+- **Config behavior:** approve only an exact `https://inference.baseten.co/v1` (optional one trailing slash), construct the pinned Chat Completions destination, fail closed on every URL mismatch. Model approval always refuses pending owner D9, including `meta/muse-spark-open` and the documented direct ID; no alias translation.
+- **Test objective:** L-CFG-1 refusal matrix plus TypeScript, lint and required GitHub CI. Do not claim executed checks until actual logs are available.
+- **Next action:** independent audit after successful required evidence; owner merge decision separately. Later I2/I3 must honor dashboard-branch sequencing; no live request before D1–D7, D9 and per-run approval.
+
 ## Handoff: UI-C3-02-I5
 
 - **Task / phase:** UI-C3-02-I234 consolidated offline execution (I2 companion + I3 Zone L + I4 mock adapter)
