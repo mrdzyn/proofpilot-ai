@@ -1407,7 +1407,7 @@ Do not merge, implement, or deploy on the agent's behalf.
 - **From:** Implementation agent (Muse Code, powered by Muse Spark)
 - **To:** GPT-6 independent exact-head re-audit, then project owner (visual approval)
 - **Branch:** `design/ui-c3-01a-dashboard`
-- **Implementation head:** `TBD-on-commit` (design docs only; filled at commit time)
+- **Implementation head:** `e35f316c485ce34729f7a671a920370d4bd91d89`
 - **PR:** #26 (Draft)
 - **State:** READY FOR RE-AUDIT (design gate); no shell until approved
 
