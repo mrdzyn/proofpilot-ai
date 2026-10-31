@@ -1,0 +1,109 @@
+{
+  "_meta": {
+    "project": "ProofPilot AI — Local Demo Dashboard (UI-C3-01A, Phase A)",
+    "description": "Dashboard-scoped semantic tokens. Palette primitives sit beneath semantic aliases; components reference roles only. Brand accent: cyan #22C6F0, used sparingly for provenance markers and key figures, never as the sole carrier of meaning.",
+    "base": "design/tokens/design-tokens.json"
+  },
+  "color": {
+    "background": {
+      "default": "#FFFFFF",
+      "subtle": "#F7F8FA",
+      "inverse": "#111111"
+    },
+    "surface": {
+      "default": "#FFFFFF",
+      "raised": "#FFFFFF",
+      "muted": "#F1F3F5"
+    },
+    "text": {
+      "primary": "#111111",
+      "secondary": "#3D4148",
+      "muted": "#5B6068",
+      "inverse": "#FFFFFF",
+      "onAction": "#FFFFFF"
+    },
+    "border": {
+      "default": "#D8DCE1",
+      "strong": "#9AA1AB",
+      "focus": "#0E87AD"
+    },
+    "action": {
+      "primary": "#111111",
+      "primaryHover": "#000000",
+      "secondary": "#3D4148",
+      "danger": "#B91C1C"
+    },
+    "brand": {
+      "accent": "#22C6F0",
+      "accentInk": "#0B6E87"
+    },
+    "feedback": {
+      "success": "#047857",
+      "warning": "#92400E",
+      "error": "#B91C1C",
+      "info": "#0E87AD"
+    },
+    "zone": {
+      "modelWash": "#F4F4F5",
+      "modelBorder": "#9AA1AB",
+      "modelRule": "#22C6F0",
+      "evidenceWash": "#FFFFFF",
+      "evidenceBorder": "#D8DCE1",
+      "evidenceRule": "#111111"
+    }
+  },
+  "spacing": {
+    "0": 0,
+    "1": 4,
+    "2": 8,
+    "3": 12,
+    "4": 16,
+    "5": 20,
+    "6": 24,
+    "8": 32,
+    "10": 40,
+    "12": 48,
+    "16": 64
+  },
+  "radius": {
+    "none": 0,
+    "sm": 4,
+    "md": 8,
+    "lg": 12,
+    "pill": 999
+  },
+  "typography": {
+    "fontFamily": {
+      "sans": "system-ui, -apple-system, 'Segoe UI', sans-serif",
+      "mono": "ui-monospace, 'SF Mono', Menlo, Consolas, monospace"
+    },
+    "size": {
+      "xs": 12,
+      "sm": 14,
+      "md": 16,
+      "lg": 18,
+      "xl": 20,
+      "2xl": 24,
+      "3xl": 30,
+      "4xl": 36
+    },
+    "weight": {
+      "regular": 400,
+      "medium": 500,
+      "semibold": 600,
+      "bold": 700
+    }
+  },
+  "motion": {
+    "duration": {
+      "fastMs": 120,
+      "normalMs": 200
+    },
+    "note": "All transitions disabled under prefers-reduced-motion."
+  },
+  "breakpoints": {
+    "narrowMax": 640,
+    "mediumMax": 1023,
+    "wideMin": 1024
+  }
+}

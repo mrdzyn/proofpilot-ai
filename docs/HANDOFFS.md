@@ -1299,4 +1299,149 @@ enrollment, merge or residual-risk acceptance.
 GPT-6 exact-head re-audit of the new HEAD; owner merge decision. No real execution,
 enrollment, merge or residual-risk acceptance.
 
+## Handoff: UI-C3-01A-C1
+
+- **Task / phase:** UI-C3-01A local demo dashboard, Phase A design
+  (`tasks/UI-C3-01A-LOCAL-DEMO-DASHBOARD.md`; design-only, no shell/wiring/deps)
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** Project owner (human visual approval), then GPT-6 review of the Draft PR
+- **Branch:** `design/ui-c3-01a-dashboard` (from `main@b841740`; separate from PR #25)
+- **Implementation head:** `627195252a6a7ab5715cd1f70b1daf43b33379a7`
+- **PR:** #26 (Draft; separate from PR #25)
+- **State:** READY FOR OWNER VISUAL APPROVAL (design gate); no shell until approved
+
+### Completed
+- Task contract with explicit design-direction revision (static report → dashboard).
+- `PP-DASHBOARD-CONTRACT.md` (5 zones, McKinsey/Apple restraint, black/white/cyan
+  #22C6F0, honesty rules inherited) + revision header in `PP-C3-REPORT-CONTRACT.md`
+  (history preserved, not silently replaced).
+- `PP-DASHBOARD-SCREEN-MAP.md`, `PP-DASHBOARD-STATE-MATRIX.md`,
+  `PP-DASHBOARD-SECURITY.md` (boundaries + shell-phase acceptance tests T-*).
+- Static self-contained mockup `design/mockups/ui-c3-01a-dashboard.html` (no
+  external refs, no scripts; historical reviewed values only, labelled as such).
+- `design/tokens/pp-dashboard.json`, `PP-DASHBOARD-COMPONENTS.md`,
+  `PP-DASHBOARD-DATA-IMPORT.md` (allowlist schemas, provenance classes, text-only
+  rendering, no-network invariant), `PP-DASHBOARD-COMPONENT-STRUCTURE.md`
+  (React+Vite+Tailwind vs framework-free as an explicit owner decision),
+  `PP-DASHBOARD-DEMO-WORKFLOW.md`.
+- `docs/STATUS.md` moved to UI-C3-01A (incl. correcting the stale SEC-P2-02/primary-
+  branch lines to the merged PR #24 reality, verified: PR #24 MERGED, CI SUCCESS).
+
+### Validation
+- `git diff --check` — PASS; `pnpm lint` — 204 files, 0 problems; tokens JSON parses.
+- Internal links resolve; mockup has no external refs/scripts; every hardcoded
+  historical value traces to STATUS/LIVE-SMOKE/execution-report sources.
+- Hosted CI: see the NEW Draft PR checks (required gates green before any next step).
+
+### Continuation notes
+- Architectural decisions requiring owner approval at the design gate: (1) stack
+  choice A vs B; (2) single light theme only (dark deferred); (3) no run history
+  beyond per-file import; (4) owner-confirmed portal fields still PENDING.
+- UI design gate: design approval pending — building the React shell before approval
+  is explicitly out of scope.
+- No provider/Modal/Baseten calls, no artifact access/enrollment/staging/execution,
+  no quota/activation/oracle/verifier/trust-root/gate changes, no fabricated
+  results, no residual-risk acceptance, no merge/publish/deploy.
+
+### Next action
+Owner: visual approval (or change requests) in a reviewable record. Then: GPT-6
+review of the Draft PR, owner merge decision, and only then a separately scoped
+shell phase.
+
+## Handoff: UI-C3-01A-C2
+
+- **Task / phase:** UI-C3-01A GPT-6 remediation (MAJOR-1/2, MINOR-3/4/5/6) on Draft PR #26 (review comment `6540600859`)
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** GPT-6 independent exact-head re-audit, then project owner (visual approval)
+- **Branch:** `design/ui-c3-01a-dashboard`
+- **Implementation head:** `3ac11aedbe32b016b85def7a6eb5f71bd0276acc`
+- **PR:** #26 (Draft)
+- **State:** READY FOR RE-AUDIT (design gate); no shell until approved
+
+### Completed
+- MAJOR-1: imported `VERIFIED` renders only as quoted claim under
+  `UNVERIFIED IMPORT — FILE-REPORTED VERDICT` (new UnverifiedImportChip; trusted
+  chip withheld); T-IMPORT-FAKE adversarial tests; warning state added to mockup
+  zone 4, state matrix, contract, component inventory.
+- MAJOR-2: import allowlist rewritten to the actual emitted schemas (full
+  scoreboard key sets incl. `_example` handling, baseline-summary shape from
+  `scripts/f01-baseline.ts`); display view-model projection specified; T-IMPORT-REAL
+  uses the committed example + live-shaped fixtures.
+- MINOR-3: loopback-only origin policy (zero non-loopback traffic; dev/built
+  artifact tested; `file://` as literally-zero-request option); workflow + T-NET-1
+  aligned.
+- MINOR-4: playback-suitability vs certified-intake distinction with concrete
+  bounded browser checks; "suitable for playback" label only.
+- MINOR-5: gold/yellow and green zone washes removed; monochrome chips (red for
+  errors only), gray model wash + cyan rule, black-rule evidence zone; mockup,
+  tokens, contract, components aligned.
+- MINOR-6: Option B corrected to framework-free JS/JSDoc (or tsc-compiled TS);
+  T-CSS-1 scoped to model-/file-derived values.
+- Owner recommendations recorded (preferred React+TS+Vite+Tailwind, light-only,
+  no persisted history, portal PENDING) as design input, not implementation.
+- Five-zone structure, provenance labels, previously verified values and all
+  security boundaries preserved.
+
+### Validation
+- `git diff --check` — PASS; `pnpm lint` — 0 problems; tokens JSON parses.
+- Schemas verified against `docs/examples/c3-b1-scoreboard.example.json` and the
+  `baseline-summary.json` emit code; mockup self-contained (no external refs or
+  scripts); links resolve; historical values trace to sources.
+- Hosted CI: see PR #26 checks at the new head (required gates green before merge).
+- Phase A scope held: no code, deps, provider/Modal/Baseten calls, artifact
+  access/enrollment/staging/execution, gate changes, fabricated results,
+  residual-risk acceptance, merge/publish/deploy.
+
+### Continuation notes
+- The static-report revision and five-screen-map cut remain recorded, untouched.
+- Decisions still requiring the owner at the gate: stack confirmation (A preferred),
+  mockup visual approval (reopened after palette change).
+
+### Next action
+GPT-6: exact-head re-audit of PR #26; owner: visual approval in a reviewable record.
+Do not merge, implement, or deploy on the agent's behalf.
+
+## Handoff: UI-C3-01A-C3
+
+- **Task / phase:** UI-C3-01A remediation round 2 (residual MAJOR-2, MINOR-7, 2 wording) on Draft PR #26 (review comment `6540795146`)
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** GPT-6 independent exact-head re-audit, then project owner (visual approval)
+- **Branch:** `design/ui-c3-01a-dashboard`
+- **Implementation head:** `e35f316c485ce34729f7a671a920370d4bd91d89`
+- **PR:** #26 (Draft)
+- **State:** READY FOR RE-AUDIT (design gate); no shell until approved
+
+### Completed
+- MAJOR-2 residual: depth bound fixed to explicit convention (root = 1; real file
+  reaches 6; refuse > 8); artifact entries corrected to `{relativePath, sha256,
+  bytes}`; `WorktreeState` union specified; replay mobile/desktop pinned to exact
+  `{status, hitTestTarget, cartCountAfter}` per `candidate-stage.ts`.
+- MINOR-7: picked files can no longer impersonate the bundled example — every pick
+  projects `sourceTag: "owner-imported evidence"` (`_example` at most appends
+  "(file claims to be an example)"); T-IMPORT-REAL uses the actual committed
+  scoreboard + producer-shaped baseline fixture; new T-IMPORT-FORGED-EXAMPLE.
+- Wording: contract states no non-loopback traffic (served-app case); mockup hint
+  clarifies no import earns a trusted verdict (schema violations still refused);
+  state matrix validation-error row aligned.
+- Five-zone structure, approved direction (React+TS+Vite+Tailwind preferred,
+  light-only, no history, no external traffic, portal PENDING), UNTRUSTED proposal
+  label, and all boundaries preserved.
+
+### Validation
+- `git diff --check` — PASS; `pnpm lint` — 0 problems; tokens JSON parses.
+- Schemas re-verified against the committed example (key sets, nesting depth 6,
+  replay shapes), `f01-baseline.ts` emit code (artifacts + summary), and
+  `candidate-stage.ts` (replay mobile/desktop); mockup self-contained; links resolve.
+- Hosted CI: see PR #26 checks at the new head (required gates green before merge).
+- Phase A scope held: no shell, deps, provider calls, artifact access, gate
+  changes, fabricated results, residual-risk acceptance, merge/deploy.
+
+### Continuation notes
+- Owner decisions still at the gate: stack confirmation (A preferred), mockup
+  visual approval (reopened after round-1 palette change).
+
+### Next action
+GPT-6: exact-head re-audit of PR #26; owner: visual approval in a reviewable record.
+Do not merge, implement, or deploy on the agent's behalf.
+
 <!-- HANDOFF_ENTRIES_END -->
