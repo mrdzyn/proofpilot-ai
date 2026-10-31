@@ -1333,4 +1333,35 @@ enrollment, merge or residual-risk acceptance.
 ### Next action
 GPT-6: exact-head review of PR #25; owner: merge decision, then record the demo video and verify the portal fields. Do not merge or submit on the agent's behalf.
 
+## Handoff: META-DEMO-01-C2
+
+- **Task / phase:** META-DEMO-01 GPT-6 remediation (MAJOR-1, MINOR-2/3/4) on Draft PR #25 (audit comment `6540007825`)
+- **From:** Implementation agent (Muse Code)
+- **To:** GPT-6 independent exact-head re-audit, then project owner
+- **Branch:** `docs/meta-demo-01-recording`
+- **Implementation head:** `0b80a3aba597282a34cd94359f978679a9238ed5`
+- **PR:** #25 (Draft)
+- **State:** READY FOR RE-AUDIT
+
+### Completed
+- MAJOR-1: Scene 3/5 narration, submission Meta-usage copy, prep §4 and QA rows 3/7 now distinguish two C2B video analyses from the third fix-proposal attempt; no "once" wording remains.
+- MINOR-2: Scene 6 narration + example label + checklist §5 + QA row 8 + submission highlight state the real proposal has no scoreboard row and inherits no verdict; it lives only in `docs/LIVE-C3-01-EXECUTION-REPORT.md` as UNTRUSTED — NOT VERIFIED.
+- MINOR-3: refusal drill in storyboard + checklist is copy/paste-executable (synthetic 40-hex `a`/`b`/`c` SHAs, `demo-source`); quoted stderr + exit `2` verified by running the drill (gate at `scripts/c3-b2b-verify-proposal.ts:70`, before any file/Git read, no evidence created). No `<40-hex>` placeholders remain.
+- MINOR-4: checklist retitled to offline/provider-free/real-artifact-read-free; intro discloses local synthetic-evidence writes; `pnpm install`, F01 and PC-1 steps annotated; submission beat table reworded to "offline preflight".
+- Eight-scene structure, provenance labels, previously verified values and all security boundaries preserved.
+
+### Validation
+- `git diff --check` — PASS; `pnpm lint` — 196 files, 0 problems.
+- Refusal drill executed once with synthetic SHAs — exact quoted message, exit `2`, no evidence, no provider, no artifact read (permitted read-only code inspection + the runbook-prescribed drill).
+- 40-char SHA shapes + quoted refusal text verified programmatically in both docs; `<40-hex>` sweep clean.
+- Hosted CI: see PR #25 checks at the new head (required gates must be green before merge).
+- No provider call, no credential read, no stored-artifact access, no execution, no residual-risk acceptance, no crypto/gate/oracle change (scope restriction held).
+
+### Continuation notes
+- The remediation commit changes docs only (4 files, +72/−36); the handoff-only commit follows the same two-commit pattern as C1.
+- Portal video duration/file rules, repository access/licence, team/contact fields: still PENDING (owner must verify in the signed-in portal).
+
+### Next action
+GPT-6: exact-head re-audit of PR #25; owner: merge decision. Do not merge or submit on the agent's behalf.
+
 <!-- HANDOFF_ENTRIES_END -->
