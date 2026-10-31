@@ -1307,7 +1307,7 @@ enrollment, merge or residual-risk acceptance.
 - **To:** Project owner (human visual approval), then GPT-6 review of the Draft PR
 - **Branch:** `design/ui-c3-01a-dashboard` (from `main@b841740`; separate from PR #25)
 - **Implementation head:** `627195252a6a7ab5715cd1f70b1daf43b33379a7`
-- **PR:** NEW Draft PR (not #25; number filled at creation)
+- **PR:** #26 (Draft; separate from PR #25)
 - **State:** READY FOR OWNER VISUAL APPROVAL (design gate); no shell until approved
 
 ### Completed
