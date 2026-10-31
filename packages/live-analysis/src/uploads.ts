@@ -9,7 +9,7 @@
  * staged bytes. No network, no credentials, no persistence beyond staging.
  */
 import { createHash, randomBytes } from 'node:crypto';
-import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {
@@ -63,6 +63,46 @@ function mediaRefusal(error: unknown): UploadRefusal {
   return 'MEDIA_INVALID';
 }
 
+/** Prefix for companion staging roots; SIGKILL/abnormal exits cannot clean up. */
+export const STAGING_PREFIX = 'pp-live-upload-';
+/** Staging roots older than this at startup are treated as crash leftovers. */
+export const STALE_STAGING_MS = 24 * 60 * 60_000;
+
+/**
+ * Best-effort recovery for abnormal shutdowns (SIGKILL, power loss): remove
+ * staging roots older than `maxAgeMs` under `baseDir`. Bounded (prefix match,
+ * mtime gate, removal cap); never throws. Documented: only SIGKILL-class
+ * deaths can leave these; SIGINT/SIGTERM/quit/revoke paths delete eagerly.
+ */
+export async function sweepStaleStagingDirs(
+  baseDir: string = os.tmpdir(),
+  maxAgeMs: number = STALE_STAGING_MS,
+  now: number = Date.now(),
+  cap = 100,
+): Promise<number> {
+  let removed = 0;
+  let entries: string[];
+  try {
+    entries = await readdir(baseDir);
+  } catch {
+    return 0;
+  }
+  for (const entry of entries) {
+    if (removed >= cap) break;
+    if (!entry.startsWith(STAGING_PREFIX)) continue;
+    const full = path.join(baseDir, entry);
+    try {
+      const info = await stat(full);
+      if (!info.isDirectory() || now - info.mtimeMs < maxAgeMs) continue;
+      await rm(full, { recursive: true, force: true });
+      removed += 1;
+    } catch {
+      /* best effort only */
+    }
+  }
+  return removed;
+}
+
 export class StagedUploads {
   readonly stagingRoot: string;
   readonly #deps: UploadStoreDeps;
@@ -74,8 +114,9 @@ export class StagedUploads {
   }
 
   static async create(deps?: UploadStoreDeps): Promise<StagedUploads> {
-    const root = await mkdtemp(path.join(os.tmpdir(), 'pp-live-upload-'));
+    const root = await mkdtemp(path.join(os.tmpdir(), STAGING_PREFIX));
     await chmod(root, 0o700);
+    await sweepStaleStagingDirs(os.tmpdir()).catch(() => undefined);
     return new StagedUploads(root, deps ?? {});
   }
 

@@ -10,7 +10,6 @@
 import path from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { createCompanion, DEFAULT_PORT } from '../packages/live-analysis/src/server.ts';
-import { createMockTransport } from '../packages/live-analysis/src/mock-transport.ts';
 
 function flagValue(argv: string[], name: string): string | null {
   const i = argv.indexOf(name);
@@ -30,8 +29,10 @@ function flagInt(argv: string[], name: string, fallback: number): number {
 
 const argv = process.argv.slice(2);
 const port = flagInt(argv, '--port', DEFAULT_PORT);
-if (port < 1 || port > 65535) {
-  console.error('refused: --port must be 1-65535');
+// Port 0 selects an ephemeral loopback port (used by automated tests); the
+// actual bound port is printed on startup and is the only one that listens.
+if (port < 0 || port > 65535) {
+  console.error('refused: --port must be 0-65535 (0 = ephemeral loopback)');
   process.exit(2);
 }
 const serveOpt = flagValue(argv, '--serve');
@@ -46,15 +47,42 @@ const companion = await createCompanion({
   baseUrl,
   analysesLeft: flagInt(argv, '--analyses', 3),
   proposalsLeft: flagInt(argv, '--proposals', 1),
-  transport: createMockTransport({ latencyMs: flagInt(argv, '--mock-latency-ms', 1200) }),
+  // Built-in mock transport aborts promptly on cancel (shouldCancel over the
+  // run records); --mock-latency-ms only stretches the cancellable window.
+  transportLatencyMs: flagInt(argv, '--mock-latency-ms', 1200),
 }).catch((error: unknown) => {
   console.error(`refused: cannot start companion (${error instanceof Error ? error.message : 'unknown'})`);
   process.exit(2);
 });
 
+// Abnormal-shutdown cleanup: SIGINT/SIGTERM/quit/revoke paths delete staged
+// bytes eagerly via companion.close(). Only SIGKILL-class deaths (kill -9,
+// power loss) can leave staging roots behind; those are swept on the next
+// startup by sweepStaleStagingDirs (see uploads.ts).
+let closing = false;
+async function shutdown(signal: string): Promise<void> {
+  if (closing) return;
+  closing = true;
+  console.log(`closing on ${signal}: cancelling in-flight runs, deleting staged bytes`);
+  try {
+    await companion.close();
+  } catch {
+    /* best effort */
+  }
+  try {
+    rl.close();
+  } catch {
+    /* best effort */
+  }
+  process.exit(0);
+}
+process.on('SIGINT', () => void shutdown('SIGINT'));
+process.on('SIGTERM', () => void shutdown('SIGTERM'));
+
 const rl = createInterface({ input: process.stdin, output: process.stdout, terminal: false });
-console.log(`ui-c3-02 companion (mock transport, no live inference) on http://127.0.0.1:${port}`);
+console.log(`ui-c3-02 companion (mock transport, no live inference) on http://127.0.0.1:${String(companion.port)}`);
 console.log(`serving: ${serveRoot ?? defaultDist} (API-only if missing)`);
+console.log(`staging: ${companion.uploads.stagingRoot} (deleted on quit/SIGINT/SIGTERM/revoke)`);
 console.log('commands: pair | permit <analyze|propose> <sha256> <bytes> | revoke | status | quit');
 
 const SHA_RE = /^[0-9a-f]{64}$/;

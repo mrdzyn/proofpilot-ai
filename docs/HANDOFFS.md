@@ -1580,4 +1580,51 @@ ONE independent GPT-6 security + functional audit of the integration PR;
 owner decisions D1–D7 and D9 stay pending (D8 design-only). STOP: no merge,
 no live inference, no deploy. Do not self-certify.
 
+## Handoff: UI-C3-02-I6 — GPT-6 remediation of PR #31 (FIX REQUIRED → remediated)
+
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** ONE independent GPT-6 security + functional re-audit, then project owner
+- **Branch:** `feat/ui-c3-02-i2i3i4-consolidated` (merge `306fb32` reconciles with
+  `main@821171a`; PRs #26/#27/#29/#30 untouched, unmerged, unretargeted; no
+  rebase/force-push)
+- **Audit basis:** [independent GPT-6 audit](https://github.com/mrdzyn/proofpilot-ai/pull/31#issuecomment-6546549691) at `01c700d` — 4 MAJOR + 2 MINOR.
+- **MAJOR-1 (real Cancel):** `/api/analyze|propose` accept promptly with a
+  `runId` (state `analyzing`) and settle in the background; Zone L tracks the
+  active runId and polls in flight. Proven by Chromium Cancel-click test and
+  HTTP in-flight cancel test (cancel → CANCELLED in ms, quota kept, bytes gone).
+- **MAJOR-2 (single-flight):** one slot for upload/analyze/propose acquired
+  synchronously before the first await; revoke bumps an epoch so a stale run
+  can never release a newer slot. Deterministic tests: two concurrent analyzes
+  (one accepted, one RUN_BUSY), second-valid-permit waits then proceeds,
+  upload-during-analyze 409, revoke/re-pair race.
+- **MAJOR-3 (permit-before-upload):** browser hashes locally (Web Crypto),
+  owner issues a hash/byte/action-bound terminal permit, companion peeks
+  eligibility via read-only `peekEligiblePermit` (no consumption, no spent
+  marking) before staging or decoding anything; consumption stays at the
+  attempt, single-use preserved. Unpermitted upload → NO_PERMIT with zero
+  staged bytes and zero decode work (staging dir + probe counter asserted).
+- **MAJOR-4 (merge ancestry):** forward merge of `origin/main@821171a`; I1
+  files byte-identical with merged PR #29; STATUS/HANDOFFS conflicts resolved
+  keeping both histories; stale refs fixed (#29 merged, SEC-P2-02 merged as #24).
+- **MINOR-1:** SIGINT/SIGTERM handlers + eager close; SIGKILL-class stale sweep
+  (`sweepStaleStagingDirs`, unit-tested) + SIGTERM-with-staged-clip integration
+  test (exit 0, staging gone); typed 413 BAD_BODY_SIZE on drained oversize
+  bodies (HTTP test); JSON-null guard on `/api/pair`; `uploadId` bound to the
+  staged upload (foreign id spends the permit, then fails closed).
+- **MINOR-2:** misleading tests renamed/rewritten (cancel, concurrency);
+  Zone L browser adds Cancel click (20 s-latency companion), 320px reflow +
+  200% text scoped to Zone L (pre-existing shell fixtures documented),
+  keyboard-only pairing, quota exhaustion; STATUS stale refs fixed.
+- **Validation (all observed):** `pnpm lint` 247 files 0 problems; root +
+  dashboard typecheck clean; unit 470/486 (16 pre-existing sandbox listen
+  failures identical on pristine main); security 139/139; HTTP 9/9 over real
+  loopback; Zone L browser 5/5 (EXIT 0) + desktop/mobile screenshots;
+  dashboard regression 11/11 pass lines; shutdown SIGTERM 1/1.
+- **Residuals:** same-UID writer swap detected but writer containment out of
+  scope; CLI piped-stdin deliberate; demo quota in-memory; SIGKILL-class
+  deaths rely on next-startup sweep (documented); dashboard regression runner
+  footer absent in sandbox (per-test verdicts quoted, not hidden).
+- **STOP:** independent GPT-6 re-audit. No merge, deploy, provider calls,
+  credential reads, spend, model-ID activation, or stored-proposal execution.
+
 <!-- HANDOFF_ENTRIES_END -->

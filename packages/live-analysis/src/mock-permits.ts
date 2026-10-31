@@ -57,6 +57,22 @@ export class OfflineMockPermitLedger {
     return { ok: true };
   }
 
+  /**
+   * Read-only eligibility check for the permit-before-upload boundary: verifies
+   * the pending permit matches and is live WITHOUT consuming it or marking
+   * anything spent. Field ordering mirrors consumeMockAttempt.
+   */
+  peekEligiblePermit(input: MockPermitIdentity): Result {
+    const now = this.#now();
+    const pending = this.#pending;
+    if (!pending) return { ok: false, code: 'NO_PERMIT' };
+    if (now - pending.issuedAt >= PERMIT_TTL_MS) return { ok: false, code: 'PERMIT_EXPIRED' };
+    if (!validIdentity(input)) return { ok: false, code: 'INVALID_IDENTITY' };
+    if (pending.runId !== input.runId || pending.kind !== input.kind || pending.bytes !== input.bytes ||
+      !hashesMatch(pending.sha256, input.sha256)) return { ok: false, code: 'PERMIT_MISMATCH' };
+    return { ok: true };
+  }
+
   /** One mock attempt consumes the permit even for a mismatch or failure. */
   consumeMockAttempt(input: MockPermitIdentity): Result {
     const now = this.#now();

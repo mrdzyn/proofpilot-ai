@@ -13,10 +13,11 @@ D8 is design-only. No live inference path exists in this slice.
   (OPEN, unmerged): `dashboard/`, `packages/dashboard-import/`,
   `tests/unit/dashboard-*.test.ts`, `tests/integration/dashboard-browser.test.ts`
   copied verbatim into the integration branch.
-- PR #29 I1 config @ `3593527b3629b9de8e49725000cd687430466c6c` (OPEN, unmerged):
-  `packages/live-analysis/src/config.ts`,
+- PR #29 I1 config: MERGED to `main` as `821171a`; the integration branch
+  merged `origin/main` forward (no rebase/force) and the I1 files
+  (`packages/live-analysis/src/config.ts`,
   `tasks/UI-C3-02-I1-OFFLINE-CONFIG.md`,
-  `tests/unit/live-analysis-config.test.ts` copied verbatim.
+  `tests/unit/live-analysis-config.test.ts`) are byte-identical with the merge.
 - PR #30 I2 security helpers @ `3a0e1a8aee8d315bc4709b38e436960464ed644b`
   (OPEN, unmerged): `local-session.ts`, `mock-permits.ts`, `request-guard.ts`
   (+ `'/api/cancel'` route, same policy class, documented below),
@@ -54,6 +55,35 @@ no authenticated model listing, no billable inference, no quota/activation-pin
 changes, no historical real-proposal execution, no verifier/oracle/trust-root
 changes, no retry/fallback, no raw video/base64/model-response persistence,
 no merge or deployment.
+
+## GPT-6 remediation of PR #31 (same branch, no history rewrite)
+
+Independent audit verdict FIX REQUIRED (4 MAJOR + 2 MINOR). Remediation:
+
+- MAJOR-1: `/api/analyze|propose` accept promptly with a `runId` (state
+  `analyzing`) and settle in the background; the UI tracks the active runId
+  and polls in flight, so Cancel reaches the in-flight run (proven by
+  Chromium click-while-processing and HTTP cancel tests).
+- MAJOR-2: one single-flight slot for upload/analyze/propose acquired
+  synchronously before the first await; revoke bumps an epoch so a stale
+  settling run can never release a newer run's slot; deterministic
+  two-permit, upload-during-analyze, and revoke/re-pair race tests.
+- MAJOR-3: approved permit-before-upload sequence restored — the browser
+  hashes locally, the owner issues a hash/byte/action-bound permit, the
+  companion peeks eligibility (new read-only `peekEligiblePermit`, no
+  consumption) before staging or decoding anything; consumption stays at the
+  analyze/propose attempt (single-use preserved). Unpermitted uploads get
+  NO_PERMIT with zero staged bytes and zero trusted-boundary decode work.
+- MAJOR-4: branch reconciled with `main@821171a` via a forward merge (no
+  rebase, force-push, or changes to PRs #26/#27/#29/#30); STATUS/HANDOFFS
+  conflicts resolved keeping both histories; I1 files kept as merged.
+- MINOR-1: SIGINT/SIGTERM handlers + eager close, SIGKILL-crash stale sweep
+  (`sweepStaleStagingDirs`, unit-tested; SIGTERM-with-staged-clip integration
+  test), typed 413 BAD_BODY_SIZE on drained oversize bodies, JSON-null guard
+  on `/api/pair`, `uploadId` bound to the staged upload.
+- MINOR-2: misleading test names corrected; Zone L browser coverage adds
+  Cancel click, 320px reflow, 200% text, keyboard-only pairing, and quota
+  exhaustion; STATUS stale refs fixed (#29/#24 merged).
 
 ## Acceptance
 

@@ -1,9 +1,13 @@
 // UI-C3-02-I2: zero-I/O request/session/mock-permit adversarial battery.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { existsSync, mkdtempSync, mkdirSync, rmSync, utimesSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { checkCompanionRequest, type RequestMetadata } from '../../packages/live-analysis/src/request-guard.ts';
 import { LocalSessionManager } from '../../packages/live-analysis/src/local-session.ts';
 import { OfflineMockPermitLedger } from '../../packages/live-analysis/src/mock-permits.ts';
+import { sweepStaleStagingDirs } from '../../packages/live-analysis/src/uploads.ts';
 import { evaluateOfflineLiveConfiguration } from '../../packages/live-analysis/src/config.ts';
 
 const port = 5188;
@@ -177,6 +181,46 @@ test('L-AUTH-1: invalid mock permits and revoked permits refuse', () => {
   permits.revokePending();
   assert.deepEqual(permits.consumeMockAttempt(identity), { ok: false, code: 'NO_PERMIT' });
   assert.deepEqual(permits.issueTerminalMockPermit(identity), { ok: false, code: 'RUN_SPENT' });
+});
+
+test('L-PERMIT-1: peek checks eligibility without consuming or spending', () => {
+  let now = 5_000;
+  const permits = new OfflineMockPermitLedger(() => now);
+  assert.deepEqual(permits.peekEligiblePermit(identity), { ok: false, code: 'NO_PERMIT' });
+  assert.deepEqual(permits.issueTerminalMockPermit(identity), { ok: true });
+  assert.deepEqual(permits.peekEligiblePermit(identity), { ok: true });
+  assert.deepEqual(permits.peekEligiblePermit(identity), { ok: true });
+  assert.deepEqual(
+    permits.peekEligiblePermit({ ...identity, sha256: 'b'.repeat(64) }),
+    { ok: false, code: 'PERMIT_MISMATCH' },
+  );
+  now += 120_000;
+  assert.deepEqual(permits.peekEligiblePermit(identity), { ok: false, code: 'PERMIT_EXPIRED' });
+  // Peek never spends: consume still sees the (expired) permit, then marks it spent.
+  assert.deepEqual(permits.consumeMockAttempt(identity), { ok: false, code: 'PERMIT_EXPIRED' });
+  assert.deepEqual(permits.issueTerminalMockPermit(identity), { ok: false, code: 'RUN_SPENT' });
+});
+
+test('L-SWEEP-1: stale staging roots are swept; fresh roots and foreign dirs survive', async () => {
+  const base = mkdtempSync(path.join(tmpdir(), 'pp-sweep-'));
+  try {
+    const stale = path.join(base, 'pp-live-upload-stale');
+    const fresh = path.join(base, 'pp-live-upload-fresh');
+    const foreign = path.join(base, 'other-dir');
+    mkdirSync(stale);
+    mkdirSync(fresh);
+    mkdirSync(foreign);
+    const oldSec = (Date.now() - 25 * 60 * 60_000) / 1000;
+    utimesSync(stale, oldSec, oldSec);
+    const removed = await sweepStaleStagingDirs(base);
+    assert.equal(removed, 1);
+    assert.ok(!existsSync(stale), 'stale staging root removed');
+    assert.ok(existsSync(fresh), 'fresh staging root kept');
+    assert.ok(existsSync(foreign), 'foreign directory untouched');
+    assert.equal(await sweepStaleStagingDirs(path.join(base, 'no-such-dir')), 0);
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
 });
 
 test('L-ONE-1: no I2 positive permit can authorize inference before D9', () => {

@@ -23,7 +23,7 @@ import { OfflineMockPermitLedger, type MockPermitKind } from './mock-permits.ts'
 import { createMockTransport, MockCancelled, type MockTransport } from './mock-transport.ts';
 import { encodeVideoPart } from './baseten-request.ts';
 import { sanitizeAnalysisResponse, sanitizeProposalResponse } from './responses.ts';
-import { StagedUploads } from './uploads.ts';
+import { MAX_STAGED_BYTES, StagedUploads } from './uploads.ts';
 import type { ValidatedVideo } from '../../intake/src/media.ts';
 
 export const COMPANION_VERSION = '0.1-i2i4-mock';
@@ -43,6 +43,8 @@ export interface CompanionOptions {
   permits?: OfflineMockPermitLedger;
   uploads?: StagedUploads;
   transport?: MockTransport;
+  /** Latency for the built-in cancelling mock transport; ignored when `transport` is supplied. */
+  transportLatencyMs?: number;
   analysesLeft?: number;
   proposalsLeft?: number;
   runTimeoutMs?: number;
@@ -58,6 +60,10 @@ export interface ApiMeta {
   readonly fetchSite?: string | null;
   readonly contentType?: string | null;
   readonly sessionToken?: string | null;
+  /** Raw upload declaration (mirrors the x-live-sha256/x-live-bytes/x-live-action headers). */
+  readonly declaredSha256?: string | null;
+  readonly declaredBytes?: string | null;
+  readonly declaredKind?: string | null;
 }
 
 export interface ApiResult {
@@ -93,6 +99,8 @@ interface RunRecord {
   finishedAt: number | null;
   cancelled: boolean;
   result: unknown;
+  /** Companion epoch that owned the slot when this run started (revoke bumps it). */
+  epoch: number;
 }
 
 function jsonResponse(status: number, body: unknown): ApiResult {
@@ -139,6 +147,7 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
   // The default transport aborts promptly when the in-flight run is cancelled;
   // a caller-supplied transport (tests) owns its own policy.
   const transport = options.transport ?? createMockTransport({
+    latencyMs: options.transportLatencyMs ?? 1200,
     shouldCancel: () => [...runs.values()].some((r) => r.state === 'analyzing' && r.cancelled),
   });
   let analysesLeft = options.analysesLeft ?? 3;
@@ -146,10 +155,20 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
   const runTimeoutMs = options.runTimeoutMs ?? 120_000;
   const serveRoot = options.serveRoot ?? null;
   const pendingByKey = new Map<string, string>();
+  const inflight = new Set<Promise<void>>();
   let verified: ValidatedVideo | null = null;
+  let stagedUploadId: string | null = null;
   let permitCounter = 0;
   let runCounter = 0;
-  let busy = false;
+  // Single-flight slot for upload/analyze/propose, acquired synchronously
+  // before the first await. `epoch` is bumped by terminalRevoke so a stale
+  // settling run can never release a newer run's slot.
+  let flight: { epoch: number } | null = null;
+  let epoch = 0;
+
+  function releaseFlight(runEpoch: number): void {
+    if (flight !== null && flight.epoch === runEpoch) flight = null;
+  }
 
   const keyOf = (sha256: string, bytes: number, kind: MockPermitKind): string =>
     `${kind}:${sha256}:${bytes}`;
@@ -173,8 +192,12 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
     sessions.revokeAll();
     permits.revokePending();
     pendingByKey.clear();
-    busy = false;
+    // Bump the epoch and free the slot: stale in-flight runs settle as
+    // CANCELLED but can never release a newer run's slot (see settleRun).
+    epoch += 1;
+    flight = null;
     verified = null;
+    stagedUploadId = null;
     for (const run of runs.values()) {
       if (run.state === 'analyzing') {
         run.cancelled = true;
@@ -191,19 +214,53 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
       paired: authenticated,
       config: { urlOk: true, modelOk: false, d9: 'pending (blocks any live call)' },
       quota: { analysesLeft, proposalsLeft },
-      busy,
+      busy: flight !== null,
     };
   }
 
-  async function handleUpload(body: Uint8Array): Promise<ApiResult> {
-    verified = null;
+  /**
+   * Permit-before-upload: the request declares the exact (sha256, bytes,
+   * action) the owner permitted in the terminal. Without a live eligible
+   * permit nothing is staged and no trusted-boundary decode work happens.
+   */
+  async function handleUpload(
+    body: Uint8Array,
+    declared: { sha256: string | null | undefined; bytes: string | null | undefined; kind: string | null | undefined },
+  ): Promise<ApiResult> {
+    if (flight !== null) {
+      return refusal('RUN_BUSY', 'another live run is in flight; wait or cancel it first', 409);
+    }
+    const kind = declared.kind;
+    const sha = declared.sha256;
+    const bytesRaw = declared.bytes;
+    if ((kind !== 'analyze' && kind !== 'propose') || typeof sha !== 'string' || !/^[0-9a-f]{64}$/.test(sha) ||
+      typeof bytesRaw !== 'string' || !/^[0-9]{1,10}$/.test(bytesRaw)) {
+      return refusal('BAD_PAYLOAD', 'upload must declare sha256, bytes and action', 400);
+    }
+    const declaredBytes = Number.parseInt(bytesRaw, 10);
+    if (!Number.isSafeInteger(declaredBytes) || declaredBytes <= 0 || declaredBytes > MAX_STAGED_BYTES) {
+      return refusal('BAD_PAYLOAD', 'upload must declare sha256, bytes and action', 400);
+    }
+    const ledgerId = pendingByKey.get(keyOf(sha, declaredBytes, kind));
+    if (ledgerId === undefined) {
+      return refusal('NO_PERMIT', 'no terminal permit names this file and action; ask the owner to permit it first', 403);
+    }
+    const eligible = permits.peekEligiblePermit({ runId: ledgerId, sha256: sha, bytes: declaredBytes, kind });
+    if (!eligible.ok) {
+      return refusal(eligible.code, 'the terminal permit for this file and action is not usable', 403);
+    }
     const staged = await uploads.stage(body);
     if (!staged.ok) return refusal(staged.code, staged.detail, 422);
     const checked = await uploads.verify(staged.uploadId);
     if (!checked.ok) {
       return refusal(checked.code, checked.detail, 422);
     }
+    if (checked.video.sha256 !== sha || checked.video.bytes !== declaredBytes) {
+      await uploads.discard();
+      return refusal('MEDIA_CHANGED', 'staged bytes differ from the declared upload', 422);
+    }
     verified = checked.video;
+    stagedUploadId = staged.uploadId;
     return jsonResponse(200, {
       ok: true,
       uploadId: staged.uploadId,
@@ -225,6 +282,68 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
     else proposalsLeft = Math.max(0, proposalsLeft - 1);
   }
 
+  /**
+   * Settle a background run: race the mock transport against the ceiling,
+   * record done/refused/cancelled/timeout on the run record, spend quota only
+   * on a sanitized success, and release the single-flight slot only when it
+   * still belongs to this run's epoch.
+   */
+  async function settleRun(
+    run: RunRecord,
+    kind: MockPermitKind,
+    responsePromise: Promise<{ mockModel: string; text: string; usage: { promptTokens: number; completionTokens: number; totalTokens: number } }>,
+  ): Promise<void> {
+    const deadline = now() + runTimeoutMs;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error('run exceeded its total time ceiling')), Math.max(0, deadline - now()));
+    });
+    try {
+      const response = await Promise.race([responsePromise, timeout]);
+      if (run.cancelled) {
+        run.state = 'cancelled';
+        run.finishedAt = now();
+        run.result = { ok: false as const, code: 'CANCELLED', detail: 'run cancelled before the mock response landed' };
+        await uploads.discard();
+        return;
+      }
+      const sanitized = kind === 'analyze'
+        ? sanitizeAnalysisResponse({ mockModel: response.mockModel, text: response.text, usage: response.usage })
+        : sanitizeProposalResponse({ mockModel: response.mockModel, text: response.text, usage: response.usage });
+      if (!sanitized.ok) {
+        run.state = 'refused';
+        run.finishedAt = now();
+        run.result = {
+          ok: false, code: sanitized.code, detail: sanitized.detail, transport: 'mock-fixture', liveInference: false,
+        };
+        return;
+      }
+      spendQuota(kind);
+      run.state = 'done';
+      run.finishedAt = now();
+      run.result = { ok: true, ...sanitized.value, runId: run.runId, sha256: run.sha256, mockModel: response.mockModel };
+    } catch (error) {
+      run.state = 'cancelled';
+      run.finishedAt = now();
+      const message = error instanceof Error ? error.message : '';
+      const timedOut = message.includes('ceiling');
+      const cancelled = error instanceof MockCancelled || message.includes('cancelled');
+      run.result = (cancelled || timedOut)
+        ? { ok: false, code: timedOut ? 'TIMEOUT' : 'CANCELLED', detail: 'run cancelled or timed out; staged bytes already deleted' }
+        : { ok: false, code: 'TRANSPORT_REFUSED', detail: 'mock transport refused the internal request' };
+      await uploads.discard();
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+      releaseFlight(run.epoch);
+    }
+  }
+
+  /**
+   * Accept a run promptly: every check that can refuse (quota, single-flight,
+   * staged identity, permit consumption, read, encode) happens synchronously
+   * up to the first await, and the runId is returned while the mock transport
+   * still runs in the background — so Cancel can reach the in-flight run.
+   */
   async function handleAnalyzePropose(kind: MockPermitKind, payload: unknown): Promise<ApiResult> {
     if (typeof payload !== 'object' || payload === null) {
       return refusal('BAD_PAYLOAD', 'request body must be a JSON object', 400);
@@ -237,101 +356,70 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
     if (quotaFor(kind) <= 0) {
       return refusal('QUOTA_SPENT', 'demo quota exhausted; mock runs stop here', 429);
     }
-    if (busy) {
+    // Single-flight acquisition is synchronous: no await precedes it, so two
+    // concurrent requests cannot both observe a free slot.
+    if (flight !== null) {
       return refusal('RUN_BUSY', 'another live run is already in flight', 409);
     }
+    flight = { epoch };
+    // Epoch captured at acquisition: after an await, a revoke may have freed
+    // this slot and a newer run may own it — never clear another epoch's slot.
+    const myEpoch = epoch;
+    const releaseAndRefuse = async (code: string, detail: string, status: number): Promise<ApiResult> => {
+      await uploads.discard();
+      verified = null;
+      stagedUploadId = null;
+      releaseFlight(myEpoch);
+      return refusal(code, detail, status);
+    };
     const ledgerId = pendingByKey.get(keyOf(sha256, bytes as number, kind));
     if (ledgerId === undefined) {
-      return refusal('NO_PERMIT', 'no terminal permit names this file and action', 403);
+      return releaseAndRefuse('NO_PERMIT', 'no terminal permit names this file and action', 403);
     }
     pendingByKey.delete(keyOf(sha256, bytes as number, kind));
     // Single-use semantics: the mock attempt is consumed even when the
     // staged bytes turn out to be wrong (mirrors the I2 ledger contract).
     const consumed = permits.consumeMockAttempt({ runId: ledgerId, sha256, bytes: bytes as number, kind });
     if (!consumed.ok) {
-      await uploads.discard();
-      verified = null;
-      return refusal(consumed.code, 'stored mock permit could not be consumed', 403);
+      return releaseAndRefuse(consumed.code, 'stored mock permit could not be consumed', 403);
     }
-    if (verified === null || verified.sha256 !== sha256 || verified.bytes !== bytes) {
-      await uploads.discard();
-      verified = null;
-      return refusal('MEDIA_CHANGED', 'staged bytes differ from the validated upload', 422);
+    // The uploadId is bound to the currently staged upload (declared at the
+    // permitted upload); a foreign id fails closed here, spending the permit.
+    if (stagedUploadId === null || verified === null || stagedUploadId !== uploadId ||
+      verified.sha256 !== sha256 || verified.bytes !== bytes) {
+      return releaseAndRefuse('MEDIA_CHANGED', 'staged bytes differ from the validated upload', 422);
     }
     let bytesToEncode: Buffer;
     try {
       bytesToEncode = await uploads.readBytes(verified);
     } catch {
-      await uploads.discard();
-      verified = null;
-      return refusal('MEDIA_CHANGED', 'staged bytes changed before encoding', 422);
+      return releaseAndRefuse('MEDIA_CHANGED', 'staged bytes changed before encoding', 422);
     }
     const part = encodeVideoPart(new Uint8Array(bytesToEncode.buffer, bytesToEncode.byteOffset, bytesToEncode.byteLength));
     await uploads.discard();
     verified = null;
+    stagedUploadId = null;
     if (!part.ok) {
+      releaseFlight(myEpoch);
       return refusal(part.code, 'verified bytes failed wire encoding', 422);
     }
     runCounter += 1;
     const runId = `local-${new Date(now()).toISOString().slice(0, 10)}-${String(runCounter).padStart(3, '0')}`;
     const run: RunRecord = {
-      runId, kind, sha256, state: 'analyzing', createdAt: now(), finishedAt: null, cancelled: false, result: null,
+      runId, kind, sha256, state: 'analyzing', createdAt: now(), finishedAt: null,
+      cancelled: false, result: null, epoch,
     };
     runs.set(runId, run);
     if (runs.size > 20) {
       const oldest = [...runs.values()].filter((r) => r.state !== 'analyzing').sort((a, b) => (a.finishedAt ?? 0) - (b.finishedAt ?? 0))[0];
       if (oldest !== undefined) runs.delete(oldest.runId);
     }
-    busy = true;
-    const deadline = now() + runTimeoutMs;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const timeout = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new Error('run exceeded its total time ceiling')), Math.max(0, deadline - now()));
+    const settled = settleRun(run, kind, transport.respond({ kind, runId, sha256, videoBytes: bytes as number }));
+    inflight.add(settled);
+    void settled.finally(() => {
+      inflight.delete(settled);
     });
-    try {
-      const response = await Promise.race([
-        transport.respond({ kind, runId, sha256, videoBytes: bytes as number }),
-        timeout,
-      ]);
-      if (run.cancelled) {
-        run.state = 'cancelled';
-        run.finishedAt = now();
-        run.result = { ok: false as const, code: 'CANCELLED', detail: 'run cancelled before the mock response landed' };
-        return jsonResponse(200, { ok: true, runId, state: run.state });
-      }
-      spendQuota(kind);
-      const sanitized = kind === 'analyze'
-        ? sanitizeAnalysisResponse({ mockModel: response.mockModel, text: response.text, usage: response.usage })
-        : sanitizeProposalResponse({ mockModel: response.mockModel, text: response.text, usage: response.usage });
-      if (!sanitized.ok) {
-        run.state = 'refused';
-        run.finishedAt = now();
-        run.result = {
-          ok: false, code: sanitized.code, detail: sanitized.detail, transport: 'mock-fixture', liveInference: false,
-        };
-      } else {
-        run.state = 'done';
-        run.finishedAt = now();
-        run.result = { ok: true, ...sanitized.value, runId, sha256, mockModel: response.mockModel };
-      }
-      return jsonResponse(200, { ok: true, runId, state: run.state });
-    } catch (error) {
-      run.state = 'cancelled';
-      run.finishedAt = now();
-      const message = error instanceof Error ? error.message : '';
-      const timedOut = message.includes('ceiling');
-      const cancelled = error instanceof MockCancelled || message.includes('cancelled');
-      run.result = (cancelled || timedOut)
-        ? { ok: false, code: timedOut ? 'TIMEOUT' : 'CANCELLED', detail: 'run cancelled or timed out; staged bytes already deleted' }
-        : { ok: false, code: 'TRANSPORT_REFUSED', detail: 'mock transport refused the internal request' };
-      if (run.result !== null && typeof run.result === 'object' && (run.result as { code: string }).code === 'TRANSPORT_REFUSED') {
-        return refusal('TRANSPORT_REFUSED', 'mock transport refused the internal request', 500);
-      }
-      return jsonResponse(200, { ok: true, runId, state: run.state });
-    } finally {
-      if (timer !== undefined) clearTimeout(timer);
-      busy = false;
-    }
+    return jsonResponse(200, { ok: true, runId, state: 'analyzing' as const });
   }
 
   function handleCancel(payload: unknown): ApiResult {
@@ -399,13 +487,20 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
       return refusal('INVALID_ROUTE', 'no such endpoint', 404);
     }
     if (policy.endpoint === '/api/upload') {
-      return handleUpload(body);
+      return handleUpload(body, {
+        sha256: meta.declaredSha256,
+        bytes: meta.declaredBytes,
+        kind: meta.declaredKind,
+      });
     }
     const parsed = parseJson(body);
     if (!parsed.ok) {
       return refusal('BAD_JSON', 'request body is not valid JSON', 400);
     }
     if (policy.endpoint === '/api/pair') {
+      if (typeof parsed.value !== 'object' || parsed.value === null) {
+        return refusal('BAD_PAYLOAD', 'pairing body must be a JSON object', 400);
+      }
       const value = (parsed.value as Record<string, unknown>)['code'];
       const paired = sessions.pair(value);
       if (!paired.ok) {
@@ -424,30 +519,54 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
     return refusal('INVALID_ROUTE', 'no such endpoint', 404);
   }
 
-  function readHttpBody(req: IncomingMessage, limit: number): Promise<{ ok: true; bytes: Buffer } | { ok: false }> {
+  /**
+   * Bounded body reader. Oversize bodies are drained (up to a fixed grace
+   * window) so the server answers with a typed BAD_BODY_SIZE instead of
+   * killing the socket; a stream that exceeds even the grace window is
+   * destroyed and the caller must not attempt a response on it.
+   */
+  function readHttpBody(req: IncomingMessage, limit: number): Promise<
+    | { ok: true; bytes: Buffer }
+    | { ok: false; oversized: boolean; destroyed: boolean }
+  > {
+    const GRACE_BYTES = 1_048_576;
     return new Promise((resolve) => {
       const chunks: Buffer[] = [];
       let total = 0;
-      let failed = false;
+      let oversized = false;
+      let settled = false;
+      const finish = (result: { ok: false; oversized: boolean; destroyed: boolean }): void => {
+        if (!settled) {
+          settled = true;
+          resolve(result);
+        }
+      };
       req.on('data', (chunk: Buffer) => {
-        if (failed) return;
+        if (settled) return;
         total += chunk.length;
-        if (total > limit) {
-          failed = true;
-          req.destroy();
-          resolve({ ok: false });
-          return;
+        if (!oversized && total > limit) {
+          oversized = true;
+          chunks.length = 0;
+        }
+        if (oversized) {
+          if (total > limit + GRACE_BYTES) {
+            req.destroy();
+            finish({ ok: false, oversized: true, destroyed: true });
+            return;
+          }
+          return; // drain and discard
         }
         chunks.push(chunk);
       });
       req.on('end', () => {
-        if (!failed) resolve({ ok: true, bytes: Buffer.concat(chunks) });
+        if (!settled) {
+          settled = true;
+          if (oversized) resolve({ ok: false, oversized: true, destroyed: false });
+          else resolve({ ok: true, bytes: Buffer.concat(chunks) });
+        }
       });
       req.on('error', () => {
-        if (!failed) {
-          failed = true;
-          resolve({ ok: false });
-        }
+        finish({ ok: false, oversized, destroyed: false });
       });
     });
   }
@@ -502,6 +621,9 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
       fetchSite: (req.headers['sec-fetch-site'] as string | undefined) ?? undefined,
       contentType: req.headers['content-type'] ?? undefined,
       sessionToken: (req.headers['x-live-session'] as string | undefined) ?? undefined,
+      declaredSha256: (req.headers['x-live-sha256'] as string | undefined) ?? undefined,
+      declaredBytes: (req.headers['x-live-bytes'] as string | undefined) ?? undefined,
+      declaredKind: (req.headers['x-live-action'] as string | undefined) ?? undefined,
     };
     if (method === 'GET') {
       // GET bodies are never parsed; a GET that carries one is refused so the
@@ -516,6 +638,11 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
     // Absolute anti-abuse cap; the guard re-checks the per-endpoint limit.
     const body = await readHttpBody(req, 30_000_000);
     if (!body.ok) {
+      if (body.oversized && !body.destroyed) {
+        sendHttpRefusal(res, 'BAD_BODY_SIZE', 'request body exceeds the endpoint limit', 413);
+      } else if (!body.destroyed) {
+        sendHttpRefusal(res, 'INTERNAL', 'failed to read the request body', 500);
+      }
       return;
     }
     sendHttp(res, await dispatch(meta, new Uint8Array(body.bytes.buffer, body.bytes.byteOffset, body.bytes.byteLength)));
@@ -567,6 +694,12 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
       if (options.bind !== false) {
         await new Promise<void>((resolve) => server.close(() => resolve()));
       }
+      // Let in-flight runs observe cancellation and settle before the staging
+      // tree is deleted, so close() never strands a run or temp bytes.
+      for (const run of runs.values()) {
+        if (run.state === 'analyzing') run.cancelled = true;
+      }
+      await Promise.allSettled([...inflight]);
       await uploads.destroy();
     },
     terminalPermit,
