@@ -1299,4 +1299,41 @@ enrollment, merge or residual-risk acceptance.
 GPT-6 exact-head re-audit of the new HEAD; owner merge decision. No real execution,
 enrollment, merge or residual-risk acceptance.
 
+## Handoff: UI-C3-02-P1
+
+- **Task / phase:** UI-C3-02 live-analysis mode — docs-only architecture & security proposal
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** Independent review, then project owner (decisions D1–D7 before any implementation)
+- **Branch:** `docs/ui-c3-02-live-analysis-mode` (based on `main@b841740`, independent of PRs #26/#27)
+- **PR:** new Draft PR against `main` (to be opened)
+- **State:** PROPOSAL ONLY. No implementation, provider calls, quota, merge, or deploy.
+
+### Deliverable
+
+- `docs/UI-C3-02-LIVE-ANALYSIS-MODE.md` (new): bounded spec for a future Live Muse
+  Spark Analysis Mode — explicit-click Analyze/Propose journey, localhost
+  companion holding the only credential path, per-request two-act authorization
+  (terminal permit + UI click), single-use hash-bound permits, synthetic-first
+  bounded inputs, upload lifecycle with cleanup, strict output validation with
+  untrusted-text rendering, separate live vs historical views, never VERIFIED
+  for unexecuted proposals, LIVE-C3-01 quota preserved spent, no
+  verifier/oracle/gate changes; trust-boundary diagram; owner decisions
+  D1–D7; testing plan (L-STAT/L-AUTH/L-ONE/L-BIND/L-SAN/L-SEP/L-NET/L-A11Y +
+  owner-run acceptance + adversarial tests); acceptance and stop rule.
+- `docs/STATUS.md`: UI-C3-02 row + handoff pointer + next action (this branch only).
+
+### Validation
+
+- `git diff --check` clean; `pnpm lint` green (docs-only change set).
+- No code, no tests, no provider surface: nothing executable to run; hosted CI
+  owns the PR gates.
+- Forbidden-scope check: no Meta/Baseten/Modal contact, no credential read,
+  no quota/activation/pin change, no stored-proposal access, no
+  verifier/oracle/grammar change, no merge/deploy.
+
+### Next action
+
+Independent review of the proposal PR; owner decisions D1–D7. STOP before
+implementation or any live provider call.
+
 <!-- HANDOFF_ENTRIES_END -->

@@ -10,7 +10,7 @@
 - **Primary branch:** protected `main` at `07ae865a8195ef608b01a146cc25d17fe13164f8` (PR #23 squash merge)
 - **Working branch:** `phase/pp-secp202-authenticity` (SEC-P2-02 Draft PR; the branch head is authoritative)
 - **Active task:** SEC-P2-02 artifact authenticity + isolated-verification readiness (task contract in `tasks/SEC-P2-02-ARTIFACT-AUTHENTICITY.md`; C3-B2B context in `tasks/PP-META-I2-C3-B2B.md`)
-- **Active handoff:** PP-SEC-P2-02-A3
+- **Active handoff:** UI-C3-02-P1
 - **Authorization:** Both single-use C2B live smokes are **spent**. **APPROVED and EXECUTED:** LIVE-C3-01 (owner decision October 29, 2026: one Meta `muse-spark-1.3` attempt in total); the attempt was made and the lifetime quota is **spent**; a further provider call is **NOT AUTHORIZED** (it needs a new owner decision, a new activation commit and a new pin-only commit). **APPROVED:** SEC-C3-01 (F01-only closed-grammar CSS, hand-authored controls only). **APPROVED (implementation only):** C3-B2B P1/P2/E1/E2 (all merged), QA-01 + SEC-P2-01 (merged as PR #23), and SEC-P2-02 (signed authentication, isolated-verification runbook, adversarial synthetic tests, on a Draft PR) with synthetic fixtures and offline automated tests in bounded Draft PRs. **NOT APPROVED:** accessing, loading, staging or executing the real stored proposal (`c3-live-meta-001`) in any form — a separate pending owner decision from the implementation approval, plus the SEC-P2-01 residual owner decision before any real execution; UI-C3-01 (report UI), HOST-C3-01 (Modal or any hosted backend), Baseten, additional attempts, automated retries. A credit balance is not permission to spend. No agent reads credentials or approval records, executes model-generated code, deploys or merges.
 
 ## Completed milestones
@@ -87,6 +87,7 @@
 | C3-B2B future real verification | DISABLED procedure in `docs/C3B2B-REAL-PROPOSAL-PROCEDURE.md` (authorization, exact-param placeholders, 3-replay run, evidence verification, stop/rollback); hard-disable intact, no access/loading/staging/execution |
 | Hackathon submission pack (`docs/META-HACKATHON-SUBMISSION.md`) | MERGED (PR #18); portal fields, video, final links: PENDING; deadline Nov 4, 2026 9 PM ET = Nov 5, 10 AM PHT |
 | C3-C scoreboard report UI, C3-D report + replay + audit, C3-E demo, C3-F submission | NOT STARTED (UI-C3-01 not approved) |
+| UI-C3-02 live analysis mode | PROPOSAL ONLY on a Draft PR (`docs/UI-C3-02-LIVE-ANALYSIS-MODE.md`): localhost companion + explicit per-request authorization + synthetic-first inputs; no implementation, provider calls, quota, merge or deploy approved |
 | Baseten compatibility (`docs/BASETEN-COMPATIBILITY-PLAN.md`) | PLAN ONLY; pinned id vs public docs discrepancy and a structured-output doubt recorded; NOT TESTED |
 | Modal sandbox (`docs/MODAL-FEASIBILITY-PROPOSAL.md`) | PROPOSAL ONLY; the C3 contract forbids hosted backends; HOST-C3-01 not requested; not a verified boundary |
 | Muse Wonder as patcher | UNVERIFIED and not a dependency |
@@ -262,5 +263,6 @@ wording and the P2 reader only, and does not re-run or alter that evidence.
 
 1. Independent GPT-6 exact-head security review of the SEC-P2-02 Draft PR, then owner merge decision. This slice ends here.
 2. Owner decisions still open: SEC-P2-02 residual prerequisites (protected checkout, single-writer window, historical enrollment per runbook sections 3/7/10); whether to approve real execution of the stored proposal (requiring the separate execution approval, the residual decision, the enrollment and an independent security review) or to submit with the honest "proposal obtained, verification next" story; the demo recording and the portal fields (`docs/META-HACKATHON-SUBMISSION.md`); UI-C3-01 and HOST-C3-01 stay NOT APPROVED.
+3. UI-C3-02 live-analysis proposal (this branch, Draft PR for independent review): review the bounded spec, then owner decisions D1–D7 in `docs/UI-C3-02-LIVE-ANALYSIS-MODE.md` §8 before any implementation task. STOP before implementation or any live provider call.
 
 Submission deadline: Nov 4, 9:00 PM EST = **Nov 5, 10:00 AM PHT**; internal target is Nov 4 PHT.
