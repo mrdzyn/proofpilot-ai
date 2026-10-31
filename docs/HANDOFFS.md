@@ -1447,4 +1447,54 @@ any live provider call.
 GPT-6 second re-audit of PR #28; owner decisions D1–D9 (D9 first, blocks any
 call). STOP before implementation or any live provider call.
 
+## Handoff: UI-C3-02-P4
+
+- **Task / phase:** UI-C3-02 request-matrix revision on docs-only Draft PR #28
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** GPT-6 third review, then project owner (pending D1–D7 and D9; D8 recorded design-only)
+- **Branch:** `docs/ui-c3-02-live-analysis-mode` (based on `main@b841740`, independent of PRs #26/#27)
+- **PR:** #28 (Draft, against `main`)
+- **State:** PROPOSAL ONLY. No implementation, credential read, provider call, spend, merge, or deploy.
+
+### Revision (all four third-audit corrections addressed)
+
+- **Base-URL gate:** `BASETEN_API_BASE_URL=https://inference.baseten.co/v1`
+  validated component-wise (https scheme, exact host, default port, no
+  userinfo/query/fragment, pathname exactly `/v1` after single-trailing-slash
+  normalization); destination constructed as origin + `/v1/chat/completions`
+  from validated components (no double-append, no raw concatenation, no
+  cross-origin redirects). L-CFG-1 extended with the full URL matrix
+  (owner value PASSES bare/normalized; all hostile variants refused, zero
+  egress). D9 independent of URL validity.
+- **Request matrix:** session is the gate, Origin/fetch-metadata are
+  hardening — (a) session-bearing Host-valid absent-Origin polling GETs on
+  `/api/status|/events` allowed; (b) wrong/null Origin, non-same-origin
+  fetch metadata, missing/invalid session, or bad Host refused; (c) POSTs
+  require present exact same-origin Origin; (d) `/api/health` state-free.
+  Fetch-metadata-absent fallback specified (session + Host decide).
+  L-CSRF-1 extended with the legitimate-request matrix + Playwright
+  acceptance (owner-run).
+- **Pairing exception:** `POST /api/pair` documented as the sole pre-session
+  bootstrap (exact-Origin present required, JSON ≤1 KiB, rate limit +
+  lockout, zero CORS/egress); diagram updated; L-PAIR-1 extended with
+  cross-origin/null/absent-Origin pairing refusals.
+- **Labels:** STATUS active task, authorization line, and next action now
+  read "pending D1–D7 and D9; D8 recorded design-only".
+
+### Validation
+
+- `git diff --check` clean; `pnpm lint` green (docs-only change set).
+- No code, no tests, no provider surface, no `.env.local` read: nothing
+  executable to run; hosted CI owns the PR gates.
+- Forbidden-scope check: no Meta/Baseten/Modal contact, no credential read,
+  no quota/activation/pin change, no stored-proposal access, no
+  verifier/oracle/grammar change, no OpenRouter rerouting, no merge/deploy;
+  spent Meta quota, D9 block, and hard-disable untouched; prior findings
+  preserved.
+
+### Next action
+
+GPT-6 third review of PR #28; owner decisions D1–D7 and D9 (D8 recorded).
+STOP before implementation or any live provider call.
+
 <!-- HANDOFF_ENTRIES_END -->

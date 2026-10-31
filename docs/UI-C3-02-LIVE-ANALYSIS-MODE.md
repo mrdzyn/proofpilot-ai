@@ -163,11 +163,22 @@ Single `POST https://inference.baseten.co/v1/chat/completions`, bearer
 
 The three owner variables are untrusted operator configuration until checked:
 
-- `BASETEN_API_BASE_URL` must equal the pinned origin
-  `https://inference.baseten.co` (request path fixed to
-  `/v1/chat/completions` in code, never derived from configuration);
-  otherwise the companion refuses to start live service with typed
-  `ENDPOINT_UNAPPROVED`, zero provider calls.
+- `BASETEN_API_BASE_URL` must be exactly the owner-confirmed API base URL
+  `https://inference.baseten.co/v1`, validated component-wise: scheme must be
+  `https`, host must be exactly `inference.baseten.co`, port must be default
+  (no explicit port), userinfo/query/fragment must be absent, and the pathname
+  must be exactly `/v1` after stripping a single trailing slash. The single
+  permitted destination is then *constructed* from the validated components as
+  origin + `/v1/chat/completions` — never by concatenating the raw
+  environment string, so `/v1` cannot double-append and no configured path,
+  host, or redirect can choose a different outbound endpoint; redirect
+  following to other origins is disabled. Otherwise the companion refuses to
+  start live service with typed `ENDPOINT_UNAPPROVED`, zero provider calls.
+  URL matrix (all failures: refusal + zero egress): the owner-confirmed value
+  PASSES (with and without the single trailing slash, by the stated
+  normalization); wrong host, explicit port, `http` scheme, userinfo, query,
+  fragment, `/v2` or any other pathname, doubled path, or empty value are
+  refused. Model-ID D9 remains pending independent of URL validity.
 - `BASETEN_MODEL` must equal the D9-approved direct-Baseten model
   identifier, proven through public vendor documentation or a separately
   authorized non-spending account-specific availability check; the currently
@@ -246,27 +257,42 @@ per-model limits, base64-in-body accounting).
      destroyed on logout, expiry, or any authorization failure. Replay of a
      consumed code or a pre-restart token is refused. The Baseten key and any
      permanent approval never enter browser state.
-- **Endpoint tiers and authorization.**
-  - `/api/health` (GET): liveness only (`{ok, version}`), no run/permit/quota
-    state. The sole endpoint reachable without a session — safe for hostile
-    no-Origin GETs because it reveals nothing.
-  - Authenticated tier — `/api/status`, `/api/events` (GET, expose
-    run/permit/quota state), `/api/upload`, `/api/analyze`, `/api/propose`
-    (POST): require, on **every** call, (a) a valid `Host`, (b) `Origin`
-    equal to the companion origin when the header is present, (c) a valid
-    `X-Live-Session` header, and (d, defense in depth) `Sec-Fetch-Site:
-    same-origin` when the client sends fetch metadata. A plain cross-site
-    navigation or form POST cannot set the custom header, so hostile
-    no-Origin GETs/POSTs to state-bearing endpoints fail closed with a typed
-    error and zero side effects.
-  - Missing-Origin classification: accepted **only** where the request is both
-    state-free (`/api/health`) and Host-valid; every other missing-Origin
-    request is refused, because authorization travels in the custom header,
-    never in ambient authority.
+- **Pre-session bootstrap exception (`POST /api/pair`, and only it).** Pairing
+  is intentionally reachable without a pre-existing session — otherwise no
+  session could ever be created. It is narrowed instead of authenticated:
+  valid Host, **present** `Origin` exactly equal to the companion origin
+  (absent/`null` refused), `Content-Type: application/json`, body ≤ 1 KiB,
+  POST only, 5 attempts/minute with lockout and terminal-visible failure
+  logging, zero CORS, no session cookie or other ambient auth, and no
+  provider egress on any outcome. Cross-origin, Origin-null, Origin-absent,
+  oversize, and replayed pairing attempts are refused with typed errors.
+- **Request-validation matrix (unambiguous; session is the gate, Origin and
+  fetch metadata are hardening).**
+  - (a) Legitimate polling allowed: `GET /api/status` or `GET /api/events`
+    with a valid `Host`, a valid `X-Live-Session`, an **absent** `Origin`
+    (ordinary same-origin browser GETs need not send one), and
+    `Sec-Fetch-Site: same-origin` when the client sends fetch metadata. When
+    fetch metadata is absent entirely, the session + Host checks decide —
+    absent metadata is never treated as proof of same-origin, but it does not
+    block a session-bearing, Host-valid polling GET either.
+  - (b) Refused: any state-bearing request with a wrong or `null` Origin; a
+    `Sec-Fetch-Site` value other than `same-origin` (e.g. `cross-site`,
+    `same-site` for a non-local host, `none` on a session endpoint);
+    missing/invalid session; invalid Host (including rebinding hostnames).
+    All refusals are typed with zero side effects and zero provider egress.
+  - (c) Mutating POSTs (`/api/upload`, `/api/analyze`, `/api/propose`,
+    `/api/pair`) additionally require a **present** `Origin` exactly equal to
+    the companion origin — browsers always send `Origin` on same-origin
+    `fetch` POSTs, so requiring it costs legitimate clients nothing and
+    closes the null/absent-Origin POST vector by construction — plus the
+    session header (except `/api/pair`, the pre-session exception below),
+    permit checks, and all other gates.
+  - (d) `/api/health` (GET) stays state-free (`{ok, version}` only): the sole
+    endpoint reachable without a session, safe for hostile no-Origin GETs
+    because it reveals nothing.
   - Exact paths and methods only: no path parameters, no traversal, no method
-    beyond the one each path allows; pairing abuse (guessing, replay,
-    flooding) is rate-limited, logged to the terminal, and never produces
-    provider egress.
+    beyond the one each path allows; abuse (guessing, replay, flooding) is
+    rate-limited, logged to the terminal, and never produces provider egress.
 - **Resource limits.** Request body ≤ 30 MB; per-request idle 60 s and total
   10 min ceilings; one in-flight live request per companion; staged bytes
   capped at one file (a second upload replaces-and-deletes the first).
@@ -315,7 +341,8 @@ per-model limits, base64-in-body accounting).
 │  • strict validation, sanitized persistence,    │
 │    staged-byte cleanup (always deleted)         │
 │  • /api/health state-free; all other endpoints  │
-│    session-authenticated                         │
+│    session-authenticated except pre-session      │
+│    POST /api/pair (exact-Origin + rate-limited)  │
 └───┬───────────────────────────────┬────────────┘
     │ ONLY egress: POST             │ local evidence writes
     │ inference.baseten.co/v1/      │ (.proofpilot, 0600, allow-list,
@@ -509,7 +536,13 @@ Targeted checks (smallest evidence first; owner-run live legs never in CI):
   the D9-approved direct-Baseten ID (including the superseded `-1026` value
   and the unapproved `meta/muse-spark-open` alias) is refused with
   `MODEL_UNAVAILABLE_OR_UNAPPROVED`; both refusals produce zero transport
-  calls, no fallback, and a named configuration error naming D9.
+  calls, no fallback, and a named configuration error naming D9. URL matrix:
+  owner-confirmed `https://inference.baseten.co/v1` PASSES (bare and with one
+  trailing slash, by the stated normalization); wrong host, explicit port,
+  `http` scheme, userinfo, query, fragment, `/v2`/other/doubled path, and
+  empty value are refused; the constructed destination is asserted to be
+  exactly `https://inference.baseten.co/v1/chat/completions` (no
+  double-append, no raw-string concatenation).
 - **L-ONE-1 (unit, mocked transport):** transport double counts provider calls
   across failure/timeout/interruption drills — exactly one per permit, zero
   without.
@@ -536,15 +569,21 @@ Targeted checks (smallest evidence first; owner-run live legs never in CI):
   hostile page refused; null Origin refused for live APIs; rebinding Host
   refused; missing/stale `X-Live-Session` refused; permit replay after
   companion restart refused; second concurrent live request refused; oversize
-  body refused — all with typed errors and zero provider egress. Actual
-  hostile GETs are exercised, including absent-Origin variants against
-  `/api/status` (refused: session header required) and against `/api/health`
+  body refused — all with typed errors and zero provider egress. Legitimate-
+  request matrix (browser Playwright, owner-run): session-bearing Host-valid
+  polling GETs with absent `Origin` are accepted on `/api/status` and
+  `/api/events`; the same requests without a session, with a wrong/`null`
+  `Origin`, or with non-`same-origin` fetch metadata are refused. Actual
+  hostile GETs are exercised, including cross-origin and absent-Origin
+  variants against `/api/status` (refused) and against `/api/health`
   (accepted but state-free by construction).
 - **L-PAIR-1 (adversarial, owner-run + review):** pairing-code brute force
   (rate limit + lockout observed, codes stay single-use); code replay after
   success or expiry refused; pre-restart session token replay refused;
   session-token leakage probes (memory-only: absent from URLs, logs, storage,
-  and error text); flood of `/api/pair` refused without provider egress.
+  and error text); flood of `/api/pair` refused without provider egress;
+  cross-origin, Origin-null, and Origin-absent pairing attempts refused
+  (exact-Origin required for the bootstrap).
 - **L-LIMIT-1 (integration):** idle/total ceilings enforced; interruption
   spends the permit and renders nothing.
 - **L-A11Y-1 (browser):** keyboard-only path through Zone L states; live-region
