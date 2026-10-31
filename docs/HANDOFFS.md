@@ -1191,4 +1191,112 @@ GPT-6 focused re-audit of the new HEAD; owner merge decision; then owner-run loc
 ### Next action
 GPT-6 focused re-audit of the new HEAD; owner merge decision; then owner-run local QA per the corrected runbook.
 
+## Handoff: PP-SEC-P2-02-A1
+
+- **Task / phase:** SEC-P2-02 artifact authenticity + isolated-verification readiness
+  (task contract `tasks/SEC-P2-02-ARTIFACT-AUTHENTICITY.md`)
+- **From:** Implementation agent (Muse Code)
+- **To:** GPT-6 independent exact-head security review, then project owner
+- **Branch:** `phase/pp-secp202-authenticity` (new Draft PR from `main@07ae865a`)
+- **State:** READY FOR REVIEW. Detached Ed25519 manifest authentication (Zone P,
+  `node:crypto` only) verified fail-closed before registration/staging; empty committed
+  trust roots; authenticated operator command mirrors the existing pipeline with the same
+  five flags and a first-position real-id hard disable; 19 adversarial tests plus
+  guard-removal; Zone P boundary extended by one file with no new builtin/member/edge;
+  runbook documents the threat model, key rules, macOS prerequisites, refusal codes and
+  the explicit residual. Real proposal never read; no providers, credentials, activation
+  or oracle changes; F01/PC-1 behavior preserved.
+
+### Completed
+- `packages/provenance/src/artifact-auth.ts`, `config/artifact-trust-roots.json`,
+  `scripts/c3-b2b-verify-authenticated.ts`, `tests/unit/artifact-auth.test.ts`,
+  `tests/support/artifact-auth-fixture.ts`, boundary allow-list update with justification.
+- `docs/SEC-P2-02-ISOLATED-VERIFICATION-RUNBOOK.md`, SEC-P2-01 findings addendum,
+  disabled-procedure enrollment prerequisite, STATUS refresh (PR #23 merged, QA-01 PASS).
+
+### Validation
+- `pnpm lint`, `pnpm typecheck`, `pnpm test:unit`, `pnpm test:security` and hosted CI at
+  the exact HEAD (evidence on the PR).
+
+### Next action
+GPT-6 exact-head security review; owner merge decision; owner-operated prerequisites stay
+open per runbook sections 3/7/10. No real execution, enrollment, merge or deploy.
+
+## Handoff: PP-SEC-P2-02-A2
+
+- **Task / phase:** SEC-P2-02 remediation of the four independent-audit findings, same Draft PR #24
+- **From:** Implementation agent (Muse Code)
+- **To:** GPT-6 independent exact-head re-audit, then project owner
+- **Branch:** `phase/pp-secp202-authenticity` (same Draft PR #24, new HEAD)
+- **State:** READY FOR RE-REVIEW. All four findings remediated with the smallest changes:
+  MAJOR-1 sidecars now read through a shared pinned descriptor helper
+  (`openNoFollowReadOnly`, extracted from the P2 reader with byte-identical artifact
+  behavior; boundary `open`/`realpath` assertions unchanged) with FIFO/dir/oversize
+  refusals, a descriptor-pinning proof, and a deterministic test-only open-to-read seam;
+  MAJOR-2 `asymmetricKeyType === 'ed25519'` enforced at trust-root parse and defensively
+  at verification, with RSA/EC/Ed448 negative controls; MINOR-3 structural decoded-key
+  top-level walk replaces the regex scan (escaped duplicates/proto refuse, string-value
+  colons are not keys); MINOR-4 composition test plus exact-command harness (temporary
+  in-test trust-roots overlay, committed roots restored byte-for-byte) proving past-auth
+  advance and substitution refusal. Empty production roots and the real-artifact
+  hard disable preserved; no new builtins, members, Zone E edges, providers, credentials
+  or activation changes.
+
+### Completed
+- `packages/provenance/src/proposal-artifact.ts` (shared helper, no behavior change),
+  `packages/provenance/src/artifact-auth.ts` (descriptor reads, key-type gates, structural
+  scan, test hooks), `tests/unit/artifact-auth.test.ts` (+10 tests),
+  `tests/unit/artifact-auth-pipeline.test.ts` (new, 4 tests), runbook sections 4/6,
+  STATUS handoff pointer.
+
+### Validation
+- `pnpm lint`, `pnpm typecheck`, `git diff --check` clean; `pnpm test:security` 137/137;
+  auth suites 33/33; full unit failures remain the 16 pre-existing sandbox EPERM blocks.
+  Hosted CI at the exact HEAD (evidence on the PR).
+
+### Next action
+GPT-6 exact-head re-audit of the new HEAD; owner merge decision. No real execution,
+enrollment, merge or residual-risk acceptance.
+
+## Handoff: PP-SEC-P2-02-A3
+
+- **Task / phase:** SEC-P2-02 MAJOR-3 remediation (isolated integration harness), same Draft PR #24
+- **From:** Implementation agent (Muse Code)
+- **To:** GPT-6 independent exact-head re-audit, then project owner
+- **Branch:** `phase/pp-secp202-authenticity` (same Draft PR #24, new HEAD)
+- **State:** READY FOR RE-REVIEW. MAJOR-3 remediated; MAJOR-1/MAJOR-2/MINOR-3 resolutions preserved untouched; production behavior, trust roots and hard disable unchanged.
+
+### Completed
+- `tests/unit/artifact-auth-pipeline.test.ts` rewritten (5 tests): the command harness now
+  builds a disposable synthetic checkout outside the working repository from copies of the
+  reviewed program files (`packages/`, `package.json`, the authenticated command) with a
+  separate test trust-root file at its normal relative path, fresh synthetic keys and
+  unique run ids per test. The real CLI runs there with its exact five-flag contract (no
+  key/path/mode flags, no env input). Positive (past auth into provenance refusal),
+  signed-substitution (auth-gate refusal), sequential/concurrent and SIGKILL-interrupted
+  isolation tests all assert production `config/artifact-trust-roots.json` and prior
+  production evidence snapshotted read-only stay unchanged; cleanup removes only
+  directories the test created. Production trust roots are never written; no fixed
+  shared evidence directory is ever deleted.
+- `docs/SEC-P2-02-ISOLATED-VERIFICATION-RUNBOOK.md` sections 4/6: isolated-harness
+  description; scope stated honestly as command-to-provenance integration, explicitly
+  NOT a full authenticated three-replay VERIFIED result.
+
+### Validation
+- Targeted pipeline suite 5/5; `pnpm lint` (193 files, 0 problems), `pnpm typecheck`,
+  `git diff --check` clean; `pnpm test:security` 137/137; full unit 421 tests: 405 pass,
+  16 fail, every failure exactly `listen EPERM` (pre-existing sandbox bind blocks, same
+  count as A2; hosted CI owns the real-browser verdict).
+- Hosted CI at the exact HEAD (evidence on the PR).
+
+### Continuation notes
+- The new tests assert production trust roots are empty (`{version:1,keys:[]}`); a future
+  reviewed enrollment will need to update that assertion alongside the enrollment.
+- Residuals unchanged and NOT accepted: same-UID verifier/key integrity, historical
+  origin of unsigned Meta artifacts, no OS sandbox.
+
+### Next action
+GPT-6 exact-head re-audit of the new HEAD; owner merge decision. No real execution,
+enrollment, merge or residual-risk acceptance.
+
 <!-- HANDOFF_ENTRIES_END -->

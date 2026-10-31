@@ -272,6 +272,33 @@ const checkDescriptorStat = (st: { isFile(): boolean; size: number; mode: number
   if (st.uid !== uid) return fail('ARTIFACT_OWNERSHIP', 'the artifact is not owned by the current user');
 };
 
+export type PinnedReadHandle = Awaited<ReturnType<typeof open>>;
+
+/**
+ * Open a fixed path read-only without following a final-component symlink (shared by the
+ * artifact reader and the authentication sidecars, so every Zone P read pins a descriptor
+ * before any check). A platform without numeric no-follow flags is refused instead of
+ * silently downgraded. Errno maps to artifact codes; authentication callers translate a
+ * refusal into `AUTH_UNSIGNED` since a missing or hostile sidecar means unauthenticated.
+ */
+export async function openNoFollowReadOnly(file: string, notFoundMessage: string): Promise<PinnedReadHandle> {
+  // Race-resistant open: a no-follow read-only descriptor pins the file; every check runs
+  // against the open descriptor, never the pathname. The flags come from the
+  // capability-free `fs.constants` table (the only `node:fs` use in Zone P).
+  if (typeof fsConstants.O_RDONLY !== 'number' || typeof fsConstants.O_NOFOLLOW !== 'number' || typeof fsConstants.O_NONBLOCK !== 'number') {
+    return fail('ARTIFACT_UNSTABLE', 'this platform cannot open files without following symlinks');
+  }
+  // O_NONBLOCK keeps a FIFO at the final path from blocking the open; the descriptor stat refuses it.
+  try {
+    return await open(file, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK);
+  } catch (e) {
+    const errno = (e as NodeJS.ErrnoException)?.code;
+    if (errno === 'ELOOP') return fail('ARTIFACT_SYMLINK', 'the path must not be a symlink');
+    if (errno === 'EACCES') return fail('ARTIFACT_PERMISSIONS', 'the path is not accessible');
+    return fail('ARTIFACT_NOT_FOUND', notFoundMessage);
+  }
+}
+
 async function readArtifactBytes(repoRoot: string, runId: string): Promise<{ bytes: Buffer; path: string }> {
   if (!isValidRunId(runId) || runId === '.' || runId === '..' || runId.includes('/') || runId.includes('\\')) {
     return fail('ARTIFACT_RUN_ID_INVALID', 'the run id is malformed');
@@ -296,21 +323,15 @@ async function readArtifactBytes(repoRoot: string, runId: string): Promise<{ byt
   }
   const file = artifactPathFor(repoRoot, runId);
   // Race-resistant read: a no-follow read-only descriptor pins the file; every check below runs against
-  // the open descriptor, and the post-read identity must match the pre-read one. The flags come from the
-  // capability-free `fs.constants` table (the only `node:fs` use in Zone P); a platform without numeric
-  // O_NOFOLLOW cannot do the no-follow open and is refused instead of silently downgrading.
-  if (typeof fsConstants.O_RDONLY !== 'number' || typeof fsConstants.O_NOFOLLOW !== 'number' || typeof fsConstants.O_NONBLOCK !== 'number') {
-    return fail('ARTIFACT_UNSTABLE', 'this platform cannot open files without following symlinks');
-  }
-  // O_NONBLOCK keeps a FIFO at the final path from blocking the open; the descriptor stat below refuses it.
-  let handle: Awaited<ReturnType<typeof open>> | null = null;
+  // the open descriptor, and the post-read identity must match the pre-read one.
+  let handle: PinnedReadHandle | null = null;
   try {
-    handle = await open(file, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK);
+    handle = await openNoFollowReadOnly(file, `no proposal artifact at .proofpilot/evidence/proposals/${runId}/proposal.json`);
   } catch (e) {
     const errno = (e as NodeJS.ErrnoException)?.code;
     if (errno === 'ELOOP') return fail('ARTIFACT_SYMLINK', 'the artifact must not be a symlink');
     if (errno === 'EACCES') return fail('ARTIFACT_PERMISSIONS', 'the artifact is not accessible');
-    return fail('ARTIFACT_NOT_FOUND', `no proposal artifact at .proofpilot/evidence/proposals/${runId}/proposal.json`);
+    throw e;
   }
   try {
     const before = await handle.stat();
