@@ -40,7 +40,8 @@ export class LocalSessionManager {
   #failedAt: number[] = [];
   #lockedUntil = Number.NEGATIVE_INFINITY;
 
-  constructor(private readonly clock: () => number = Date.now) {}
+  private readonly clock: () => number;
+  constructor(clock: () => number = Date.now) { this.clock = clock; }
 
   #now(): number {
     const sampled = this.clock();
