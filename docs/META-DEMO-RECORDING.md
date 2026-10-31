@@ -55,14 +55,15 @@
 ### Scene 3 — Muse Spark watches the video (0:40–1:05)
 
 - **Screen:** terminal showing a **previously recorded** summary of run `c2b-live-smoke-002`
-  (pre-typed text file, NOT a live call): `VIDEO_ANALYZED`, schema-valid `Symptom`
+  (pre-typed text file, NOT a live call; the second of two single-use C2B analysis
+  attempts — run 001 ended incomplete): `VIDEO_ANALYZED`, schema-valid `Symptom`
   hypothesis — two Add-to-cart taps (about 3.3 s and 6.4 s), cart count unchanged, no
   feedback — plus the run's own listed uncertainties; usage 2,773 in / 1,129 out
   (665 reasoning) / 3,902 total tokens.
-- **Narration:** "We sent that mobile clip to Meta's Muse Spark 1.3 once. It came back
-  with a structured description of the symptom — treated strictly as an untrusted
-  hypothesis, never as a verdict. One earlier attempt ran out of output tokens and was
-  discarded; both run IDs are spent."
+- **Narration:** "We analyzed the synthetic clip with Muse Spark. The first authorized
+  analysis was incomplete; the second returned a validated symptom hypothesis — treated
+  strictly as an untrusted hypothesis, never as a verdict. We later made one separately
+  approved fix-proposal request. All three attempts are spent."
 - **Caption:** `MODEL HYPOTHESIS — UNTRUSTED, NOT A VERDICT (1 OF 2 RUNS COMPLETED)`.
 - **Evidence paths:** local-only `.proofpilot/analysis/c2b-live-smoke-002/analysis.json`
   (gitignored, mode 0600); summarized in `docs/STATUS.md` §C2B.
@@ -96,9 +97,9 @@
   `.promo-overlay` / `pointer-events` / `none`; 1,300 tokens total (670 in / 630 out,
   601 reasoning); response id `7cb1e5e2-3d88-42ab-9652-fcab88b690d8`; input 2,756
   characters, SHA-256 `4e1466e8adf1ee58b6c050e70f9720da43ddb254b255d4f754f8696a857af558`.
-- **Narration:** "Under a fail-closed, single-use approval chain, Muse Spark returned one
-  minimal proposal in our closed grammar. It passed host-side validation — and it stops
-  there. **SAY ALOUD:** this proposal is labelled UNTRUSTED, NOT VERIFIED. It has never
+- **Narration:** "In a third and final Meta attempt, under a fail-closed, single-use
+  approval chain, Muse Spark returned one minimal proposal in our closed grammar.
+  It passed host-side validation — and it stops there. **SAY ALOUD:** this proposal is labelled UNTRUSTED, NOT VERIFIED. It has never
   run in a browser, and its value happening to equal our hand-written fix proves nothing
   about the model."
 - **Caption:** `UNTRUSTED PROPOSAL — NOT VERIFIED (ONE APPROVED ATTEMPT, QUOTA SPENT)`.
@@ -110,7 +111,8 @@
 
 ### Scene 6 — How a fix earns trust (1:55–2:25)
 
-- **Screen:** `docs/examples/c3-b1-scoreboard.example.json` (committed, sanitized):
+- **Screen:** `docs/examples/c3-b1-scoreboard.example.json` (committed, sanitized,
+  labelled `HAND-AUTHORED CONTROLS ONLY — NO MODEL INPUT`):
   baseline `REPRODUCED`; NC-1, NC-1b, NC-3 `PATCH_FAILED`; NC-6, NC-7 `INCONCLUSIVE`
   (injected faults); **PC-1 `VERIFIED` 3/3** (three fresh stages, three distinct nonces,
   oracle exit 0 each); NC-5 `NOT_REPRODUCED`; `modelOrProviderCalls: 0`. Optionally, a
@@ -120,8 +122,9 @@
 - **Narration:** "This is what trust looks like here. Negative controls fail exactly as
   they should, and a hand-written correct fix passes the unmodified oracle three times
   in three fresh disposable stages. **SAY ALOUD:** that VERIFIED row is our own
-  hand-authored control — the model's identical-looking value has its own separate row,
-  and it is not verified."
+  hand-authored control. The model's identical proposed adjustment is documented
+  separately as UNTRUSTED — NOT VERIFIED; it does not inherit PC-1's verdict and has
+  no verified model scoreboard row."
 - **Caption:** `VERIFIED 3/3 — HAND-AUTHORED CONTROL PC-1 ONLY`.
 - **Evidence paths:** `docs/examples/c3-b1-scoreboard.example.json` (example from local
   run `c3-b1-20261028T084508Z-e27b62` at `bb64b73`); procedure in `docs/QA-01-RUNBOOK.md`
@@ -132,10 +135,24 @@
 
 ### Scene 7 — Guardrails (2:25–2:50)
 
-- **Screen:** terminal, the real-artifact refusal drill (offline, safe — it refuses before
-  any file read, creates no evidence, exit `2`):
-  `node scripts/c3-b2b-verify-proposal.ts --run-id c3-live-meta-001 --source-sha <40-hex> --source-fixture-tree <40-hex> --source-analysis-id x --verification-sha <40-hex>`
-  → `HARD-DISABLED` refusal. Then, optionally, the zero-network preflight:
+- **Screen:** terminal, the real-artifact refusal drill (offline, safe — the hard-disable
+  in `scripts/c3-b2b-verify-proposal.ts` runs before any file read, stage, browser or
+  Git call, creates no evidence, exit `2`). Copy/paste exactly — the SHA values are
+  obviously synthetic (repeated `a`/`b`/`c`) and format-valid, so the command reaches
+  the real-id gate instead of failing on argument shape:
+
+  ```sh
+  node scripts/c3-b2b-verify-proposal.ts --run-id c3-live-meta-001 \
+    --source-sha aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+    --source-fixture-tree bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb \
+    --source-analysis-id demo-source \
+    --verification-sha cccccccccccccccccccccccccccccccccccccccc
+  ```
+
+  Expected output (stderr, verified by running the drill): `refused: c3-live-meta-001
+  is the real stored model proposal and its execution path is HARD-DISABLED (no owner
+  execution approval, no security review of a real run). This command verifies synthetic
+  fixtures only.` Exit code `2`. Then, optionally, the zero-network preflight:
   `node scripts/c3-proposal-preflight.ts` (deterministic, `providerRequests: 0`).
 - **Narration:** "And the guardrails hold in code, not just on paper: asking the verifier
   to touch the stored model proposal is refused before any file is even read, and the

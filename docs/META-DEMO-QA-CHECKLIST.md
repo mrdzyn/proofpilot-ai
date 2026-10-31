@@ -11,12 +11,12 @@
 |---|---|---|---|
 | 1 | Mobile defect: tap intercepted, cart stays 0 | `.proofpilot/recordings/f01-20261027T122211Z-df375a/` mobile clip, SHA-256 `e9df68b1…eafdf` (`docs/STATUS.md` §C1) | Clip shown without `SYNTHETIC FIXTURE` caption |
 | 2 | Desktop control passes | Same set, desktop clip, SHA-256 `e565e8bf…1976d` | Implied to be a real shopper or real store |
-| 3 | Muse Spark returned a symptom hypothesis | Run 002 summary: `VIDEO_ANALYZED`, `model-hypothesis` Symptom, usage 2773/1129/665/3902 (`docs/STATUS.md` §C2B) | Called a verdict, a diagnosis of root cause, or proof of a fix |
+| 3 | Muse Spark's second analysis run returned a symptom hypothesis (attempt 2 of 3 total) | Run 002 summary: `VIDEO_ANALYZED`, `model-hypothesis` Symptom, usage 2773/1129/665/3902 (`docs/STATUS.md` §C2B) | Called a verdict, a diagnosis of root cause, or proof of a fix; presented as the only Meta attempt |
 | 4 | One earlier analysis run failed | Run 001 `PARTIAL` (`ANALYSIS_FAILED` / `RESPONSE_NOT_COMPLETED`) | Omitted (survivorship bias) |
 | 5 | Baseline REPRODUCED, exact-SHA certified | `pnpm f01:baseline` exit `0` with the four runbook key lines (`docs/QA-01-RUNBOOK.md` §2) | `test:e2e:f01` nonzero exit shown as a failure, or wrapper/oracle exits confused |
 | 6 | The oracle is independent of the model | `verifier/` trust root; model-output-never-judges boundary (`docs/SECURITY.md`, STATUS gates) | Any suggestion the model checked its own work |
-| 7 | One model proposal, host-validated | Report §2 values: 1 adjustment, 1,300 tokens, response id `7cb1e5e2…`, input SHA `4e1466e8…f558` (`docs/LIVE-C3-01-EXECUTION-REPORT.md`) | Values read from the artifact dir instead of the report |
-| 8 | Proposal is NOT verified | Caption `UNTRUSTED PROPOSAL — NOT VERIFIED` on every mention | Any `VERIFIED`-adjacent wording near the model row |
+| 7 | The third Meta attempt — one fix-proposal request — returned a host-validated but unverified proposal | Report §2 values: 1 adjustment, 1,300 tokens, response id `7cb1e5e2…`, input SHA `4e1466e8…f558` (`docs/LIVE-C3-01-EXECUTION-REPORT.md`) | Values read from the artifact dir instead of the report; presented as one of the two video analyses |
+| 8 | Proposal is NOT verified and has no scoreboard row | Caption `UNTRUSTED PROPOSAL — NOT VERIFIED` on every mention; model value documented only in the execution report | Any `VERIFIED`-adjacent wording near the model proposal, or any implied model scoreboard row |
 | 9 | PC-1 VERIFIED 3/3 | `docs/examples/c3-b1-scoreboard.example.json` or fresh `c3-offline-verification` run ending `ALL EXPECTATIONS MET` | Example presented as a fresh run, or replays not all clean passes |
 | 10 | PC-1 is hand-authored, distinct from the model value | `provenance: hand-authored-control` vs `provenance: model-hypothesis` | Identity of values presented as evidence for the model |
 | 11 | Negatives fail as they should | NC-1/NC-1b/NC-3 `PATCH_FAILED`, NC-6/NC-7 `INCONCLUSIVE`, NC-5 `NOT_REPRODUCED` | Only the passing row shown |
