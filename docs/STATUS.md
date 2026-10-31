@@ -88,7 +88,7 @@
 | Hackathon submission pack (`docs/META-HACKATHON-SUBMISSION.md`) | MERGED (PR #18); portal fields, video, final links: PENDING; deadline Nov 4, 2026 9 PM ET = Nov 5, 10 AM PHT |
 | C3-C scoreboard report UI, C3-D report + replay + audit, C3-E demo, C3-F submission | NOT STARTED (UI-C3-01 shell not approved) |
 | UI-C3-01A local demo dashboard | Phase A DESIGN on Draft PR #26 (contract, screen map, static mockup, tokens, component inventory, import/state/security/component/demo docs); remediation rounds 1 (6 findings) and 2 (2 findings + 2 wording) on the same PR; owner visual approval recorded; unmerged |
-| UI-C3-01B functional local dashboard | IN PROGRESS on a stacked Draft PR targeting the design branch (validator + view-model + T-IMPORT/T-TRUTH unit tests, React+TS+Vite+Tailwind app, Playwright browser QA local-only, demo workflow); merging either dashboard PR NOT approved |
+| UI-C3-01B functional local dashboard | READY FOR REVIEW on stacked Draft PR #27 (validator + view-model + T-IMPORT/T-TRUTH unit tests green, React+TS+Vite+Tailwind app, Playwright browser QA 6/6 green unsandboxed with desktop+mobile screenshots, demo workflow); merging either dashboard PR NOT approved |
 | Baseten compatibility (`docs/BASETEN-COMPATIBILITY-PLAN.md`) | PLAN ONLY; pinned id vs public docs discrepancy and a structured-output doubt recorded; NOT TESTED |
 | Modal sandbox (`docs/MODAL-FEASIBILITY-PROPOSAL.md`) | PROPOSAL ONLY; the C3 contract forbids hosted backends; HOST-C3-01 not requested; not a verified boundary |
 | Muse Wonder as patcher | UNVERIFIED and not a dependency |

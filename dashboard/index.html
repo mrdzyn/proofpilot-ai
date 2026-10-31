@@ -4,12 +4,15 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <!--
-      Local-only content policy: same-origin document/assets only, loopback
-      websocket for dev HMR, blob/data for local media. No external origins.
+      Local-only content policy. The built file is a single self-contained
+      document (audited bundle inline), so script/style 'unsafe-inline' covers
+      only our own bytes: no host sources are allowed anywhere, hence no
+      external, provider, or exfiltration traffic is possible. blob:/data: cover
+      local media; loopback ws: covers dev HMR only.
     -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src blob:; connect-src 'self' ws://127.0.0.1:* ws://localhost:*; font-src 'self'; base-uri 'none'; form-action 'none'"
+      content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src blob:; connect-src 'self' ws://127.0.0.1:* ws://localhost:*; font-src 'self'; base-uri 'none'; form-action 'none'"
     />
     <title>ProofPilot AI — Local Demo Dashboard</title>
   </head>

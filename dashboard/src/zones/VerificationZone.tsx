@@ -23,6 +23,7 @@ function ImportedScoreboard({ view }: { view: Extract<ImportedView, { kind: 'sco
     <div className="mt-3">
       <p>
         <UnverifiedImportChip />
+        {view.claimsExampleNote && <> (file claims to be an example)</>}
       </p>
       <EvidenceTable caption="Owner-imported file, quoted as claims — trusted chip withheld">
         <Row head="Label">{view.label}</Row>

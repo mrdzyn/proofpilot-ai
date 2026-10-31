@@ -177,6 +177,9 @@ test('T-IMPORT-FORGED: fake VERIFIED + forged _example never earn trust', async 
 test('T-XSS + T-CSS: injected markup/URLs/styles render as inert text', async () => {
   const page = await newPage({ width: 1280, height: 800 });
   try {
+    // Single-file build: the app bundle itself is one inline script/style pair.
+    // Injected content must add none.
+    const scriptsBefore = await page.locator('script').count();
     const before = await page.locator('style').count();
     const evil = {
       schemaVersion: 1, label: '<script>alert(1)</script>', complete: true,
@@ -196,7 +199,7 @@ test('T-XSS + T-CSS: injected markup/URLs/styles render as inert text', async ()
     writeFileSync(f('evil.json'), JSON.stringify(evil));
     await page.locator('#evjson').setInputFiles(f('evil.json'));
     await page.getByText('UNVERIFIED IMPORT', { exact: false }).first().waitFor({ timeout: 15_000 });
-    assert.equal(await page.locator('script').count(), 0, 'no injected scripts');
+    assert.equal(await page.locator('script').count(), scriptsBefore, 'no injected scripts');
     assert.equal(await page.locator('img').count(), 0, 'no injected images');
     assert.equal(await page.locator('style').count(), before, 'no injected styles');
     const text = await page.locator('main').innerText();
