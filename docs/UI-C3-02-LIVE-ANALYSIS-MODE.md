@@ -32,12 +32,28 @@ Required experience, in order:
 7. An unexecuted model proposal is **never** labelled VERIFIED.
 
 New live runs use **Baseten-hosted Meta Muse Spark Open** and are recorded as
-`provider: baseten`, `model: meta-models/muse-spark-open`. They are **not**
-direct Meta Model API usage and are **not** identical to, or comparable with,
-the historical Meta `muse-spark-1.3` runs: the historical LIVE-C3-01 attempt
-(`c3-live-meta-001`, `provider: meta`, spent quota, `UNTRUSTED — NOT
-VERIFIED`) keeps its own provenance, labels, and hard-disable, and every UI
-surface names the provider and model of the run it shows.
+`provider: baseten` with the exact approved direct-Baseten model identifier.
+They are **not** direct Meta Model API usage and are **not** identical to, or
+comparable with, the historical Meta `muse-spark-1.3` runs: the historical
+LIVE-C3-01 attempt (`c3-live-meta-001`, `provider: meta`, spent quota,
+`UNTRUSTED — NOT VERIFIED`) keeps its own provenance, labels, and
+hard-disable, and every UI surface names the provider and model of the run it
+shows.
+
+Owner-configured environment (variable names and model identifier are not
+secrets; values below are the owner's stated configuration, not reads from
+disk — this docs-only work never opens `.env.local`):
+`BASETEN_API_KEY`, `BASETEN_API_BASE_URL`, and
+`BASETEN_MODEL=meta/muse-spark-open`. The earlier-noted
+`BASETEN_MODEL_VISUAL=meta-models/muse-spark-open-1026` is **superseded and
+wrong for this integration — do not use it**. Provider-ID nuance:
+`meta/muse-spark-open` is the published **OpenRouter** identifier, while
+Meta's Baseten guide and Baseten's changelog specify the direct Baseten Model
+APIs parameter `meta-models/muse-spark-open`; the two must NOT be silently
+assumed equivalent. The companion therefore treats all three variables as
+untrusted operator configuration and fails closed on any mismatch (§3.3,
+§6.2): no translation, no fallback, no OpenRouter rerouting, no inference
+until the owner records the exact direct-Baseten model ID (decision D9).
 
 Non-objectives: verifying or executing the stored proposal `c3-live-meta-001`
 (stays hard-disabled), re-running LIVE-C3-01, any hosted backend, any change to
@@ -55,8 +71,10 @@ the verifier/oracle/grammar/patch policy.
 ### 2.2 Forbidden scope (holds for the proposal and any implementation)
 
 - No API credentials in React, in the bundle, in fixtures, or in screenshots.
-  `BASETEN_API_KEY` lives exclusively in the owner-started companion's
-  environment.
+  The companion reads exactly the three existing owner variable names —
+  `BASETEN_API_KEY`, `BASETEN_API_BASE_URL`, `BASETEN_MODEL` — and only at
+  authorized runtime in the owner-started process. No new variable names, no
+  `.env.local` inspection during design, no key printing or persistence.
 - No automatic calls, no retries, no fallback provider/model/endpoint, no
   batch loop: one explicit click → at most one provider request, then STOP.
 - No public media URLs, no separate remote-upload/Files lifecycle: the video
@@ -92,7 +110,10 @@ security contract, PR #26).
   anywhere). The only component that may hold `BASETEN_API_KEY`, and only via
   its invocation environment (inherited from the LIVE-C3-01B runner pattern:
   credential read by the production runner after read-only authorization, never
-  by an agent, never printed, never persisted). Owns: loopback request
+  by an agent, never printed, never persisted). At startup it loads exactly
+  `BASETEN_API_KEY`, `BASETEN_API_BASE_URL`, `BASETEN_MODEL` and validates
+  them against the pinned allowlist (§3.3 config gate) before any pairing,
+  permit, upload, or call can exist. Owns: loopback request
   authentication (§3.4), per-request authorization check, quota enforcement,
   input validation and file-hash binding, server-side request encoding, the
   single provider call, strict output validation, upload lifecycle and
@@ -134,7 +155,35 @@ Interruption at any point leaves no verdict: partial output is never rendered.
 Single `POST https://inference.baseten.co/v1/chat/completions`, bearer
 `BASETEN_API_KEY`:
 
-- `model: "meta-models/muse-spark-open"` (fixed; no caller override).
+- `model:` the exact approved direct-Baseten identifier recorded under
+  decision D9 (no caller override, no silent translation of the configured
+  value, no OpenRouter rerouting).
+
+### Configuration gate (startup, before pairing/permits/calls exist)
+
+The three owner variables are untrusted operator configuration until checked:
+
+- `BASETEN_API_BASE_URL` must equal the pinned origin
+  `https://inference.baseten.co` (request path fixed to
+  `/v1/chat/completions` in code, never derived from configuration);
+  otherwise the companion refuses to start live service with typed
+  `ENDPOINT_UNAPPROVED`, zero provider calls.
+- `BASETEN_MODEL` must equal the D9-approved direct-Baseten model
+  identifier, proven through public vendor documentation or a separately
+  authorized non-spending account-specific availability check; the currently
+  configured `meta/muse-spark-open` (an OpenRouter identifier) does NOT match
+  the publicly documented direct-Baseten `meta-models/muse-spark-open`, and
+  the alias is NOT established — so until D9 is recorded, startup refuses
+  with typed `MODEL_UNAVAILABLE_OR_UNAPPROVED`, zero provider calls.
+- Any other value, missing variable, or extra provider/model/endpoint
+  override is refused the same way. There is no automatic fallback to another
+  model, host, or provider, and no inference-shaped traffic of any kind
+  leaves the companion in the refused state.
+
+A mismatch shows a named configuration error in the companion terminal and in
+Zone L, and requests the owner's explicit choice of the exact direct-Baseten
+model ID (D9). Changing the owner's environment remains the owner's manual
+act; the companion never writes configuration.
 - One user message with two content parts: a text prompt (fixed analysis /
   proposal grammar preamble) and one typed video part —
   `{"type": "video_url", "video_url": {"url": "data:video/mp4;base64,..."}}` —
@@ -153,6 +202,13 @@ Single `POST https://inference.baseten.co/v1/chat/completions`, bearer
   shape is pinned by mocked-transport contract tests first; if the live
   endpoint ever rejects the shape, the companion fails closed and returns the
   decision to the owner — shapes are never silently adapted.
+- No constrained-output assumption: per Baseten's Model APIs documentation,
+  Muse Spark Open does **not** support structured outputs or JSON mode, so the
+  companion never sends `response_format` (any `json_schema`/JSON-mode flag is
+  a contract violation) and treats every response as **untrusted free-form
+  text**. The "closed grammar" for proposals is purely host-side parsing that
+  refuses malformed, partial, wrong-schema, or wrong-model text — with no
+  retry, no reformat-and-resend, and no second request (each would spend).
 
 Sources (verified Oct 31, 2026; re-verify at authorization time):
 `https://www.baseten.co/library/muse-spark-open/` (model id, base URL,
@@ -164,33 +220,61 @@ per-model limits, base64-in-body accounting).
 
 - **Same-origin service.** The companion serves the dashboard document and the
   live API from one `127.0.0.1:<port>` origin. No `Access-Control-*` headers
-  are ever emitted; cross-origin browser calls are impossible by construction,
-  not by policy string.
-- **Host/Origin verification.** Every API request must carry
-  `Host: 127.0.0.1:<port>` (or `localhost:<port>`); anything else — including
-  DNS-rebinding hostnames that resolve to 127.0.0.1 — is refused before any
-  state is touched. When an `Origin` header is present it must exactly equal
-  the companion origin; a `null` Origin (e.g. `file://` or sandboxed context)
-  may load the historical zones but every live API call is refused.
-- **Session authorization (not the provider key).** Mutating calls
-  (`/api/upload`, `/api/analyze`, `/api/propose`) additionally require a
-  per-process ephemeral session token in a custom header (`X-Live-Session`):
-  issued only through the companion terminal pairing step, held in React
-  memory only (never `localStorage`/disk), void on companion restart with all
-  permits. Simple CSRF vectors (plain form POSTs, cross-origin `fetch`
-  without the custom header) fail closed.
-- **Endpoint restrictions.** Exact-path allowlist only:
-  `/api/status` (GET, read-only), `/api/upload` (POST bytes),
-  `/api/analyze` + `/api/propose` (POST, JSON, permit-bound),
-  `/api/events` (GET status poll). No path parameters, no static-file
-  traversal, no method beyond the one each path allows.
+  are ever emitted; foreign scripts therefore cannot **read** any API
+  response — but requests can still **reach** the service, so every endpoint
+  below is authenticated or state-free on its own. Localhost alone is never
+  treated as authentication.
+- **Host verification (DNS-rebinding defense).** Every API request must carry
+  `Host: 127.0.0.1:<port>` (or `localhost:<port>`); any other Host —
+  including attacker hostnames that resolve to 127.0.0.1 — is refused with a
+  typed error before any state is touched. The companion binds 127.0.0.1 only
+  and accepts no DNS names.
+- **Terminal pairing (session bootstrap).** Sessions are created only through
+  an explicit pairing exchange:
+  1. The owner runs the pairing command in the companion terminal; the
+     companion prints a single-use pairing code (short numeric, 2-minute TTL)
+     to that terminal only.
+  2. The owner types the code into the dashboard's pairing form (same-origin
+     `POST /api/pair`, JSON body ≤ 1 KiB, rate-limited to 5 attempts/minute
+     with lockout and terminal-visible failure logging).
+  3. On success the companion consumes the code and returns a 256-bit session
+     token in the JSON response body (readable only by same-origin script —
+     no CORS — and held in React memory only, never `localStorage`, disk,
+     URL, or logs). Failure, expiry, or restart consumes/voids the code.
+  4. The session lives at most 30 minutes idle / 4 hours absolute, is bound to
+     the companion process (restart voids all sessions and permits), and is
+     destroyed on logout, expiry, or any authorization failure. Replay of a
+     consumed code or a pre-restart token is refused. The Baseten key and any
+     permanent approval never enter browser state.
+- **Endpoint tiers and authorization.**
+  - `/api/health` (GET): liveness only (`{ok, version}`), no run/permit/quota
+    state. The sole endpoint reachable without a session — safe for hostile
+    no-Origin GETs because it reveals nothing.
+  - Authenticated tier — `/api/status`, `/api/events` (GET, expose
+    run/permit/quota state), `/api/upload`, `/api/analyze`, `/api/propose`
+    (POST): require, on **every** call, (a) a valid `Host`, (b) `Origin`
+    equal to the companion origin when the header is present, (c) a valid
+    `X-Live-Session` header, and (d, defense in depth) `Sec-Fetch-Site:
+    same-origin` when the client sends fetch metadata. A plain cross-site
+    navigation or form POST cannot set the custom header, so hostile
+    no-Origin GETs/POSTs to state-bearing endpoints fail closed with a typed
+    error and zero side effects.
+  - Missing-Origin classification: accepted **only** where the request is both
+    state-free (`/api/health`) and Host-valid; every other missing-Origin
+    request is refused, because authorization travels in the custom header,
+    never in ambient authority.
+  - Exact paths and methods only: no path parameters, no traversal, no method
+    beyond the one each path allows; pairing abuse (guessing, replay,
+    flooding) is rate-limited, logged to the terminal, and never produces
+    provider egress.
 - **Resource limits.** Request body ≤ 30 MB; per-request idle 60 s and total
   10 min ceilings; one in-flight live request per companion; staged bytes
   capped at one file (a second upload replaces-and-deletes the first).
-- **Adversarial acceptance** in §9 (L-CSRF, L-LIMIT): hostile cross-origin
-  GET/POST, null Origin, rebinding Host, missing/stale session header,
-  permit replay after restart, oversize bodies, and concurrent second
-  requests are all refused with typed errors and zero provider egress.
+- **Adversarial acceptance** in §9 (L-CSRF, L-LIMIT, L-PAIR): hostile
+  cross-origin GET/POST, null Origin, missing Origin, rebinding Host,
+  missing/stale session header, pairing brute-force/replay/flood, session
+  leakage probes, permit replay after restart, oversize bodies, and concurrent
+  second requests are all refused with typed errors and zero provider egress.
 
 ### 3.5 What the companion reuses (no reinvention)
 
@@ -211,21 +295,27 @@ per-model limits, base64-in-body accounting).
 
 ```text
 ┌─ Owner browser (React dashboard) ──────────────┐  UNTRUSTED RENDER
-│ file picker · local SHA-256 · quoted text only  │  no secret, no approval,
+│ file picker · local SHA-256 · pairing form      │  no secret, no approval,
 │ LIVE VIA BASETEN banners · NO VERIFIED chip     │  no verdict authority;
 │ historical zones keep Meta-1.3 labels          │  session token in memory
 └───────────────┬────────────────────────────────┘  only, never stored
                 │ SAME-ORIGIN loopback only (companion-served UI + API,
-                │ Host/Origin-checked, X-Live-Session on POSTs)
+                │ Host/Origin/fetch-metadata-checked; X-Live-Session on
+                │ every state-bearing call; terminal pairing code in,
+                │ session token out — never the Baseten key)
 ┌───────────────▼────────────────────────────────┐  CREDENTIAL BOUNDARY
 │ Companion 127.0.0.1:<port> (owner-started)      │
-│  • session + single-use hash-bound permit check │
+│  • config gate (URL/model allowlist; §3.3)       │
+│  • pairing (single-use code, rate-limited) +    │
+│    session + single-use hash-bound permit check │
 │  • quota (new Baseten LIVE record; Meta C3-01   │
 │    stays spent; §6)                             │
 │  • re-hash upload, server-side base64 encode,   │
 │    ONE fixed-shape Baseten request, token caps  │
 │  • strict validation, sanitized persistence,    │
 │    staged-byte cleanup (always deleted)         │
+│  • /api/health state-free; all other endpoints  │
+│    session-authenticated                         │
 └───┬───────────────────────────────┬────────────┘
     │ ONLY egress: POST             │ local evidence writes
     │ inference.baseten.co/v1/      │ (.proofpilot, 0600, allow-list,
@@ -251,21 +341,27 @@ verifier; live and historical views never share a verdict chip or a run id.
 New **Zone L · Live Analysis via Baseten (explicit opt-in)** placed after the
 historical zones, visually separated (own section, own heading,
 `LIVE VIA BASETEN — UNVERIFIED MODEL OUTPUT` banner on every live value,
-naming model `meta-models/muse-spark-open` and the Baseten run id). Reuses
+naming the D9-approved direct-Baseten model id and the Baseten run id). Reuses
 catalog components only: `EvidenceTable`/`Row` for observations/usage/run
 identity, `LoadingState` for upload/analyzing progress, `ErrorState` for typed
 refusals, chip banners extended with a live-run variant.
 
 Required states (per `docs/DESIGN-SYSTEM.md` required-states list):
 
-- idle (prerequisites listed: companion reachable? session paired? permit
-  present? quota left?);
+- idle (prerequisites listed: companion reachable? configuration valid?
+  session paired? permit present? quota left?);
+- unpaired + pairing form (short code entry, attempt feedback, lockout notice;
+  never echoes the session token);
+- configuration error (named `ENDPOINT_UNAPPROVED` /
+  `MODEL_UNAVAILABLE_OR_UNAPPROVED` with the owner's next step: record D9);
 - ready-to-request (file validated, hash shown, permit confirmed);
 - uploading (bytes + progress, cancellable; cancel deletes staged bytes);
 - analyzing (no fake progress: indeterminate until Baseten responds);
-- done-live (observations as quoted text, model-stated uncertainty verbatim,
-  token usage as reported, Baseten run/request identity, timestamp, plus the
-  standing disclosure that the provider samples ≤96 frames and ignores audio);
+- done-live (observations as quoted free-form text — the model offers no
+  JSON mode, so nothing arrives pre-structured — model-stated uncertainty
+  verbatim, token usage as reported, Baseten run/request identity, timestamp,
+  plus the standing disclosure that the provider samples ≤96 frames and
+  ignores audio);
 - proposal (optional second explicit click; constrained triple rendered as
   escaped read-only text; `UNTRUSTED PROPOSAL — NOT VERIFIED (BASETEN)`);
 - refused (typed reason: no permit/session, hash mismatch, over-limit file,
@@ -299,11 +395,13 @@ per record and per provider: Meta-spent and Baseten balances never mix.
 
 ### 6.2 Per-request authorization
 
-Two independent owner acts per provider request, neither delegable:
+Two independent owner acts per provider request, neither delegable (both
+require a passed configuration gate, §3.3, and a paired session, §3.4):
 
 1. In the companion terminal: create a single-use permit naming the exact
    file SHA-256 (typed confirmation of hash + byte size, mirroring the
-   `SEND ONE META REQUEST` discipline, naming the Baseten run id).
+   `SEND ONE META REQUEST` discipline, naming the Baseten run id, the
+   D9-approved model id, and the pinned endpoint).
 2. In the dashboard: click the explicit Analyze/Propose button for that file
    (with a paired in-memory session).
 
@@ -313,7 +411,7 @@ interruption all spend it); restart voids sessions and permits.
 
 ### 6.3 Bounded spending
 
-Fixed endpoint, fixed model `meta-models/muse-spark-open`,
+Fixed endpoint, fixed D9-approved direct-Baseten model id,
 companion-enforced caps (single video part, `max_tokens` fixed per request
 type); no retry/fallback (a failed or unclear request ends the attempt — a
 new request needs a new permit under the remaining quota). Cost assumptions:
@@ -336,7 +434,8 @@ credit balance is never permission to spend.
 - File-hash binding: the dashboard's local SHA-256, the permit, the uploaded
   bytes (re-hashed by the companion), the encoded request, and the persisted
   evidence must all name the same hash, or the run is refused and staged
-  bytes are deleted.
+  bytes are deleted. The request's model field is bound the same way to the
+  D9-approved direct-Baseten identifier — never to the raw configured value.
 - No caller-controlled provider, model, endpoint, limits, credential,
   repository root, or evidence directory.
 
@@ -363,11 +462,29 @@ credit balance is never permission to spend.
 - **D7 — Sequencing.** Proposal review → implementation task → implementation
   PR → independent audit → merge decision; activation/pin/approval per §6.1.
 
-Recorded here: **Baseten is provider-selected for UI-C3-02 design.**
-Still pending: execution, spend, credential access (D1, D2, D4), and all
-merge/deploy decisions. Standing NOT-APPROVED (unchanged): executing,
-staging, or verifying any model-generated CSS; changing verifier, oracle,
-grammar, or gates; Modal; HOST-C3-01; merging or deploying.
+- **D8 — Baseten provider selection (design-only, RECORDED).** Owner decision
+  Oct 31, 2026: Baseten Model APIs is the selected provider for future
+  UI-C3-02 live inference. This decision authorizes design work only — not
+  execution, spend, credential access, or any merge/deploy.
+- **D9 — Exact direct-Baseten model identifier (PENDING, blocks any call).**
+  The configured `BASETEN_MODEL=meta/muse-spark-open` (an OpenRouter
+  identifier; the earlier `BASETEN_MODEL_VISUAL=...-1026` value is superseded
+  and must not be used) does not match the publicly documented direct-Baseten
+  `meta-models/muse-spark-open`, and the alias is not established. The owner
+  must explicitly record the exact direct-Baseten model ID to use — either by
+  confirming the documented ID (and updating the environment manually) or by
+  authorizing a separate non-spending account-specific availability check
+  that proves the configured ID. Until D9 is recorded, the companion refuses
+  with `MODEL_UNAVAILABLE_OR_UNAPPROVED`. No translation, fallback,
+  rerouting, or inference in the meantime; any later model change needs a new
+  explicit decision of this form.
+
+Recorded here: **D8 — Baseten is provider-selected for UI-C3-02 design.**
+Still pending: execution, spend, credential access (D1, D2, D4), the model-ID
+resolution (D9), and all merge/deploy decisions. Standing NOT-APPROVED
+(unchanged): executing, staging, or verifying any model-generated CSS;
+changing verifier, oracle, grammar, or gates; Modal; HOST-C3-01; merging or
+deploying.
 
 ## 9. Testing plan
 
@@ -381,11 +498,18 @@ Targeted checks (smallest evidence first; owner-run live legs never in CI):
 - **L-STAT-1 (static, CI):** React source contains no credential, endpoint,
   approval, quota, or session-secret string (extend the T-ABSENT-1 scanner to
   the new zone + companion-client module); companion contains no fallback
-  provider/model/endpoint and emits no CORS headers.
+  provider/model/endpoint, no `response_format` flag, and emits no CORS
+  headers; exactly the three owner variable names are read, no new ones.
 - **L-AUTH-1 (unit, mocked transport):** click-equivalent without a
   session+permit is refused; permit for hash A with bytes of hash B is
   refused; used/expired permit is refused; second request on spent quota is
   refused with the spent terminal state.
+- **L-CFG-1 (unit, no transport):** startup with a non-pinned base URL is
+  refused with `ENDPOINT_UNAPPROVED`; startup with a model value that is not
+  the D9-approved direct-Baseten ID (including the superseded `-1026` value
+  and the unapproved `meta/muse-spark-open` alias) is refused with
+  `MODEL_UNAVAILABLE_OR_UNAPPROVED`; both refusals produce zero transport
+  calls, no fallback, and a named configuration error naming D9.
 - **L-ONE-1 (unit, mocked transport):** transport double counts provider calls
   across failure/timeout/interruption drills — exactly one per permit, zero
   without.
@@ -396,7 +520,9 @@ Targeted checks (smallest evidence first; owner-run live legs never in CI):
   `javascript:` URLs, style directives, prototype keys, oversized strings)
   renders as inert text; proposal triples outside the closed grammar rejected;
   non-conforming responses (wrong shape, model mismatch, missing usage)
-  refused, never rendered.
+  refused, never rendered. Because the model offers no JSON mode, tests force
+  malformed, partial, truncated, wrong-schema, and wrong-model free-form
+  responses to refuse with zero additional requests — never a reformat retry.
 - **L-SEP-1 (browser, fixtures):** live and historical views render separate
   provenance (`provider: baseten` vs `provider: meta` records never share a
   row or run id); no VERIFIED chip in Zone L under any fixture; forged
@@ -410,14 +536,24 @@ Targeted checks (smallest evidence first; owner-run live legs never in CI):
   hostile page refused; null Origin refused for live APIs; rebinding Host
   refused; missing/stale `X-Live-Session` refused; permit replay after
   companion restart refused; second concurrent live request refused; oversize
-  body refused — all with typed errors and zero provider egress.
+  body refused — all with typed errors and zero provider egress. Actual
+  hostile GETs are exercised, including absent-Origin variants against
+  `/api/status` (refused: session header required) and against `/api/health`
+  (accepted but state-free by construction).
+- **L-PAIR-1 (adversarial, owner-run + review):** pairing-code brute force
+  (rate limit + lockout observed, codes stay single-use); code replay after
+  success or expiry refused; pre-restart session token replay refused;
+  session-token leakage probes (memory-only: absent from URLs, logs, storage,
+  and error text); flood of `/api/pair` refused without provider egress.
 - **L-LIMIT-1 (integration):** idle/total ceilings enforced; interruption
   spends the permit and renders nothing.
 - **L-A11Y-1 (browser):** keyboard-only path through Zone L states; live-region
   announcements observed; 200% zoom + 320 px without horizontal scroll.
 - **Contract validation (mocked fixtures, CI):** the `video_url` data-URL
-  request shape, usage/error response shapes, and refusal mapping pinned
-  against fixtures before any live acceptance.
+  request shape (model field = D9-approved ID, pinned endpoint, no
+  `response_format`), usage/error response shapes, and refusal mapping pinned
+  against fixtures before any live acceptance; config-gate fixtures pin the
+  `ENDPOINT_UNAPPROVED` / `MODEL_UNAVAILABLE_OR_UNAPPROVED` matrix.
 - **Real-browser acceptance (owner-run, NOT CI):** genuine synthetic MP4
   selection, permitted analysis, actual Baseten response rendered with run
   id/usage; revocation drill (revoke permit mid-upload → refusal + cleanup).

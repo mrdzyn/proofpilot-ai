@@ -1391,4 +1391,60 @@ implementation or any live provider call.
 GPT-6 re-audit of PR #28; owner decisions D1–D7. STOP before implementation or
 any live provider call.
 
+## Handoff: UI-C3-02-P3
+
+- **Task / phase:** UI-C3-02 owner-config revision on docs-only Draft PR #28
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** GPT-6 second re-audit, then project owner (decisions D1–D9; D9 blocks any call)
+- **Branch:** `docs/ui-c3-02-live-analysis-mode` (based on `main@b841740`, independent of PRs #26/#27)
+- **PR:** #28 (Draft, against `main`)
+- **State:** PROPOSAL ONLY. No implementation, credential read, provider call, spend, merge, or deploy.
+
+### Revision (all four re-audit findings addressed)
+
+- **MAJOR-1 (owner config):** companion reads exactly the existing
+  `BASETEN_API_KEY`, `BASETEN_API_BASE_URL`, `BASETEN_MODEL` (owner-started
+  runtime only; no new names; no `.env.local` inspection in docs work).
+  Owner-stated `BASETEN_MODEL=meta/muse-spark-open` recorded exactly; the
+  earlier `-1026` value is superseded and must not be used. Provider-ID nuance
+  explicit (OpenRouter `meta/…` vs direct-Baseten `meta-models/…` must not be
+  equated). Fail-closed startup gate: base URL vs pinned
+  `https://inference.baseten.co` origin (`ENDPOINT_UNAPPROVED`), model vs
+  D9-approved direct-Baseten ID (`MODEL_UNAVAILABLE_OR_UNAPPROVED`), zero
+  calls, no fallback/translation/rerouting; mismatch names D9. New L-CFG-1
+  mismatch-battery tests.
+- **MAJOR-2 (pairing + endpoint auth):** terminal pairing protocol specified
+  (`POST /api/pair`, single-use 2-min code, ≤1 KiB body, 5/min rate limit +
+  lockout, 256-bit memory-only session, 30-min idle/4-h absolute expiry,
+  restart voids all). Endpoint tiers: state-free `/api/health` vs
+  session-authenticated `/api/status|/events|/upload|/analyze|/propose`
+  (Host + Origin-when-present + `X-Live-Session` + `Sec-Fetch-Site`
+  defense-in-depth on every call). Missing-Origin classification documented
+  (accepted only for state-free + Host-valid). New L-PAIR-1 battery; L-CSRF-1
+  extended with actual hostile no-Origin GETs.
+- **MINOR-3 (no structured output):** spec states the companion never sends
+  `response_format` and treats every response as untrusted free-form text;
+  host-side grammar refuses malformed/partial/wrong-schema text with zero
+  extra requests (L-SAN-1 extended; Zone L disclosure updated).
+- **MINOR-4 (bookkeeping):** STATUS L9 harmonized (PR #23 hash historical,
+  PR #24 merged as `main@b841740`, matching L10); D8 formalized as recorded
+  design-only provider selection; D9 added as the pending model-ID decision
+  that blocks any call; decision ranges updated to D1–D9.
+
+### Validation
+
+- `git diff --check` clean; `pnpm lint` green (docs-only change set).
+- No code, no tests, no provider surface, no `.env.local` read: nothing
+  executable to run; hosted CI owns the PR gates.
+- Forbidden-scope check: no Meta/Baseten/Modal contact, no credential read,
+  no quota/activation/pin change, no stored-proposal access, no
+  verifier/oracle/grammar change, no OpenRouter rerouting, no merge/deploy;
+  spent Meta quota and hard-disable untouched; previously resolved findings
+  preserved.
+
+### Next action
+
+GPT-6 second re-audit of PR #28; owner decisions D1–D9 (D9 first, blocks any
+call). STOP before implementation or any live provider call.
+
 <!-- HANDOFF_ENTRIES_END -->
