@@ -1354,7 +1354,7 @@ shell phase.
 - **From:** Implementation agent (Muse Code, powered by Muse Spark)
 - **To:** GPT-6 independent exact-head re-audit, then project owner (visual approval)
 - **Branch:** `design/ui-c3-01a-dashboard`
-- **Implementation head:** `TBD-on-commit` (design docs only; filled at commit time)
+- **Implementation head:** `3ac11aedbe32b016b85def7a6eb5f71bd0276acc`
 - **PR:** #26 (Draft)
 - **State:** READY FOR RE-AUDIT (design gate); no shell until approved
 
