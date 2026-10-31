@@ -44,7 +44,8 @@ export class OfflineMockPermitLedger {
     this.#lastNow = Math.max(this.#lastNow, sample);
     return this.#lastNow;
   }
-  constructor(private readonly clock: () => number = Date.now) {}
+  private readonly clock: () => number;
+  constructor(clock: () => number = Date.now) { this.clock = clock; }
 
   /** Simulates a terminal-issued single-use permit, NEVER a live authorization. */
   issueTerminalMockPermit(input: MockPermitIdentity): Result {
