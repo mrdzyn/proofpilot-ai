@@ -38,11 +38,14 @@ test('the activation locks that remain: quota is the approved constant, the pin 
   // no execution switch, real artifact hard-disabled; covered by the E2 boundary tests).
   // c3-b2b-verify-authenticated.ts is the reviewed SEC-P2-02 authenticated verification command
   // (same five flags, no key/trust-root/bypass flags, no env, real artifact hard-disabled before
-  // any read; covered by tests/unit/artifact-auth.test.ts command-surface tests). Never expanded
-  // to make a test pass: any further CLI is a reviewed contract change (see
-  // tasks/SEC-P2-02-ARTIFACT-AUTHENTICITY.md).
+  // any read; covered by tests/unit/artifact-auth.test.ts command-surface tests).
+  // c3-live-analysis.ts is the UI-C3-02-I2/I4 offline companion entry point (owner direction:
+  // localhost only, mock transport, no env/credential/provider calls; no live inference path).
+  // Never expanded to make a test pass: any further CLI is a reviewed contract change (see
+  // tasks/SEC-P2-02-ARTIFACT-AUTHENTICITY.md and the I2/I4 integration PR notes).
   const scripts = readdirSync(path.join(root, 'scripts')).filter((f) => /^c3-/.test(f)).sort();
-  assert.deepEqual(scripts, ['c3-activation-digest.ts', 'c3-approve-live-run.ts', 'c3-b2b-verify-authenticated.ts', 'c3-b2b-verify-proposal.ts', 'c3-live-proposal.ts', 'c3-live-rehearsal.ts', 'c3-offline-verification.ts', 'c3-pin-check.ts', 'c3-proposal-preflight.ts', 'c3-stage-spike.ts']);
+  assert.deepEqual(scripts, ['c3-activation-digest.ts', 'c3-approve-live-run.ts', 'c3-b2b-verify-authenticated.ts', 'c3-b2b-verify-proposal.ts', 'c3-live-analysis.ts', 'c3-live-proposal.ts', 'c3-live-rehearsal.ts', 'c3-offline-verification.ts', 'c3-pin-check.ts', 'c3-proposal-preflight.ts', 'c3-stage-spike.ts']);
+  assert.doesNotMatch(code('scripts/c3-live-analysis.ts'), /process\.env|fetch|createProvider|MODEL_API_KEY|BASETEN_API_KEY|PROOFPILOT_ALLOW_BILLABLE_CALLS|runProductionProposalAttempt|openMetaProposalCall/);
 });
 
 test('the production runner is reachable only through the gated entry point (and the owner CLI through it): the index, the staging runner and the approval CLI cannot reach it', () => {
