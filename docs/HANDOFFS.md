@@ -1299,4 +1299,202 @@ enrollment, merge or residual-risk acceptance.
 GPT-6 exact-head re-audit of the new HEAD; owner merge decision. No real execution,
 enrollment, merge or residual-risk acceptance.
 
+## Handoff: UI-C3-02-P1
+
+- **Task / phase:** UI-C3-02 live-analysis mode — docs-only architecture & security proposal
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** Independent review, then project owner (decisions D1–D7 before any implementation)
+- **Branch:** `docs/ui-c3-02-live-analysis-mode` (based on `main@b841740`, independent of PRs #26/#27)
+- **PR:** new Draft PR against `main` (to be opened)
+- **State:** PROPOSAL ONLY. No implementation, provider calls, quota, merge, or deploy.
+
+### Deliverable
+
+- `docs/UI-C3-02-LIVE-ANALYSIS-MODE.md` (new): bounded spec for a future Live Muse
+  Spark Analysis Mode — explicit-click Analyze/Propose journey, localhost
+  companion holding the only credential path, per-request two-act authorization
+  (terminal permit + UI click), single-use hash-bound permits, synthetic-first
+  bounded inputs, upload lifecycle with cleanup, strict output validation with
+  untrusted-text rendering, separate live vs historical views, never VERIFIED
+  for unexecuted proposals, LIVE-C3-01 quota preserved spent, no
+  verifier/oracle/gate changes; trust-boundary diagram; owner decisions
+  D1–D7; testing plan (L-STAT/L-AUTH/L-ONE/L-BIND/L-SAN/L-SEP/L-NET/L-A11Y +
+  owner-run acceptance + adversarial tests); acceptance and stop rule.
+- `docs/STATUS.md`: UI-C3-02 row + handoff pointer + next action (this branch only).
+
+### Validation
+
+- `git diff --check` clean; `pnpm lint` green (docs-only change set).
+- No code, no tests, no provider surface: nothing executable to run; hosted CI
+  owns the PR gates.
+- Forbidden-scope check: no Meta/Baseten/Modal contact, no credential read,
+  no quota/activation/pin change, no stored-proposal access, no
+  verifier/oracle/grammar change, no merge/deploy.
+
+### Next action
+
+Independent review of the proposal PR; owner decisions D1–D7. STOP before
+implementation or any live provider call.
+
+## Handoff: UI-C3-02-P2
+
+- **Task / phase:** UI-C3-02 Baseten-selected revision on docs-only Draft PR #28
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** GPT-6 re-audit, then project owner (decisions D1–D7 before any implementation)
+- **Branch:** `docs/ui-c3-02-live-analysis-mode` (based on `main@b841740`, independent of PRs #26/#27)
+- **PR:** #28 (Draft, against `main`)
+- **State:** PROPOSAL ONLY. No live call, credential read, implementation, merge, or deploy.
+
+### Revision (all four review findings addressed)
+
+- **MAJOR-1 (provider):** new live path reworked for Baseten Model APIs,
+  model `meta-models/muse-spark-open`, fixed endpoint
+  `https://inference.baseten.co/v1/chat/completions`, bearer
+  `BASETEN_API_KEY` companion-env-only. Server-side inline `video_url` data
+  URL from hash-verified ≤25 MB synthetic MP4 (inside the 100 MiB body cap;
+  provider caps: 2 videos, 200 MB media, 300 s, H.264, ≤96 sampled frames,
+  audio ignored — disclosed in UI). No public URL, Files API, or Meta
+  credential/egress anywhere in the new path. Historical Meta 1.3 runs vs new
+  Baseten runs distinguished in labels, records (`provider: baseten` vs
+  `provider: meta`), diagram, costs, quotas, and D1–D7.
+- **MAJOR-2 (loopback auth):** companion serves UI+API same-origin
+  (no CORS headers at all); strict Host/Origin checks (rebinding + null Origin
+  refused for live APIs); per-process ephemeral `X-Live-Session` header on
+  mutating calls (memory-only, void on restart with all permits); exact-path
+  allowlist; body ≤30 MB, idle 60 s / total 10 min, one in-flight request;
+  L-CSRF + L-LIMIT refusal batteries in the test plan.
+- **MINOR-3 (lifecycle):** browser→companion staged bytes always deleted;
+  single request with inline media (no remote file exists to delete);
+  provider-side retention is a D5 owner-confirm item; video bytes/base64 and
+  raw provider text never persisted locally.
+- **MINOR-4 (bookkeeping):** STATUS current phase/task/working-branch now
+  name this docs-only PR #28 (primary `main@b841740` = PR #24 merge; PRs
+  #26/#27 stated unmerged, not implied merged); Baseten moved from blanket
+  NOT-APPROVED to provider-selected-for-design with execution/spend/credential
+  pending.
+
+### Validation
+
+- `git diff --check` clean; `pnpm lint` green (docs-only change set).
+- No code, no tests, no provider surface: nothing executable to run; hosted CI
+  owns the PR gates.
+- Forbidden-scope check: no Meta/Baseten/Modal contact, no credential read,
+  no quota/activation/pin change, no stored-proposal access, no
+  verifier/oracle/grammar change, no merge/deploy; spent Meta quota and
+  hard-disable untouched.
+- Baseten claims verified Oct 31, 2026 against
+  `baseten.co/library/muse-spark-open` and
+  `docs.baseten.co/inference/model-apis/vision` (re-verify at authorization).
+
+### Next action
+
+GPT-6 re-audit of PR #28; owner decisions D1–D7. STOP before implementation or
+any live provider call.
+
+## Handoff: UI-C3-02-P3
+
+- **Task / phase:** UI-C3-02 owner-config revision on docs-only Draft PR #28
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** GPT-6 second re-audit, then project owner (decisions D1–D9; D9 blocks any call)
+- **Branch:** `docs/ui-c3-02-live-analysis-mode` (based on `main@b841740`, independent of PRs #26/#27)
+- **PR:** #28 (Draft, against `main`)
+- **State:** PROPOSAL ONLY. No implementation, credential read, provider call, spend, merge, or deploy.
+
+### Revision (all four re-audit findings addressed)
+
+- **MAJOR-1 (owner config):** companion reads exactly the existing
+  `BASETEN_API_KEY`, `BASETEN_API_BASE_URL`, `BASETEN_MODEL` (owner-started
+  runtime only; no new names; no `.env.local` inspection in docs work).
+  Owner-stated `BASETEN_MODEL=meta/muse-spark-open` recorded exactly; the
+  earlier `-1026` value is superseded and must not be used. Provider-ID nuance
+  explicit (OpenRouter `meta/…` vs direct-Baseten `meta-models/…` must not be
+  equated). Fail-closed startup gate: base URL vs pinned
+  `https://inference.baseten.co` origin (`ENDPOINT_UNAPPROVED`), model vs
+  D9-approved direct-Baseten ID (`MODEL_UNAVAILABLE_OR_UNAPPROVED`), zero
+  calls, no fallback/translation/rerouting; mismatch names D9. New L-CFG-1
+  mismatch-battery tests.
+- **MAJOR-2 (pairing + endpoint auth):** terminal pairing protocol specified
+  (`POST /api/pair`, single-use 2-min code, ≤1 KiB body, 5/min rate limit +
+  lockout, 256-bit memory-only session, 30-min idle/4-h absolute expiry,
+  restart voids all). Endpoint tiers: state-free `/api/health` vs
+  session-authenticated `/api/status|/events|/upload|/analyze|/propose`
+  (Host + Origin-when-present + `X-Live-Session` + `Sec-Fetch-Site`
+  defense-in-depth on every call). Missing-Origin classification documented
+  (accepted only for state-free + Host-valid). New L-PAIR-1 battery; L-CSRF-1
+  extended with actual hostile no-Origin GETs.
+- **MINOR-3 (no structured output):** spec states the companion never sends
+  `response_format` and treats every response as untrusted free-form text;
+  host-side grammar refuses malformed/partial/wrong-schema text with zero
+  extra requests (L-SAN-1 extended; Zone L disclosure updated).
+- **MINOR-4 (bookkeeping):** STATUS L9 harmonized (PR #23 hash historical,
+  PR #24 merged as `main@b841740`, matching L10); D8 formalized as recorded
+  design-only provider selection; D9 added as the pending model-ID decision
+  that blocks any call; decision ranges updated to D1–D9.
+
+### Validation
+
+- `git diff --check` clean; `pnpm lint` green (docs-only change set).
+- No code, no tests, no provider surface, no `.env.local` read: nothing
+  executable to run; hosted CI owns the PR gates.
+- Forbidden-scope check: no Meta/Baseten/Modal contact, no credential read,
+  no quota/activation/pin change, no stored-proposal access, no
+  verifier/oracle/grammar change, no OpenRouter rerouting, no merge/deploy;
+  spent Meta quota and hard-disable untouched; previously resolved findings
+  preserved.
+
+### Next action
+
+GPT-6 second re-audit of PR #28; owner decisions D1–D9 (D9 first, blocks any
+call). STOP before implementation or any live provider call.
+
+## Handoff: UI-C3-02-P4
+
+- **Task / phase:** UI-C3-02 request-matrix revision on docs-only Draft PR #28
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** GPT-6 third review, then project owner (pending D1–D7 and D9; D8 recorded design-only)
+- **Branch:** `docs/ui-c3-02-live-analysis-mode` (based on `main@b841740`, independent of PRs #26/#27)
+- **PR:** #28 (Draft, against `main`)
+- **State:** PROPOSAL ONLY. No implementation, credential read, provider call, spend, merge, or deploy.
+
+### Revision (all four third-audit corrections addressed)
+
+- **Base-URL gate:** `BASETEN_API_BASE_URL=https://inference.baseten.co/v1`
+  validated component-wise (https scheme, exact host, default port, no
+  userinfo/query/fragment, pathname exactly `/v1` after single-trailing-slash
+  normalization); destination constructed as origin + `/v1/chat/completions`
+  from validated components (no double-append, no raw concatenation, no
+  cross-origin redirects). L-CFG-1 extended with the full URL matrix
+  (owner value PASSES bare/normalized; all hostile variants refused, zero
+  egress). D9 independent of URL validity.
+- **Request matrix:** session is the gate, Origin/fetch-metadata are
+  hardening — (a) session-bearing Host-valid absent-Origin polling GETs on
+  `/api/status|/events` allowed; (b) wrong/null Origin, non-same-origin
+  fetch metadata, missing/invalid session, or bad Host refused; (c) POSTs
+  require present exact same-origin Origin; (d) `/api/health` state-free.
+  Fetch-metadata-absent fallback specified (session + Host decide).
+  L-CSRF-1 extended with the legitimate-request matrix + Playwright
+  acceptance (owner-run).
+- **Pairing exception:** `POST /api/pair` documented as the sole pre-session
+  bootstrap (exact-Origin present required, JSON ≤1 KiB, rate limit +
+  lockout, zero CORS/egress); diagram updated; L-PAIR-1 extended with
+  cross-origin/null/absent-Origin pairing refusals.
+- **Labels:** STATUS active task, authorization line, and next action now
+  read "pending D1–D7 and D9; D8 recorded design-only".
+
+### Validation
+
+- `git diff --check` clean; `pnpm lint` green (docs-only change set).
+- No code, no tests, no provider surface, no `.env.local` read: nothing
+  executable to run; hosted CI owns the PR gates.
+- Forbidden-scope check: no Meta/Baseten/Modal contact, no credential read,
+  no quota/activation/pin change, no stored-proposal access, no
+  verifier/oracle/grammar change, no OpenRouter rerouting, no merge/deploy;
+  spent Meta quota, D9 block, and hard-disable untouched; prior findings
+  preserved.
+
+### Next action
+
+GPT-6 third review of PR #28; owner decisions D1–D7 and D9 (D8 recorded).
+STOP before implementation or any live provider call.
+
 <!-- HANDOFF_ENTRIES_END -->
