@@ -1,0 +1,50 @@
+@import "tailwindcss";
+
+/*
+ * ProofPilot AI dashboard tokens (from design/tokens/pp-dashboard.json).
+ * Palette: black / white / neutral grays + cyan rule for model zones.
+ * Red is reserved for errors. Verdicts are always text + glyph, never color-only.
+ */
+@theme {
+  --color-ink: #111111;
+  --color-ink-2: #3d4148;
+  --color-ink-muted: #5b6068;
+  --color-line: #d8dce1;
+  --color-line-strong: #9aa1ab;
+  --color-focus: #0e87ad;
+  --color-accent: #22c6f0;
+  --color-accent-ink: #0b6e87;
+  --color-error: #b91c1c;
+  --color-info: #0e87ad;
+  --color-model-wash: #f4f4f5;
+  --color-subtle: #f7f8fa;
+  --color-muted: #f1f3f5;
+  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+body {
+  background: #ffffff;
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  word-break: break-all;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}

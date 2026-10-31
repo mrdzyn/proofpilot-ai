@@ -1444,4 +1444,37 @@ Do not merge, implement, or deploy on the agent's behalf.
 GPT-6: exact-head re-audit of PR #26; owner: visual approval in a reviewable record.
 Do not merge, implement, or deploy on the agent's behalf.
 
+## Handoff: UI-C3-01B-C1
+
+- **Task / phase:** UI-C3-01B functional local dashboard (task `tasks/UI-C3-01B-FUNCTIONAL-DASHBOARD.md`; local viewer scope only)
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** GPT-6 review, then project owner (merge decisions for both dashboard PRs)
+- **Branch:** `feat/ui-c3-01b-dashboard` (from approved design HEAD `1655bbb`; PR #26 unmerged and unmodified)
+- **Implementation head:** `TBD-on-commit` (filled at commit time)
+- **PR:** NEW stacked Draft PR targeting `design/ui-c3-01a-dashboard` (number filled at creation)
+- **State:** READY FOR REVIEW. Do not merge, publish, or deploy on the agent's behalf.
+
+### Completed
+- `packages/dashboard-import/` (pure bounded validator + view-model; exact-key schemas verified against the committed example, `f01-baseline.ts` emit code and `candidate-stage.ts` writer shapes; `field()` presence accessor under `noUncheckedIndexedAccess`; `function`-declaration `fail`/`shapeError` after proving the const-arrow form defeats tsc narrowing).
+- `tests/unit/dashboard-import.test.ts` (T-IMPORT-REAL on the real example + producer-shaped baseline; T-IMPORT-FAKE; T-IMPORT-FORGED-EXAMPLE; bounds/refusal batteries) — 8/8 pass. `tests/unit/dashboard-truth.test.ts` (T-TRUTH byte-for-byte) — 3/3 pass; it caught and fixed two real transcription slips (desktop SHA, run-002 response id).
+- `dashboard/` Vite+React+TS+Tailwind app (light-only, CSP, loopback binding, `base: './'` for file:// use; five zones; MP4 picker + playback + metadata + WebCrypto SHA-256 + suitability label; JSON import with preserved-state refusals; quoted-claim imported rendering; no external requests).
+- `tests/integration/dashboard-browser.test.ts` (local-only Playwright QA: real MP4 playback, valid/invalid/malicious/forged imports, provenance separation, zero non-loopback requests, desktop+mobile screenshots to `/tmp/pp-dashboard-qa/`, overflow + keyboard checks).
+- Root scripts `dashboard:dev/build/preview/typecheck/test:browser`; demo workflow with exact commands; `dashboard/dist/` gitignored (build output); `dashboard/pnpm-lock.yaml` committed.
+- PR #26 untouched (verified: no commits on the design branch in this slice).
+
+### Validation
+- `git diff --check` — PASS; `pnpm lint` — 0 problems; root `pnpm typecheck` — PASS; dashboard `tsc --noEmit` — PASS; `pnpm dashboard:build` — PASS.
+- `pnpm test:unit` (full) + `pnpm test:security` — PASS (run at commit time).
+- Dist audit: no external URLs (only XML namespaces, a react.dev error string, a tailwind comment); CSP meta present; relative asset paths.
+- SSR render smoke of the final component bytes (esbuild bundle + `renderToStaticMarkup`, throwaway /tmp harness): all five zones, skip link, landmarks, file inputs — PASS.
+- Hosted CI: see the stacked Draft PR checks (required gates green before merge).
+- NOT run in this sandbox: real-browser Playwright QA (Chromium launch denied by the macOS sandbox — Mach bootstrap `EPERM`; needs an unsandboxed run) and `pnpm f01:baseline` (needs Chromium). Both are documented, local-only, and required before any merge claim of full QA.
+
+### Continuation notes
+- Owner decisions: merging design PR #26 first (if at all), then the stacked PR; portal fields PENDING; residual security risks accepted: none (same-UID/enrollment/origin stay open and disclosed).
+- `dashboard/node_modules` (ignored) and `/tmp/ms-playwright` (browser binaries) are environment-local, not deliverables.
+
+### Next action
+GPT-6: review the stacked Draft PR; owner: merge decisions. Run `pnpm dashboard:test:browser` unsandboxed for the full browser QA before merging.
+
 <!-- HANDOFF_ENTRIES_END -->

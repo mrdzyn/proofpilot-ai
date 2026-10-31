@@ -49,12 +49,15 @@ the example additionally carries `_example`, an inert documentation string):
   append "(file claims to be an example)".
   Any other top-level key refuses the file.
 - `baseline`: exactly `reproduced` (boolean), `reasons` (array of strings),
-  `replay` (object). `replay`: exactly `n`, `outcome`, `failureCode`,
-  `failureMessage`, `oracleExitCode`, `evidenceDir`, `recordSha256`,
-  `candidateCssSha256`, `nonce`, `mobile`, `desktop`, `servedCssSha256` (array of
-  strings), `evidenceFinalized`, `evidenceProblems` (array). `mobile`/`desktop`
-  are exactly `{status, hitTestTarget, cartCountAfter}` (the reduced replay shape
-  written by `candidate-stage.ts`, not the full oracle observation).
+  `replay` (object). `replay`: exactly `n`, `outcome`, `failureCode`
+  (string|null), `failureMessage` (string|null), `oracleExitCode` (number|null),
+  `evidenceDir`, `recordSha256`, `candidateCssSha256` (string|null — null when
+  staging never completed, e.g. NC-7 busy-port), `nonce` (string|null, same rule),
+  `mobile`, `desktop`, `servedCssSha256` (array of strings), `evidenceFinalized`,
+  `evidenceProblems` (array). `mobile`/`desktop`
+  are exactly `{status, hitTestTarget, cartCountAfter}` or `null` (fault-injected
+  replays never ran the browser; the reduced replay shape written by
+  `candidate-stage.ts`, not the full oracle observation).
 - `candidates[]`: exactly `id`, `description`, `provenance`, `candidateId`,
   `adjustments`, `renderedCss`, `fault`, `replaysRequired`, `replaysAttempted`,
   `replaysPassed`, `status`, `reason`, `expected`, `expectationMet`,

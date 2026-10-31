@@ -21,7 +21,12 @@
     "f01:baseline": "node scripts/f01-baseline.ts",
     "inference:status": "node --env-file-if-exists=.env.local scripts/inference-status.ts",
     "record:f01": "node scripts/f01-record.ts",
-    "analyze:video": "node --env-file-if-exists=.env.local scripts/analyze-video.ts"
+    "analyze:video": "node --env-file-if-exists=.env.local scripts/analyze-video.ts",
+    "dashboard:dev": "pnpm --dir dashboard dev",
+    "dashboard:build": "pnpm --dir dashboard build",
+    "dashboard:preview": "pnpm --dir dashboard preview",
+    "dashboard:typecheck": "pnpm --dir dashboard typecheck",
+    "dashboard:test:browser": "node --test --test-timeout=300000 tests/integration/dashboard-browser.test.ts"
   },
   "devDependencies": {
     "@playwright/test": "1.64.1",
