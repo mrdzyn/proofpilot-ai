@@ -1,19 +1,22 @@
-# PP-DASHBOARD — local startup and demonstration workflow (UI-C3-01A, Phase A)
+# PP-DASHBOARD — local startup and demonstration workflow (UI-C3-01B, implemented)
 
-> Proposed workflow for the shell phase. Exact commands depend on the stack decision
-> (`design/architecture/PP-DASHBOARD-COMPONENT-STRUCTURE.md` §2); the invariants below
-> hold for either option.
+> Stack decided per owner preference: React + TypeScript + Vite + Tailwind
+> (light theme only, no routing, no database, no persisted history, no external
+> services). Commands below are exact; run from the repository root.
 
 ## 1. Startup (owner's machine, loopback only)
 
 1. Clean checkout of the approved dashboard commit; `git status` clean.
-2. Install with the frozen lockfile (Option A) or no install (Option B: plain JS).
-3. Serve on loopback only (Vite dev with `--host 127.0.0.1`, or any static server
-   bound to loopback). No LAN exposure, no tunnel, no hosted URL. The document and
-   asset loads this serving requires are local-origin traffic; the dashboard itself
-   makes zero requests to non-loopback origins. A self-contained single-file build
-   opened over `file://` is the literally-zero-request alternative.
-4. Open `http://127.0.0.1:<port>` in a desktop and a mobile-width browser window.
+2. `pnpm install --frozen-lockfile` (root) and `pnpm --dir dashboard install`
+   (dashboard dependencies; committed `dashboard/pnpm-lock.yaml`).
+3. `pnpm dashboard:dev`, then open http://127.0.0.1:5173 in a desktop and a
+   mobile-width browser window. `pnpm dashboard:build` + `pnpm dashboard:preview`
+   serves the production build at http://127.0.0.1:4174; `dashboard/dist/` also
+   opens over `file://` (literally zero requests). No LAN exposure, no tunnel,
+   no hosted URL.
+4. First run needs Chromium for the optional local browser QA only:
+   `pnpm exec playwright install chromium` (the dashboard itself needs no browser
+   tooling to serve).
 
 ## 2. Demonstration walkthrough (mirrors `docs/META-DEMO-RECORDING.md`, live page)
 
@@ -35,7 +38,7 @@
   origins during the full walkthrough (T-NET-1 invariant demonstrated); only
   loopback document/asset loads (and dev HMR) appear.
 - No secrets, paths, or private directories visible; history values match the cited
-  sources byte for byte (T-TRUTH-1).
+  sources byte for byte (`tests/unit/dashboard-truth.test.ts`, T-TRUTH).
 - Keyboard-only dry run completed; focus visible throughout; live regions announce.
 
 ## 4. Out of scope for the demo

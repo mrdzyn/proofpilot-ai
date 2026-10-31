@@ -35,3 +35,9 @@ playwright-report/
 # Python bytecode caches
 __pycache__/
 *.py[cod]
+
+# Local dashboard build output (regenerable via pnpm dashboard:build)
+dashboard/dist/
+
+# pnpm content-addressable store cache (regenerable; environment-local)
+.pnpm-store/

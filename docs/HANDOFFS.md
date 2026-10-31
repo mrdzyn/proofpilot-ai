@@ -1444,4 +1444,119 @@ Do not merge, implement, or deploy on the agent's behalf.
 GPT-6: exact-head re-audit of PR #26; owner: visual approval in a reviewable record.
 Do not merge, implement, or deploy on the agent's behalf.
 
+## Handoff: UI-C3-01B-C1
+
+- **Task / phase:** UI-C3-01B functional local dashboard (task `tasks/UI-C3-01B-FUNCTIONAL-DASHBOARD.md`; local viewer scope only)
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** GPT-6 review, then project owner (merge decisions for both dashboard PRs)
+- **Branch:** `feat/ui-c3-01b-dashboard` (from approved design HEAD `1655bbb`; PR #26 unmerged and unmodified)
+- **Implementation head:** `271eabe28f8dd012e9423fbf8b6b369d79ad2b46`
+- **PR:** #27 (Draft, stacked on `design/ui-c3-01a-dashboard`, i.e. on PR #26)
+- **State:** READY FOR REVIEW. Do not merge, publish, or deploy on the agent's behalf.
+
+### Completed
+- `packages/dashboard-import/` (pure bounded validator + view-model; exact-key schemas verified against the committed example, `f01-baseline.ts` emit code and `candidate-stage.ts` writer shapes; `field()` presence accessor under `noUncheckedIndexedAccess`; `function`-declaration `fail`/`shapeError` after proving the const-arrow form defeats tsc narrowing).
+- `tests/unit/dashboard-import.test.ts` (T-IMPORT-REAL on the real example + producer-shaped baseline; T-IMPORT-FAKE; T-IMPORT-FORGED-EXAMPLE; bounds/refusal batteries) — 8/8 pass. `tests/unit/dashboard-truth.test.ts` (T-TRUTH byte-for-byte) — 3/3 pass; it caught and fixed two real transcription slips (desktop SHA, run-002 response id).
+- `dashboard/` Vite+React+TS+Tailwind app (light-only, CSP, loopback binding, `base: './'` for file:// use; five zones; MP4 picker + playback + metadata + WebCrypto SHA-256 + suitability label; JSON import with preserved-state refusals; quoted-claim imported rendering; no external requests).
+- `tests/integration/dashboard-browser.test.ts` (local-only Playwright QA: real MP4 playback, valid/invalid/malicious/forged imports, provenance separation, zero non-loopback requests, desktop+mobile screenshots to `/tmp/pp-dashboard-qa/`, overflow + keyboard checks).
+- Root scripts `dashboard:dev/build/preview/typecheck/test:browser`; demo workflow with exact commands; `dashboard/dist/` gitignored (build output); `dashboard/pnpm-lock.yaml` committed.
+- PR #26 untouched (verified: no commits on the design branch in this slice).
+
+### Validation
+- `git diff --check` — PASS; `pnpm lint` — 0 problems; root `pnpm typecheck` — PASS; dashboard `tsc --noEmit` — PASS; `pnpm dashboard:build` — PASS.
+- `pnpm test:unit` (full) + `pnpm test:security` — PASS (run at commit time).
+- Dist audit: no external URLs (only XML namespaces, a react.dev error string, a tailwind comment); CSP meta present; relative asset paths.
+- SSR render smoke of the final component bytes (esbuild bundle + `renderToStaticMarkup`, throwaway /tmp harness): all five zones, skip link, landmarks, file inputs — PASS.
+- Hosted CI: see the stacked Draft PR checks (required gates green before merge).
+- NOT run in this sandbox: real-browser Playwright QA (Chromium launch denied by the macOS sandbox — Mach bootstrap `EPERM`; needs an unsandboxed run) and `pnpm f01:baseline` (needs Chromium). Both are documented, local-only, and required before any merge claim of full QA.
+
+### Continuation notes
+- Owner decisions: merging design PR #26 first (if at all), then the stacked PR; portal fields PENDING; residual security risks accepted: none (same-UID/enrollment/origin stay open and disclosed).
+- `dashboard/node_modules` (ignored) and `/tmp/ms-playwright` (browser binaries) are environment-local, not deliverables.
+
+### Next action
+GPT-6: review the stacked Draft PR; owner: merge decisions. Run `pnpm dashboard:test:browser` unsandboxed for the full browser QA before merging.
+
+## Handoff: UI-C3-01B-C2
+
+- **Task / phase:** UI-C3-01B browser-QA completion (unsandboxed Playwright run) on stacked Draft PR #27
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** GPT-6 review, then project owner (merge decisions for PR #26 then PR #27)
+- **Branch:** `feat/ui-c3-01b-dashboard`
+- **Implementation head:** `922179937e8fda1736efd9c06a327315f635e1b3`
+- **PR:** #27 (Draft, stacked on `design/ui-c3-01a-dashboard`)
+- **State:** READY FOR REVIEW. Do not merge, publish, or deploy on the agent's behalf.
+
+### Browser QA results (unsandboxed, `pnpm dashboard:test:browser`, 6/6 PASS)
+- T-VIDEO: real local H.264 MP4 plays (currentTime advances under muted programmatic play); metadata (duration, 390×844, codec hint), local SHA-256 and "suitable for playback" label shown; zero non-loopback requests.
+- T-VIDEO-REFUSAL: non-MP4 and truncated clips refused with typed errors; nothing claimed suitable.
+- T-IMPORT-REAL: committed example imports as owner-imported with UNVERIFIED IMPORT banner; historical trusted PC-1 chip intact (exactly one).
+- T-IMPORT-FORGED: fake VERIFIED + forged `_example` render as quoted claims with "(file claims to be an example)"; no trusted chip in the import.
+- T-XSS + T-CSS: injected markup/URLs/styles render as inert literal text; no new script/style/img elements.
+- T-A11Y + layout: desktop 1280×800 and mobile 390×844 keyboard path reaches both file pickers, single h1, no page-level horizontal overflow at either viewport.
+- Screenshots (local only): `/tmp/pp-dashboard-qa/desktop.png` (455,565 bytes, sha256 `474d1d7e…`) and `/tmp/pp-dashboard-qa/mobile.png` (440,999 bytes, sha256 `7859c0a5…`); both visually inspected — five zones, provenance treatments, chips and tables match the approved mockup.
+
+### Fixes required by the QA run (this commit)
+- `file://` cannot load separate-asset builds (Chromium CORS, origin `null`): the dashboard now ships a single self-contained `dist/index.html` via `vite-plugin-singlefile` (the contract's literally-zero-request distribution option). Loopback `dev`/`preview` serve the same bytes.
+- CSP `script-src`/`style-src` gained `'unsafe-inline'` scoped to our own inlined bundle (no host sources allowed anywhere); rationale recorded in `dashboard/index.html`.
+- VerificationZone now renders the "(file claims to be an example)" note from `claimsExampleNote` (the view-model carried it; the component dropped it — caught by T-IMPORT-FORGED).
+- XSS test asserts injected-element counts unchanged (the bundle itself is one inline script/style pair).
+- dist audit re-run: no external URLs (only namespaces, a react.dev error string, a tailwind comment); CSP meta present; relative asset references.
+
+### Validation
+- `git diff --check` — PASS; `pnpm lint` — 0 problems; root + dashboard `tsc --noEmit` — PASS; `pnpm dashboard:build` — PASS.
+- `tests/unit` dashboard files 11/11; `pnpm test:security` 137/137. Full `pnpm test:unit` still blocked in this sandbox by the listening-socket ban (pre-existing: identical `listen EPERM` on the clean base tree); hosted CI owns the full-suite verdict.
+- `pnpm f01:baseline` likewise needs Chromium and was not run here; CI covers it.
+- Hosted CI: see PR #27 checks at the new head (required gates green before merge).
+
+### Continuation notes
+- Owner decisions: merge PR #26 first (if at all), then PR #27; portal fields PENDING; no residual risks accepted.
+- Screenshot files and `/tmp/ms-playwright` browsers are environment-local, not deliverables; results are recorded in the PR #27 comment thread.
+
+### Next action
+GPT-6: review of PR #27; owner: merge decisions. Do not merge, publish, or deploy on the agent's behalf.
+
+## Handoff: UI-C3-01B-C3
+
+- **Task / phase:** UI-C3-01B GPT-6 audit remediation (5 findings) on stacked Draft PR #27
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** GPT-6 re-audit, then project owner (merge decisions for PR #26 then PR #27)
+- **Branch:** `feat/ui-c3-01b-dashboard`
+- **Implementation head:** `99a1ba0750b7602b418a39a1505c79deb790c61a` (code+tests commit; STATUS + this handoff follow in the docs commit, the pushed PR head)
+- **PR:** #27 (Draft, stacked on `design/ui-c3-01a-dashboard`)
+- **State:** REMEDIATION COMPLETE. Do not merge, publish, deploy, contact Meta/Baseten/Modal, access the stored proposal, or change verification/security gates on the agent's behalf.
+
+### Finding → fix (all on PR #27, design/playback/provenance/boundaries preserved)
+
+- **MAJOR-1 (failed import blanked the view):** `VerificationZone` now keeps `accepted` (last good import, still rendered with UNVERIFIED IMPORT banner) separate from `refusal` (error banner only); success replaces, failure preserves.
+- **MAJOR-2 (digest/metadata races):** `RecordingZone` rebuilt around selection generations — digest attributed only to its own pick (stale completions dropped), no placeholder SHA ever rendered (table appears only when metadata + digest for the current pick both hold), typed refusals for unknown/non-positive duration, >30 s duration, and zero dimensions; the offending pick is revoked, never shown as suitable.
+- **MINOR-3 (silent UTF-8 replacement):** `importPickedJson` decodes with `TextDecoder('utf-8', { fatal: true })`; malformed bytes are refused as "not valid UTF-8", never replaced with U+FFFD.
+- **MINOR-4 (overlong/invalid metadata):** duration >30 s refused with the exact over-limit message (browser-proven with a 35 s clip); suitability still requires a decodable last frame on top of validated metadata.
+- **MINOR-5 (omitted coverage):** new `tests/unit/dashboard-absent.test.ts` (T-ABSENT-1: no Run/Verify/Approve/Deploy label, provider endpoint, `.proofpilot` literal, or credential in shell source); T-NET-1 walkthrough under a loopback-only trap in both Vite dev and the built preview server on runtime-allocated free ports; A11Y extended to 320 px width and 640 px CSS width (≈200% zoom at 1280) plus a 400-char unbroken-cell wrap check.
+
+### Regression tests (new)
+
+- T-IMPORT-SEQUENCE: valid import → malformed import; prior accepted view intact beside the refusal.
+- T-IMPORT-UTF8: valid import → malformed-UTF-8 bytes; "not valid UTF-8" refusal, prior view intact.
+- T-VIDEO-RACE: first digest call delayed 1.5 s, A picked then immediately B; final shows B's name + digest, A's stale digest dropped, no placeholder text.
+- T-VIDEO-LONG: 35 s MP4 refused with the typed duration error; never suitable.
+- `table td { overflow-wrap: anywhere }` added so long imported strings wrap instead of overflowing narrow viewports.
+
+### Validation
+
+- `git diff --check` — PASS; `pnpm lint` — 231 files, 0 problems; root + dashboard `tsc --noEmit` — PASS.
+- `tests/unit` dashboard files 12/12 (8 import + 3 truth + 1 absent); `pnpm test:security` 137/137. Full `pnpm test:unit` still blocked in this sandbox by the listening-socket ban (pre-existing on clean base); hosted CI owns the full-suite verdict.
+- Browser QA `pnpm dashboard:test:browser` (unsandboxed, `PLAYWRIGHT_BROWSERS_PATH=/tmp/ms-playwright`) — 11/11 PASS: T-VIDEO, T-VIDEO-REFUSAL, T-VIDEO-RACE, T-VIDEO-LONG, T-IMPORT-REAL, T-IMPORT-FORGED, T-IMPORT-SEQUENCE, T-IMPORT-UTF8, T-XSS+T-CSS (+400-char long-cell wrap at 390 px), T-A11Y (desktop 1280, zoom200 640, mobile 390, narrow320 320 — keyboard path, single h1, no h-overflow), T-NET (dev + preview walkthroughs, zero non-loopback requests, no prohibited control in DOM).
+- Screenshots (local only, refreshed): `/tmp/pp-dashboard-qa/desktop.png`, `mobile.png`, `zoom200.png`, `narrow320.png`.
+- Environment note: port 5173 on this machine is occupied by an unrelated "BossForge Live" Vite app — left untouched; T-NET allocates free ports at runtime and never probes fixed defaults.
+
+### Continuation notes
+
+- Owner decisions still open: merge PR #26 first (if at all), then PR #27; portal fields PENDING; no residual risks accepted.
+- Screenshot files and `/tmp/ms-playwright` browsers are environment-local, not deliverables; results recorded in the PR #27 comment thread.
+
+### Next action
+
+GPT-6: re-audit of PR #27; owner: merge decisions. Do not merge, publish, or deploy on the agent's behalf.
+
 <!-- HANDOFF_ENTRIES_END -->
