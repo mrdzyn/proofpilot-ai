@@ -60,15 +60,28 @@ function ImportedBaseline({ view }: { view: Extract<ImportedView, { kind: 'basel
 
 export function VerificationZone() {
   const [busy, setBusy] = useState(false);
-  const [outcome, setOutcome] = useState<ImportOutcome | null>(null);
+  // Last accepted import survives later refusals: success replaces it,
+  // failure leaves it on screen and only adds the error banner.
+  const [accepted, setAccepted] = useState<Extract<
+    ImportOutcome,
+    { ok: true }
+  > | null>(null);
+  const [refusal, setRefusal] = useState<Extract<
+    ImportOutcome,
+    { ok: false }
+  > | null>(null);
 
   async function onPick(file: File | undefined): Promise<void> {
     if (!file) return;
     setBusy(true);
     try {
-      // Preserve the previous rendering until the new file validates.
       const next = await importPickedJson(file);
-      setOutcome(next);
+      if (next.ok) {
+        setAccepted(next);
+        setRefusal(null);
+      } else {
+        setRefusal(next);
+      }
     } finally {
       setBusy(false);
     }
@@ -142,20 +155,18 @@ export function VerificationZone() {
           </p>
         </div>
         {busy && <LoadingState what="evidence JSON" />}
-        {!busy && outcome === null && (
+        {!busy && accepted === null && refusal === null && (
           <EmptyState>No file imported — historical example shown.</EmptyState>
         )}
-        {!busy && outcome !== null && !outcome.ok && (
-          <ErrorState message={outcome.message} recovery={outcome.recovery} />
+        {!busy && refusal !== null && (
+          <ErrorState message={refusal.message} recovery={refusal.recovery} />
         )}
         {!busy &&
-          outcome !== null &&
-          outcome.ok &&
-          outcome.view.kind === 'scoreboard' && <ImportedScoreboard view={outcome.view} />}
+          accepted !== null &&
+          accepted.view.kind === 'scoreboard' && <ImportedScoreboard view={accepted.view} />}
         {!busy &&
-          outcome !== null &&
-          outcome.ok &&
-          outcome.view.kind === 'baseline' && <ImportedBaseline view={outcome.view} />}
+          accepted !== null &&
+          accepted.view.kind === 'baseline' && <ImportedBaseline view={accepted.view} />}
       </div>
     </ZoneSection>
   );

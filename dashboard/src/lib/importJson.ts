@@ -50,14 +50,26 @@ export async function importPickedJson(file: File): Promise<ImportOutcome> {
       recovery: recoveryFor('TOO_LARGE'),
     };
   }
-  let text: string;
+  let buf: ArrayBuffer;
   try {
-    text = await file.text();
+    buf = await file.arrayBuffer();
   } catch {
     return {
       ok: false,
       message: 'Refused: the file could not be read.',
       recovery: 'Pick the file again; if it persists, choose another exported file.',
+    };
+  }
+  let text: string;
+  try {
+    // Fatal UTF-8 decoding: malformed bytes are refused, never silently
+    // replaced with U+FFFD (which could mask a tampered payload).
+    text = new TextDecoder('utf-8', { fatal: true }).decode(buf);
+  } catch {
+    return {
+      ok: false,
+      message: 'Refused: the file is not valid UTF-8.',
+      recovery: 'Re-export the evidence file as UTF-8 JSON, then pick it again.',
     };
   }
   try {

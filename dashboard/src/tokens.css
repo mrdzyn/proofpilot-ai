@@ -40,6 +40,16 @@ body {
   word-break: break-all;
 }
 
+/*
+ * Long unbroken owner-imported strings must wrap instead of forcing
+ * horizontal overflow on narrow viewports. `anywhere` (unlike `break-word`)
+ * also shrinks the column's min-content size, so auto-layout tables stay
+ * within their container. Normal text still wraps at spaces.
+ */
+table td {
+  overflow-wrap: anywhere;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

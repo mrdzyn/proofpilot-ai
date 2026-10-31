@@ -7,21 +7,35 @@ import { EmptyState, ErrorState, LoadingState } from '../components/states.tsx';
 const MAX_MP4_BYTES = 25 * 1024 * 1024;
 const MAX_DURATION_S = 30;
 
-type ProbeState =
-  | { kind: 'idle' }
-  | { kind: 'loading'; fileName: string; fileBytes: number }
-  | { kind: 'error'; message: string; recovery: string }
-  | {
-      kind: 'ready';
-      fileName: string;
-      fileBytes: number;
-      durationS: number;
-      width: number;
-      height: number;
-      codecHint: string;
-      sha256: string;
-      lastFrameDecodable: boolean;
-    };
+interface Selection {
+  gen: number;
+  fileName: string;
+  fileBytes: number;
+  url: string;
+}
+
+interface Meta {
+  gen: number;
+  durationS: number;
+  width: number;
+  height: number;
+  codecHint: string;
+  lastFrameDecodable: boolean;
+}
+
+interface Digest {
+  gen: number;
+  sha256: string;
+}
+
+interface Refusal {
+  gen: number;
+  message: string;
+  recovery: string;
+}
+
+const REFUSAL_RECOVERY =
+  'Pick an MP4 (H.264) recording longer than 0 s, of 30 s or less, with real video dimensions; nothing was uploaded.';
 
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
@@ -37,80 +51,138 @@ async function sha256Hex(buf: ArrayBuffer): Promise<string> {
 }
 
 export function RecordingZone() {
-  const [url, setUrl] = useState<string | null>(null);
-  const [probe, setProbe] = useState<ProbeState>({ kind: 'idle' });
+  const [sel, setSel] = useState<Selection | null>(null);
+  const [meta, setMeta] = useState<Meta | null>(null);
+  const [digest, setDigest] = useState<Digest | null>(null);
+  const [refusal, setRefusal] = useState<Refusal | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  // Immutable selection identity: every async completion is attributed only
+  // to the pick it belongs to; a newer pick invalidates older work.
+  const genRef = useRef(0);
 
   useEffect(() => {
+    const current = sel;
     return () => {
-      if (url) URL.revokeObjectURL(url);
+      if (current) URL.revokeObjectURL(current.url);
     };
-  }, [url]);
+  }, [sel]);
+
+  function revokeSelection(): void {
+    setSel((prev) => {
+      if (prev) URL.revokeObjectURL(prev.url);
+      return null;
+    });
+  }
 
   async function onPick(file: File | undefined): Promise<void> {
     if (!file) return;
-    if (url) URL.revokeObjectURL(url);
     const looksMp4 =
       file.type === 'video/mp4' || file.name.toLowerCase().endsWith('.mp4');
     if (!looksMp4) {
-      setUrl(null);
-      setProbe({
-        kind: 'error',
+      revokeSelection();
+      setMeta(null);
+      setDigest(null);
+      setRefusal({
+        gen: -1,
         message: 'Refused: not an MP4 file.',
         recovery: 'Pick an MP4 (H.264) recording of 30 s or less.',
       });
       return;
     }
     if (file.size > MAX_MP4_BYTES) {
-      setUrl(null);
-      setProbe({
-        kind: 'error',
+      revokeSelection();
+      setMeta(null);
+      setDigest(null);
+      setRefusal({
+        gen: -1,
         message: `Refused: file is ${formatBytes(file.size)} (limit 25 MB).`,
         recovery: 'Pick a shorter or smaller recording; nothing was uploaded.',
       });
       return;
     }
-    const nextUrl = URL.createObjectURL(file);
-    setUrl(nextUrl);
-    setProbe({ kind: 'loading', fileName: file.name, fileBytes: file.size });
+    const gen = genRef.current + 1;
+    genRef.current = gen;
+    revokeSelection();
+    const url = URL.createObjectURL(file);
+    setSel({ gen, fileName: file.name, fileBytes: file.size, url });
+    setMeta(null);
+    setDigest(null);
+    setRefusal(null);
     try {
       const buf = await file.arrayBuffer();
-      const sha = await sha256Hex(buf);
-      // Stash the hash on the element for the metadata handler below.
-      if (videoRef.current) videoRef.current.dataset.sha256 = sha;
+      const sha256 = await sha256Hex(buf);
+      // Attribute the digest only to the selection that produced it.
+      if (genRef.current === gen) setDigest({ gen, sha256 });
     } catch {
-      setProbe({
-        kind: 'error',
-        message: 'Refused: the file could not be read.',
-        recovery: 'Pick the file again.',
-      });
+      if (genRef.current === gen) {
+        revokeSelection();
+        setMeta(null);
+        setDigest(null);
+        setRefusal({
+          gen,
+          message: 'Refused: the file could not be read.',
+          recovery: 'Pick the file again.',
+        });
+      }
     }
+  }
+
+  function metadataRefusal(
+    gen: number,
+    durationS: number,
+    width: number,
+    height: number,
+  ): Refusal | null {
+    if (!Number.isFinite(durationS) || durationS <= 0) {
+      return {
+        gen,
+        message: 'Refused: the file reports no usable duration.',
+        recovery: REFUSAL_RECOVERY,
+      };
+    }
+    if (durationS > MAX_DURATION_S) {
+      return {
+        gen,
+        message: `Refused: duration ${durationS.toFixed(2)} s exceeds the 30 s playback limit.`,
+        recovery: REFUSAL_RECOVERY,
+      };
+    }
+    if (width <= 0 || height <= 0) {
+      return {
+        gen,
+        message: 'Refused: the file reports no video dimensions.',
+        recovery: REFUSAL_RECOVERY,
+      };
+    }
+    return null;
   }
 
   function onMetadata(): void {
     const video = videoRef.current;
-    if (!video) return;
-    const sha = video.dataset.sha256 ?? 'computing…';
+    if (!video || !sel || sel.gen !== genRef.current) return;
+    const gen = sel.gen;
+    const failed = metadataRefusal(gen, video.duration, video.videoWidth, video.videoHeight);
+    if (failed) {
+      revokeSelection();
+      setMeta(null);
+      setDigest(null);
+      setRefusal(failed);
+      return;
+    }
     const durationS = video.duration;
     const width = video.videoWidth;
     const height = video.videoHeight;
     const codecHint = video.canPlayType('video/mp4; codecs="avc1.42E01E"');
-    setProbe((prev) => {
-      if (prev.kind !== 'loading') return prev;
-      return {
-        kind: 'ready',
-        fileName: prev.fileName,
-        fileBytes: prev.fileBytes,
-        durationS,
-        width,
-        height,
-        codecHint: codecHint === '' ? 'no hint' : codecHint,
-        sha256: sha,
-        lastFrameDecodable: false,
-      };
+    setMeta({
+      gen,
+      durationS,
+      width,
+      height,
+      codecHint: codecHint === '' ? 'no hint' : codecHint,
+      lastFrameDecodable: false,
     });
     // Best-effort last-frame decode check: seek near the end.
-    if (Number.isFinite(durationS) && durationS > 0.2) {
+    if (durationS > 0.2) {
       try {
         video.currentTime = Math.max(0, durationS - 0.05);
       } catch {
@@ -120,31 +192,33 @@ export function RecordingZone() {
   }
 
   function onSeeked(): void {
-    setProbe((prev) =>
-      prev.kind === 'ready' ? { ...prev, lastFrameDecodable: true } : prev,
-    );
+    setMeta((prev) => {
+      if (!prev || !sel || prev.gen !== sel.gen) return prev;
+      return { ...prev, lastFrameDecodable: true };
+    });
   }
 
   function onVideoError(): void {
-    setProbe((prev) =>
-      prev.kind === 'loading' || prev.kind === 'ready'
-        ? {
-            kind: 'error',
-            message: 'The selected file could not be played.',
-            recovery: 'Pick a valid H.264 MP4 recording; this one appears corrupt or unsupported.',
-          }
-        : prev,
-    );
+    if (!sel) return;
+    const gen = sel.gen;
+    revokeSelection();
+    setMeta(null);
+    setDigest(null);
+    setRefusal({
+      gen,
+      message: 'The selected file could not be played.',
+      recovery:
+        'Pick a valid H.264 MP4 recording; this one appears corrupt or unsupported.',
+    });
   }
 
-  const suitable =
-    probe.kind === 'ready' &&
-    Number.isFinite(probe.durationS) &&
-    probe.durationS > 0 &&
-    probe.durationS <= MAX_DURATION_S &&
-    probe.width > 0 &&
-    probe.height > 0 &&
-    probe.lastFrameDecodable;
+  const ready =
+    sel !== null &&
+    meta !== null &&
+    digest !== null &&
+    meta.gen === sel.gen &&
+    digest.gen === sel.gen;
+  const suitable = ready && meta !== null && meta.lastFrameDecodable;
 
   return (
     <ZoneSection
@@ -158,11 +232,11 @@ export function RecordingZone() {
       }
     >
       <div>
-        {url ? (
+        {sel ? (
           <video
-            key={url}
+            key={sel.url}
             ref={videoRef}
-            src={url}
+            src={sel.url}
             controls
             playsInline
             preload="metadata"
@@ -201,32 +275,26 @@ export function RecordingZone() {
             This file never leaves your machine.
           </p>
         </div>
-        {probe.kind === 'idle' && (
+        {!sel && !refusal && (
           <EmptyState>No file chosen yet; limits are listed above.</EmptyState>
         )}
-        {probe.kind === 'loading' && <LoadingState what="clip metadata" />}
-        {probe.kind === 'error' && (
-          <ErrorState message={probe.message} recovery={probe.recovery} />
+        {sel && !ready && !refusal && <LoadingState what="clip metadata" />}
+        {refusal && (!sel || refusal.gen === sel.gen || refusal.gen === -1) && (
+          <ErrorState message={refusal.message} recovery={refusal.recovery} />
         )}
-        {probe.kind === 'ready' && (
+        {ready && sel && meta && digest && (
           <EvidenceTable caption="Selected file — playback suitability only, not certified intake">
             <Row head="File">
-              {probe.fileName} · {formatBytes(probe.fileBytes)}
+              {sel.fileName} · {formatBytes(sel.fileBytes)}
             </Row>
             <Row head="SHA-256 (local)">
-              <span className="mono">{probe.sha256}</span>
+              <span className="mono">{digest.sha256}</span>
             </Row>
-            <Row head="Duration">
-              {Number.isFinite(probe.durationS)
-                ? `${probe.durationS.toFixed(2)} s`
-                : 'unknown'}
-            </Row>
-            <Row head="Dimensions">
-              {probe.width > 0 ? `${probe.width}×${probe.height}` : 'unknown'}
-            </Row>
-            <Row head="Codec hint">{probe.codecHint} (hint only, not proof)</Row>
+            <Row head="Duration">{`${meta.durationS.toFixed(2)} s`}</Row>
+            <Row head="Dimensions">{`${meta.width}×${meta.height}`}</Row>
+            <Row head="Codec hint">{meta.codecHint} (hint only, not proof)</Row>
             <Row head="Last frame">
-              {probe.lastFrameDecodable ? 'decoded (best effort)' : 'not confirmed'}
+              {meta.lastFrameDecodable ? 'decoded (best effort)' : 'not confirmed'}
             </Row>
             <Row head="Suitability">
               {suitable ? (
