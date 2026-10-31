@@ -1508,4 +1508,14 @@ STOP before implementation or any live provider call.
 - **Test objective:** L-CFG-1 refusal matrix plus TypeScript, lint and required GitHub CI. Do not claim executed checks until actual logs are available.
 - **Next action:** independent audit after successful required evidence; owner merge decision separately. Later I2/I3 must honor dashboard-branch sequencing; no live request before D1–D7, D9 and per-run approval.
 
+## Handoff: UI-C3-02-I2-C1
+
+- **Task:** `tasks/UI-C3-02-I2-LOCAL-SECURITY.md` (offline mock-only implementation).
+- **Branch:** `feat/ui-c3-02-i2-local-security`, stacked on unmerged `feat/ui-c3-02-i1-offline-config@3593527` (PR #29).
+- **Files:** pure `packages/live-analysis/src/request-guard.ts`, `local-session.ts`, `mock-permits.ts`, focused unit/security tests, task contract, STATUS and this handoff.
+- **No service activation:** no HTTP listener, credential reads, Baseten calls, spend, approval record, persistent quota, browser Zone L, real proposal execution or deployment.
+- **Security objective:** Host/Origin/fetch-metadata request matrix, protected pre-session pairing, memory-only session expiry, mock single-use hash-bound permit consumption, D9 global model refusal maintained.
+- **Validation to collect:** focused unit/security tests, typecheck/lint, git diff check and exact-head hosted Common/Stack CI. Do not claim unexecuted checks.
+- **Next:** STOP at Draft PR for independent audit; merge decisions on I1 and I2 remain separate. UI-C3-02-I3 must be stacked on reviewed dashboard PR #27, not silently added here.
+
 <!-- HANDOFF_ENTRIES_END -->
