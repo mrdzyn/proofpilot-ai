@@ -87,18 +87,25 @@ node scripts/c3-b2b-verify-authenticated.ts \
 
 Integration evidence (`tests/unit/artifact-auth-pipeline.test.ts`): a composition test
 runs load → signature verification → E1 registration → cross-phase rebind to success on
-one synthetic flow. The exact-command tests run the real
-`scripts/c3-b2b-verify-authenticated.ts` against a synthetic fixture with a temporary
-in-test trust-roots overlay (committed roots restored byte-for-byte afterwards): a valid
-binding advances past authentication into a provenance refusal (exit 2, non-AUTH),
-while tampered bytes refuse at the auth gate (manifest-binding text, no provenance
-stage reached). The temporary overlay never touches the committed roots, which stay
-empty until a reviewed enrollment.
+one synthetic flow. The exact-command tests run copies of the real reviewed program
+files (`packages/`, `package.json`, `scripts/c3-b2b-verify-authenticated.ts`) from a
+disposable synthetic checkout outside the working repository, with the exact five-flag
+contract, no key/path/mode flags and no environment input: a separate test trust-root
+file at the checkout's normal relative path holds a fresh synthetic key, and unique
+per-test run ids mean no fixed shared evidence directory. A valid binding advances
+past authentication into a provenance refusal (exit 2, non-AUTH), while tampered
+bytes refuse at the auth gate (manifest-binding text, no provenance stage reached).
+Sequential, concurrent and SIGKILL-interrupted runs are covered, and production
+`config/artifact-trust-roots.json` plus prior production evidence are snapshotted
+read-only and asserted unchanged: the harness never writes to or deletes from the
+real repository. The committed roots stay empty until a reviewed enrollment.
 
-A full authenticated synthetic end-to-end with a VERIFIED verdict is **not** runnable by
-design: provenance requires certified baseline evidence no synthetic fixture carries,
-and the three replays require the browser stage. The per-phase composition is the same
-pipeline the existing E2 tests exercise with hand-authored controls (green in hosted CI).
+These tests establish command-to-provenance integration only. A full authenticated
+synthetic end-to-end with a VERIFIED verdict is **not** runnable by design and is
+**not** claimed: provenance requires certified baseline evidence no synthetic fixture
+carries, and the three replays require the browser stage. The per-phase composition
+is the same pipeline the existing E2 tests exercise with hand-authored controls
+(green in hosted CI).
 
 ## 5. Expected refusal codes and exit statuses
 
@@ -140,9 +147,11 @@ pipeline the existing E2 tests exercise with hand-authored controls (green in ho
    21. MINOR-3 Unicode-escaped duplicates and escaped proto keys refuse with decoded
    names; quote-colon string values are not keys; nested keys are refused as shape.
 
-`tests/unit/artifact-auth-pipeline.test.ts` (4 tests): authenticated composition to
+`tests/unit/artifact-auth-pipeline.test.ts` (5 tests): authenticated composition to
 E1 registration and rebind; exact-command positive (past auth into provenance) and
-substitution (auth-gate refusal) wiring; harness restore proof.
+substitution (auth-gate refusal) wiring from isolated disposable checkouts; sequential /
+concurrent / SIGKILL-interrupted isolation proof (production trust roots and prior
+evidence asserted unchanged).
 
 `tests/security/provenance-boundary.test.ts` proves the new module adds no builtin, no
 filesystem member and no Zone E edge. Full `pnpm test:unit` + `pnpm test:security` +
