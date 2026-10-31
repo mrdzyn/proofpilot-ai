@@ -1516,4 +1516,47 @@ GPT-6: review the stacked Draft PR; owner: merge decisions. Run `pnpm dashboard:
 ### Next action
 GPT-6: review of PR #27; owner: merge decisions. Do not merge, publish, or deploy on the agent's behalf.
 
+## Handoff: UI-C3-01B-C3
+
+- **Task / phase:** UI-C3-01B GPT-6 audit remediation (5 findings) on stacked Draft PR #27
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** GPT-6 re-audit, then project owner (merge decisions for PR #26 then PR #27)
+- **Branch:** `feat/ui-c3-01b-dashboard`
+- **Implementation head:** `99a1ba0750b7602b418a39a1505c79deb790c61a` (code+tests commit; STATUS + this handoff follow in the docs commit, the pushed PR head)
+- **PR:** #27 (Draft, stacked on `design/ui-c3-01a-dashboard`)
+- **State:** REMEDIATION COMPLETE. Do not merge, publish, deploy, contact Meta/Baseten/Modal, access the stored proposal, or change verification/security gates on the agent's behalf.
+
+### Finding → fix (all on PR #27, design/playback/provenance/boundaries preserved)
+
+- **MAJOR-1 (failed import blanked the view):** `VerificationZone` now keeps `accepted` (last good import, still rendered with UNVERIFIED IMPORT banner) separate from `refusal` (error banner only); success replaces, failure preserves.
+- **MAJOR-2 (digest/metadata races):** `RecordingZone` rebuilt around selection generations — digest attributed only to its own pick (stale completions dropped), no placeholder SHA ever rendered (table appears only when metadata + digest for the current pick both hold), typed refusals for unknown/non-positive duration, >30 s duration, and zero dimensions; the offending pick is revoked, never shown as suitable.
+- **MINOR-3 (silent UTF-8 replacement):** `importPickedJson` decodes with `TextDecoder('utf-8', { fatal: true })`; malformed bytes are refused as "not valid UTF-8", never replaced with U+FFFD.
+- **MINOR-4 (overlong/invalid metadata):** duration >30 s refused with the exact over-limit message (browser-proven with a 35 s clip); suitability still requires a decodable last frame on top of validated metadata.
+- **MINOR-5 (omitted coverage):** new `tests/unit/dashboard-absent.test.ts` (T-ABSENT-1: no Run/Verify/Approve/Deploy label, provider endpoint, `.proofpilot` literal, or credential in shell source); T-NET-1 walkthrough under a loopback-only trap in both Vite dev and the built preview server on runtime-allocated free ports; A11Y extended to 320 px width and 640 px CSS width (≈200% zoom at 1280) plus a 400-char unbroken-cell wrap check.
+
+### Regression tests (new)
+
+- T-IMPORT-SEQUENCE: valid import → malformed import; prior accepted view intact beside the refusal.
+- T-IMPORT-UTF8: valid import → malformed-UTF-8 bytes; "not valid UTF-8" refusal, prior view intact.
+- T-VIDEO-RACE: first digest call delayed 1.5 s, A picked then immediately B; final shows B's name + digest, A's stale digest dropped, no placeholder text.
+- T-VIDEO-LONG: 35 s MP4 refused with the typed duration error; never suitable.
+- `table td { overflow-wrap: anywhere }` added so long imported strings wrap instead of overflowing narrow viewports.
+
+### Validation
+
+- `git diff --check` — PASS; `pnpm lint` — 231 files, 0 problems; root + dashboard `tsc --noEmit` — PASS.
+- `tests/unit` dashboard files 12/12 (8 import + 3 truth + 1 absent); `pnpm test:security` 137/137. Full `pnpm test:unit` still blocked in this sandbox by the listening-socket ban (pre-existing on clean base); hosted CI owns the full-suite verdict.
+- Browser QA `pnpm dashboard:test:browser` (unsandboxed, `PLAYWRIGHT_BROWSERS_PATH=/tmp/ms-playwright`) — 11/11 PASS: T-VIDEO, T-VIDEO-REFUSAL, T-VIDEO-RACE, T-VIDEO-LONG, T-IMPORT-REAL, T-IMPORT-FORGED, T-IMPORT-SEQUENCE, T-IMPORT-UTF8, T-XSS+T-CSS (+400-char long-cell wrap at 390 px), T-A11Y (desktop 1280, zoom200 640, mobile 390, narrow320 320 — keyboard path, single h1, no h-overflow), T-NET (dev + preview walkthroughs, zero non-loopback requests, no prohibited control in DOM).
+- Screenshots (local only, refreshed): `/tmp/pp-dashboard-qa/desktop.png`, `mobile.png`, `zoom200.png`, `narrow320.png`.
+- Environment note: port 5173 on this machine is occupied by an unrelated "BossForge Live" Vite app — left untouched; T-NET allocates free ports at runtime and never probes fixed defaults.
+
+### Continuation notes
+
+- Owner decisions still open: merge PR #26 first (if at all), then PR #27; portal fields PENDING; no residual risks accepted.
+- Screenshot files and `/tmp/ms-playwright` browsers are environment-local, not deliverables; results recorded in the PR #27 comment thread.
+
+### Next action
+
+GPT-6: re-audit of PR #27; owner: merge decisions. Do not merge, publish, or deploy on the agent's behalf.
+
 <!-- HANDOFF_ENTRIES_END -->
