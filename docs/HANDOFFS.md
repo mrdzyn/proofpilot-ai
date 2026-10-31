@@ -1336,4 +1336,59 @@ enrollment, merge or residual-risk acceptance.
 Independent review of the proposal PR; owner decisions D1–D7. STOP before
 implementation or any live provider call.
 
+## Handoff: UI-C3-02-P2
+
+- **Task / phase:** UI-C3-02 Baseten-selected revision on docs-only Draft PR #28
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** GPT-6 re-audit, then project owner (decisions D1–D7 before any implementation)
+- **Branch:** `docs/ui-c3-02-live-analysis-mode` (based on `main@b841740`, independent of PRs #26/#27)
+- **PR:** #28 (Draft, against `main`)
+- **State:** PROPOSAL ONLY. No live call, credential read, implementation, merge, or deploy.
+
+### Revision (all four review findings addressed)
+
+- **MAJOR-1 (provider):** new live path reworked for Baseten Model APIs,
+  model `meta-models/muse-spark-open`, fixed endpoint
+  `https://inference.baseten.co/v1/chat/completions`, bearer
+  `BASETEN_API_KEY` companion-env-only. Server-side inline `video_url` data
+  URL from hash-verified ≤25 MB synthetic MP4 (inside the 100 MiB body cap;
+  provider caps: 2 videos, 200 MB media, 300 s, H.264, ≤96 sampled frames,
+  audio ignored — disclosed in UI). No public URL, Files API, or Meta
+  credential/egress anywhere in the new path. Historical Meta 1.3 runs vs new
+  Baseten runs distinguished in labels, records (`provider: baseten` vs
+  `provider: meta`), diagram, costs, quotas, and D1–D7.
+- **MAJOR-2 (loopback auth):** companion serves UI+API same-origin
+  (no CORS headers at all); strict Host/Origin checks (rebinding + null Origin
+  refused for live APIs); per-process ephemeral `X-Live-Session` header on
+  mutating calls (memory-only, void on restart with all permits); exact-path
+  allowlist; body ≤30 MB, idle 60 s / total 10 min, one in-flight request;
+  L-CSRF + L-LIMIT refusal batteries in the test plan.
+- **MINOR-3 (lifecycle):** browser→companion staged bytes always deleted;
+  single request with inline media (no remote file exists to delete);
+  provider-side retention is a D5 owner-confirm item; video bytes/base64 and
+  raw provider text never persisted locally.
+- **MINOR-4 (bookkeeping):** STATUS current phase/task/working-branch now
+  name this docs-only PR #28 (primary `main@b841740` = PR #24 merge; PRs
+  #26/#27 stated unmerged, not implied merged); Baseten moved from blanket
+  NOT-APPROVED to provider-selected-for-design with execution/spend/credential
+  pending.
+
+### Validation
+
+- `git diff --check` clean; `pnpm lint` green (docs-only change set).
+- No code, no tests, no provider surface: nothing executable to run; hosted CI
+  owns the PR gates.
+- Forbidden-scope check: no Meta/Baseten/Modal contact, no credential read,
+  no quota/activation/pin change, no stored-proposal access, no
+  verifier/oracle/grammar change, no merge/deploy; spent Meta quota and
+  hard-disable untouched.
+- Baseten claims verified Oct 31, 2026 against
+  `baseten.co/library/muse-spark-open` and
+  `docs.baseten.co/inference/model-apis/vision` (re-verify at authorization).
+
+### Next action
+
+GPT-6 re-audit of PR #28; owner decisions D1–D7. STOP before implementation or
+any live provider call.
+
 <!-- HANDOFF_ENTRIES_END -->
