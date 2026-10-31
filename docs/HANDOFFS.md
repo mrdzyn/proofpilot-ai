@@ -1450,7 +1450,7 @@ Do not merge, implement, or deploy on the agent's behalf.
 - **From:** Implementation agent (Muse Code, powered by Muse Spark)
 - **To:** GPT-6 review, then project owner (merge decisions for both dashboard PRs)
 - **Branch:** `feat/ui-c3-01b-dashboard` (from approved design HEAD `1655bbb`; PR #26 unmerged and unmodified)
-- **Implementation head:** `TBD-on-commit` (filled at commit time)
+- **Implementation head:** `271eabe28f8dd012e9423fbf8b6b369d79ad2b46`
 - **PR:** NEW stacked Draft PR targeting `design/ui-c3-01a-dashboard` (number filled at creation)
 - **State:** READY FOR REVIEW. Do not merge, publish, or deploy on the agent's behalf.
 
