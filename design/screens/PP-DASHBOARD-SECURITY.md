@@ -41,16 +41,22 @@ supply-chain of the chosen frontend stack (reviewed at the stack decision).
   each refusal battery case (unknown key, duplicate key, oversize, over-depth,
   non-UTF-8, wrong-typed value, bad MP4/duration/size/decodability) refused with
   the exact typed error and the zone's prior content unchanged.
-- **T-IMPORT-REAL:** the committed example
-  (`docs/examples/c3-b1-scoreboard.example.json`, `_example` present → "committed
-  example" tag) and a live-shaped fixture (same keys minus `_example` → "owner-
-  imported evidence" tag) both import; both render the file's verdicts without the
-  trusted chip upgrade path.
+- **T-IMPORT-REAL:** the actual committed scoreboard
+  (`docs/examples/c3-b1-scoreboard.example.json`) and a producer-shaped baseline
+  fixture (same top-level keys, `{relativePath, sha256, bytes}` artifacts, and
+  `WorktreeState` union as emitted by `scripts/f01-baseline.ts`) both pass
+  validation. Picked via the file picker, both render as `owner-imported
+  evidence` with the UNVERIFIED IMPORT banner — picking the committed example's
+  bytes does not reproduce the bundled "committed example" rendering.
 - **T-IMPORT-FAKE:** adversarial fake-but-schema-valid imports — a crafted
   `hand-authored-control` + `VERIFIED` row, a forged `certified: true` baseline,
   a duplicate of the historical PC-1 row under a different run id — each renders
   as quoted claim text under the `UNVERIFIED IMPORT — FILE-REPORTED VERDICT`
   banner; the trusted chip never appears and no provenance is upgraded.
+- **T-IMPORT-FORGED-EXAMPLE:** a picked JSON carrying `_example` (with and without
+  a fake `VERIFIED` row) still projects `sourceTag: "owner-imported evidence"`,
+  shows "(file claims to be an example)", and never receives the bundled
+  "committed example" rendering or the trusted chip.
 - **T-XSS-1:** injection battery (markup, event handlers, `javascript:` URLs, style
   directives, prototype keys) in every imported string renders as inert text; DOM
   contains no injected elements/attributes afterward.

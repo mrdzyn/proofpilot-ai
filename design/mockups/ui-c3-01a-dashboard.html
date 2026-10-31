@@ -193,7 +193,7 @@
       <div class="field">
         <label for="evjson">Owner-imported evidence (optional)</label>
         <input type="file" id="evjson" accept=".json,application/json" aria-describedby="evhint">
-        <p class="hint" id="evhint">Scoreboard or baseline JSON. Checked against the import allowlist first; unknown keys or model-claimed VERIFIED rows are refused with a typed error. Imported rows keep their file verdict and are labelled “imported evidence”.</p>
+        <p class="hint" id="evhint">Scoreboard or baseline JSON. Checked against the import allowlist first; unknown keys and oversize/deep/malformed files are refused with a typed error. No import can earn a trusted verdict: file-claimed verdicts (including VERIFIED) are shown only as quoted claims under an UNVERIFIED IMPORT banner. Imported rows are labelled “imported evidence”.</p>
       </div>
       <p class="note">Historical example shown: run <span class="mono">c3-b1-20261028T084508Z-e27b62</span> at <span class="mono">bb64b73</span>. Owner QA evidence: F01 REPRODUCED, PC-1 VERIFIED 3/3, DID-1 PASS, zero provider calls (against <span class="mono">main@f305da3</span>).</p>
       <table>

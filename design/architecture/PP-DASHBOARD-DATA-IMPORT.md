@@ -36,20 +36,25 @@ text are refused before any render. Rendering reads only the projected view-mode
 (§4), never the raw file.
 
 **Scoreboard import** (live run files and the committed example share this shape;
-the example additionally carries `_example`, which marks a documentation-annotated
-copy and is otherwise ignored):
+the example additionally carries `_example`, an inert documentation string):
 - Top level: `schemaVersion` (number, must be `1`), `label` (string),
   `complete` (boolean), `approvedSha` (40-hex string), `createdAt` (string),
   `modelOrProviderCalls` (number), `modalCalls` (number), `baseline` (object),
   `candidates` (array), `nc5` (object), `notes` (array of strings).
-  Optional: `_example` (string; presence tags the file as the committed example).
+  Optional: `_example` (string, accepted and ignored). Its presence on a picked
+  file never confers "committed example" status: only the dashboard's bundled
+  historical copy — a known source transcribed at design time, never a picked
+  file — renders with the "committed example" tag. Every picked file projects
+  `sourceTag: "owner-imported evidence"`; when `_example` is present the UI may
+  append "(file claims to be an example)".
   Any other top-level key refuses the file.
 - `baseline`: exactly `reproduced` (boolean), `reasons` (array of strings),
   `replay` (object). `replay`: exactly `n`, `outcome`, `failureCode`,
   `failureMessage`, `oracleExitCode`, `evidenceDir`, `recordSha256`,
   `candidateCssSha256`, `nonce`, `mobile`, `desktop`, `servedCssSha256` (array of
-  strings), `evidenceFinalized`, `evidenceProblems` (array). `mobile`/`desktop` are
-  objects carrying at least `status`, `hitTestTarget`, `cartCountAfter`.
+  strings), `evidenceFinalized`, `evidenceProblems` (array). `mobile`/`desktop`
+  are exactly `{status, hitTestTarget, cartCountAfter}` (the reduced replay shape
+  written by `candidate-stage.ts`, not the full oracle observation).
 - `candidates[]`: exactly `id`, `description`, `provenance`, `candidateId`,
   `adjustments`, `renderedCss`, `fault`, `replaysRequired`, `replaysAttempted`,
   `replaysPassed`, `status`, `reason`, `expected`, `expectationMet`,
@@ -61,17 +66,23 @@ copy and is otherwise ignored):
   quoted claim text under the unverified-import banner, never the trusted chip —
   regardless of the provenance string the file asserts.
 
-**Baseline-summary import** (as emitted by `scripts/f01-baseline.ts`):
+**Baseline-summary import** (as emitted by `scripts/f01-baseline.ts`, lines 79–90
+emit `artifacts[]`, lines 119–131 emit the summary):
 - Top level: exactly `runId`, `oracleExitCode` (number), `classification` (object),
   `gitHead`, `fixtureTree`, `worktreeDirty` (boolean), `worktree` (object),
   `certified` (boolean), `certificationReasons` (array of strings),
-  `artifacts` (array of `{path, sha256}`-shaped objects).
+  `artifacts` (array of exactly `{relativePath, sha256, bytes}`-shaped objects).
 - `classification`: exactly `verdict` ∈ {`REPRODUCED`, `NOT_REPRODUCED`,
   `INCONCLUSIVE`}, `regression` ∈ {`PASS`, `FAIL`, `NOT_RUN`}, `interceptedBy`
   (string|null), `reasons` (array of strings).
+- `worktree`: the discriminated `WorktreeState` union — exactly one of
+  `{kind: 'clean'}`, `{kind: 'dirty', paths}`, `{kind: 'unknown', reason}`.
 
 **Bounds** (both files): file ≤ 256 KiB, strings ≤ 4 KiB, arrays ≤ 64 items
-(`replays` ≤ 8), depth ≤ 4, no duplicate JSON keys, UTF-8 only.
+(`replays` ≤ 8). Container depth uses one explicit convention — root object counts
+as depth 1, each nested array/object adds 1. The committed example reaches depth 6
+(scoreboard → `candidates` → candidate → `replays` → replay → `mobile` → scalar);
+refuse depth > 8. No duplicate JSON keys, UTF-8 only.
 
 **MP4 import** (playback suitability only — not certified intake, see §5):
 file.type/extension MP4, size ≤ 25 MiB, container duration ≤ 30 s once metadata
@@ -99,9 +110,12 @@ BaselineView    = { runId, verdict, regression, interceptedBy, certified,
 
 An imported `VERIFIED` row projects to `{ status: "VERIFIED (file-reported,
 unverified import)", trustedChip: false }` — the chip flag is not representable
-as true for any import. The committed example (detected via `_example`) projects
-with `sourceTag: "committed example"`; live-shaped files project with
-`sourceTag: "owner-imported evidence"`.
+as true for any import. Every picked file projects `sourceTag:
+"owner-imported evidence"`, whether or not it carries `_example`; a present
+`_example` appends the note "(file claims to be an example)". The
+`sourceTag: "committed example"` value is reserved for the dashboard's bundled
+historical copy — a known build-time source, never a picked file — so no picked
+file can impersonate it.
 
 ## 5. Playback suitability is not certified intake
 

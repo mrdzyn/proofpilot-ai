@@ -31,7 +31,9 @@ One local page the owner opens in a browser during (or before) the hackathon dem
 The reader is a judge or reviewer who needs, in under three minutes, to see the F01
 defect, what Muse Spark said about it, what the model proposed, and what the trusted
 oracle actually observed — with every claim labelled by provenance. No navigation
-beyond in-page zones, no forms that transmit anything, no network access at all.
+beyond in-page zones, no forms that transmit anything, and no non-loopback network
+traffic in the served-app case (loopback document/asset loads only, per the
+import architecture §7).
 
 ## 2. Design language
 
