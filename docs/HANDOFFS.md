@@ -1299,4 +1299,38 @@ enrollment, merge or residual-risk acceptance.
 GPT-6 exact-head re-audit of the new HEAD; owner merge decision. No real execution,
 enrollment, merge or residual-risk acceptance.
 
+## Handoff: META-DEMO-01-C1
+
+- **Task / phase:** META-DEMO-01 hackathon demo + submission readiness (user task specification in conversation; documentation-only, no task file)
+- **From:** Implementation agent (Muse Code)
+- **To:** GPT-6 independent exact-head review, then project owner
+- **Branch:** `docs/meta-demo-01-recording`
+- **Implementation head:** `5de97e8043a7c444a98c5f3022ad593bf6d7c244`
+- **PR:** #25 (Draft)
+- **State:** READY FOR REVIEW
+
+### Completed
+- `docs/META-DEMO-RECORDING.md` (new): 8-scene 2–3 min storyboard with timestamps, full narration, exact screen/terminal actions, captions, expected results + evidence paths, safe fallback clips, macOS recording instructions, binding caption/honesty rules.
+- `docs/META-DEMO-CHECKLIST.md` (new): read-only prep checklist (clean checkout at `b841740`, F01 repro, recorded video-analysis result, proposal summary from reviewed docs only, hand-authored PC-1 VERIFIED 3/3, negatives + refusal drill, redaction/secret checks).
+- `docs/META-DEMO-QA-CHECKLIST.md` (new): 13-claim evidence map, negative checks (no secrets/paths, no simulated-as-actual, correct REPRODUCED/VERIFIED/UNTRUSTED captions, no provider calls or real-artifact execution), caption audit, sign-off block.
+- `docs/META-HACKATHON-SUBMISSION.md`: anchored to `main@b841740` (PR #24); PRs #22/#23/#24 merged; QA-01 + SEC-P2-01/02 recorded; actual Muse Spark usage; E2 authenticated-verification capability described as synthetic-only with real artifact hard-refused; real proposal stays UNTRUSTED — NOT VERIFIED; hand-authored vs model provenance explicit; title, tagline, architecture summary, Meta usage, judging highlights; real links where known, placeholders otherwise; portal video rules stay PENDING.
+- `README.md`: minimal stale-claim corrections (through PR #24; E1/E2 + SEC-P2-02 merged synthetic-only; real execution not approved; Baseten config-only).
+- `docs/STATUS.md`: project block, authorization, gates and next action moved to META-DEMO-01; SEC-P2-02 row MERGED (PR #24).
+- UI design gate: Not applicable (no material user-facing UI; documentation-only).
+
+### Validation
+- `git diff --check` — PASS; `pnpm lint` — 196 files, 0 problems.
+- Internal-link + secret-shape scan over new/edited docs — PASS (all relative links resolve; no key-shaped material).
+- Identifier cross-check (mobile/desktop clip SHAs, run-002 request ids, input SHA, `b841740`) against `docs/STATUS.md` / `docs/LIVE-C3-01-EXECUTION-REPORT.md` — PASS after fixing three transcription slips (`05ee`/`e565e8bf…`/`e276…`); stale strings absent.
+- Hosted CI: see PR #25 checks (required gates must be green before merge).
+- No provider call, no credential read, no stored-artifact access, no execution, no crypto/gate/oracle change (scope restriction held).
+
+### Continuation notes
+- Initial task premise (SHA `b841740a…`, PR #24 merged) did not match the stale local clone (`origin/main` was `07ae865`); resolved by `git fetch` — remote confirmed `b841740` = PR #24 squash merge. No fabrication: PR #24 is recorded as merged only after verifying the merge commit.
+- Pre-existing STATUS staleness (submission pack "as of `main@564c56f`") corrected in this slice.
+- Portal video duration/file rules, repository access/licence, team/contact fields: still PENDING (owner must verify in the signed-in portal).
+
+### Next action
+GPT-6: exact-head review of PR #25; owner: merge decision, then record the demo video and verify the portal fields. Do not merge or submit on the agent's behalf.
+
 <!-- HANDOFF_ENTRIES_END -->
