@@ -10,7 +10,7 @@
 - **Primary branch:** protected `main` at `b841740a95ebd39cabb47fa73ea1329803f79d88` (PR #24 squash merge)
 - **Working branch:** `design/ui-c3-01a-dashboard` (UI-C3-01A Phase A Draft PR, separate from META-DEMO-01 PR #25; the branch head is authoritative)
 - **Active task:** UI-C3-01A local demo dashboard, Phase A design (task contract in `tasks/UI-C3-01A-LOCAL-DEMO-DASHBOARD.md`; no shell, wiring, dependencies, or deployment)
-- **Active handoff:** UI-C3-01A-C1
+- **Active handoff:** UI-C3-01A-C2
 - **Authorization:** Both single-use C2B live smokes are **spent**. **APPROVED and EXECUTED:** LIVE-C3-01 (owner decision October 29, 2026: one Meta `muse-spark-1.3` attempt in total); the attempt was made and the lifetime quota is **spent**; a further provider call is **NOT AUTHORIZED** (it needs a new owner decision, a new activation commit and a new pin-only commit). **APPROVED:** SEC-C3-01 (F01-only closed-grammar CSS, hand-authored controls only). **APPROVED (implementation only):** C3-B2B P1/P2/E1/E2 (all merged), QA-01 + SEC-P2-01 (merged as PR #23), and SEC-P2-02 (signed authentication, isolated-verification runbook, adversarial synthetic tests, merged as PR #24) with synthetic fixtures and offline automated tests in bounded Draft PRs. **APPROVED (design only):** UI-C3-01A Phase A (task contract, dashboard contract + screen map, static mockup, tokens, component inventory, import/state/security/component/demo docs — no shell, wiring, dependencies, or deployment). **NOT APPROVED:** accessing, loading, staging or executing the real stored proposal (`c3-live-meta-001`) in any form — a separate pending owner decision from the implementation approval, plus the SEC-P2-01 residual owner decision before any real execution; UI-C3-01A shell/wiring (any dashboard implementation), UI-C3-01 (report UI), HOST-C3-01 (Modal or any hosted backend), Baseten, additional attempts, automated retries. A credit balance is not permission to spend. No agent reads credentials or approval records, executes model-generated code, deploys or merges.
 
 ## Completed milestones
@@ -87,7 +87,7 @@
 | C3-B2B future real verification | DISABLED procedure in `docs/C3B2B-REAL-PROPOSAL-PROCEDURE.md` (authorization, exact-param placeholders, 3-replay run, evidence verification, stop/rollback); hard-disable intact, no access/loading/staging/execution |
 | Hackathon submission pack (`docs/META-HACKATHON-SUBMISSION.md`) | MERGED (PR #18); portal fields, video, final links: PENDING; deadline Nov 4, 2026 9 PM ET = Nov 5, 10 AM PHT |
 | C3-C scoreboard report UI, C3-D report + replay + audit, C3-E demo, C3-F submission | NOT STARTED (UI-C3-01 shell not approved) |
-| UI-C3-01A local demo dashboard | Phase A DESIGN on a separate Draft PR (contract, screen map, static mockup, tokens, component inventory, import/state/security/component/demo docs); shell/wiring NOT approved pending human visual approval |
+| UI-C3-01A local demo dashboard | Phase A DESIGN on Draft PR #26 (contract, screen map, static mockup, tokens, component inventory, import/state/security/component/demo docs); remediation of 6 GPT-6 findings in progress on the same PR; shell/wiring NOT approved pending human visual approval |
 | Baseten compatibility (`docs/BASETEN-COMPATIBILITY-PLAN.md`) | PLAN ONLY; pinned id vs public docs discrepancy and a structured-output doubt recorded; NOT TESTED |
 | Modal sandbox (`docs/MODAL-FEASIBILITY-PROPOSAL.md`) | PROPOSAL ONLY; the C3 contract forbids hosted backends; HOST-C3-01 not requested; not a verified boundary |
 | Muse Wonder as patcher | UNVERIFIED and not a dependency |
@@ -261,7 +261,7 @@ wording and the P2 reader only, and does not re-run or alter that evidence.
 
 ## Next action
 
-1. Owner visual approval of the UI-C3-01A Phase A design (contract + screen map + mockup + tokens + import/state/security/component/demo docs) in a reviewable record, including the stack decision (React+Vite+Tailwind vs framework-free). No shell until the design gate is satisfied. This slice ends here.
+1. GPT-6 exact-head re-audit of remediated Draft PR #26, then owner visual approval of the UI-C3-01A Phase A design (contract + screen map + mockup + tokens + import/state/security/component/demo docs) in a reviewable record, including the stack confirmation (owner-preferred React+Vite+Tailwind). No shell until the design gate is satisfied. This slice ends here.
 2. Owner decisions still open: UI-C3-01A stack choice; SEC-P2-02 residual prerequisites (protected checkout, single-writer window, historical enrollment per runbook sections 3/7/10); whether to approve real execution of the stored proposal (requiring the separate execution approval, the residual decision, the enrollment and an independent security review) or to submit with the honest "proposal obtained, verification next" story; the demo recording and the portal fields (`docs/META-HACKATHON-SUBMISSION.md`); UI-C3-01A shell/wiring, UI-C3-01 and HOST-C3-01 stay NOT APPROVED.
 
 Submission deadline: Nov 4, 9:00 PM EST = **Nov 5, 10:00 AM PHT**; internal target is Nov 4 PHT.

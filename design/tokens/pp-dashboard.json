@@ -44,10 +44,12 @@
       "info": "#0E87AD"
     },
     "zone": {
-      "modelWash": "#FFFBEB",
-      "modelBorder": "#D9A441",
-      "evidenceWash": "#ECFDF5",
-      "evidenceBorder": "#0E9F6E"
+      "modelWash": "#F4F4F5",
+      "modelBorder": "#9AA1AB",
+      "modelRule": "#22C6F0",
+      "evidenceWash": "#FFFFFF",
+      "evidenceBorder": "#D8DCE1",
+      "evidenceRule": "#111111"
     }
   },
   "spacing": {

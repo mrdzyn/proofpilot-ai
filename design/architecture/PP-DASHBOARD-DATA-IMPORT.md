@@ -2,69 +2,135 @@
 
 ## 1. Provenance classes (the only three the dashboard knows)
 
-| Class | Meaning | Renders where | Can it render VERIFIED? |
+| Class | Meaning | Renders where | May it render the trusted VERIFIED chip? |
 |---|---|---|---|
-| `historical-record` | Values transcribed from reviewed repo docs at design time | All zones, pre-populated | Only zone 4, PC-1 row (hand-authored) |
-| `owner-imported` | Files the owner picks at demo time, passing the allowlist | Zones 1 (MP4) and 4 (JSON slot) | Only if the file itself carries a hand-authored `VERIFIED` row; the dashboard never upgrades a verdict |
-| `model-originated` | Any string that came from Muse Spark | Zones 2–3 only, as quoted text | Never, by construction |
+| `historical-record` | Values transcribed from reviewed repo docs at design time | All zones, pre-populated | Only the hand-authored PC-1 row, citing its source run |
+| `owner-imported` | Owner-picked files passing the allowlist (§§3–4) | Zones 1 (MP4) and 4 (JSON slot) | **Never.** An imported verdict renders as quoted claim text under an `UNVERIFIED IMPORT — FILE-REPORTED VERDICT` banner, with the trusted chip withheld even when the file asserts hand-authored provenance |
+| `model-originated` | Any string that came from Muse Spark | Zones 2–3, as quoted text | Never, by construction |
+
+Rationale: syntactic validation and string allowlists do not authenticate evidence
+and cannot prove three clean oracle replays. A user-crafted JSON file can assert any
+provenance or status string, so the dashboard treats every imported verdict as an
+unverified claim. Only a separately designed genuine verification path
+(hash/provenance/certified-replay verification against the evidence store — future
+work, not this dashboard) may upgrade an imported result. The historical
+source-anchored PC-1 row stays visually distinct from every import.
 
 ## 2. What the dashboard reads (and what it never touches)
 
-Reads: (a) its own bundled historical copy (transcribed at design time, cited to
-source docs); (b) owner-picked files via `<input type=file>` — video bytes for local
-playback and metadata only; JSON evidence for rendering only.
+Reads: (a) its bundled historical copy (transcribed at design time, cited to source
+docs); (b) owner-picked files via `<input type=file>` — video bytes for local
+playback and metadata only; JSON evidence for validation-then-view-model rendering.
 
 Never reads: `.proofpilot/` hidden paths (no automatic access, no directory
 scanning), credentials, approvals, reservations, raw provider responses, or the
 stored model artifact. There is no file-path input: the browser picker returns a
 `File` object, never a path, and the dashboard displays names/sizes/hashes, not paths.
 
-## 3. Import allowlist (enforced before any render)
+## 3. Import allowlist — actual emitted schemas (not simplified shapes)
 
-JSON import accepts only these shapes; anything else is refused with a typed error
-naming the first violation. Parents unknown to the allowlist fail the whole file.
+Validated against the real producer formats: `docs/examples/c3-b1-scoreboard.example.json`
+(committed example) and `scripts/f01-baseline.ts` (`baseline-summary.json` emit).
+Unknown keys, wrong types, oversize/deep/duplicate-key/non-UTF-8 input, and unsafe
+text are refused before any render. Rendering reads only the projected view-model
+(§4), never the raw file.
 
-**Scoreboard import** (subset of the committed example shape):
-- Top level: exactly `label`, `approvedSha`, `complete`, `modelOrProviderCalls`,
-  `modalCalls`, `baseline`, `candidates`. Unknown top-level key → refuse.
-- `label` must equal `HAND-AUTHORED CONTROLS ONLY — NO MODEL INPUT` (historical
-  files) or a documented owner-run label; any other label renders as
-  owner-imported, never as verified history.
-- Each candidate: exactly `id`, `description`, `provenance`, `status`,
-  `replaysPassed`, `replaysAttempted`. `provenance` must be one of
-  `hand-authored-control`, `fault-injected-control`.
-- `status` must be one of `VERIFIED`, `PATCH_FAILED`, `INCONCLUSIVE`,
-  `NOT_REPRODUCED`, `ORACLE_PASS`. A `model-hypothesis` provenance, or any
-  `VERIFIED` row whose provenance is not `hand-authored-control`, is refused — the
-  dashboard cannot display a model VERIFIED row because the allowlist has no shape
-  for one.
-- All values size-bounded (file ≤ 256 KiB, strings ≤ 4 KiB, arrays ≤ 64 items,
-  depth ≤ 4); duplicate JSON keys refused; non-UTF-8 refused.
+**Scoreboard import** (live run files and the committed example share this shape;
+the example additionally carries `_example`, which marks a documentation-annotated
+copy and is otherwise ignored):
+- Top level: `schemaVersion` (number, must be `1`), `label` (string),
+  `complete` (boolean), `approvedSha` (40-hex string), `createdAt` (string),
+  `modelOrProviderCalls` (number), `modalCalls` (number), `baseline` (object),
+  `candidates` (array), `nc5` (object), `notes` (array of strings).
+  Optional: `_example` (string; presence tags the file as the committed example).
+  Any other top-level key refuses the file.
+- `baseline`: exactly `reproduced` (boolean), `reasons` (array of strings),
+  `replay` (object). `replay`: exactly `n`, `outcome`, `failureCode`,
+  `failureMessage`, `oracleExitCode`, `evidenceDir`, `recordSha256`,
+  `candidateCssSha256`, `nonce`, `mobile`, `desktop`, `servedCssSha256` (array of
+  strings), `evidenceFinalized`, `evidenceProblems` (array). `mobile`/`desktop` are
+  objects carrying at least `status`, `hitTestTarget`, `cartCountAfter`.
+- `candidates[]`: exactly `id`, `description`, `provenance`, `candidateId`,
+  `adjustments`, `renderedCss`, `fault`, `replaysRequired`, `replaysAttempted`,
+  `replaysPassed`, `status`, `reason`, `expected`, `expectationMet`,
+  `expectationProblems`, `replays` (array of replay objects shaped as above).
+  `status` must be one of `VERIFIED`, `PATCH_FAILED`, `INCONCLUSIVE`,
+  `NOT_REPRODUCED`, `ORACLE_PASS`.
+- `nc5`: object (opaque to the dashboard; shown only as "present" in counts).
+- A row whose `status` is `VERIFIED` is importable as data but renders per §1:
+  quoted claim text under the unverified-import banner, never the trusted chip —
+  regardless of the provenance string the file asserts.
 
-**Baseline-summary import:** exactly `verdict`, `desktopRegression`, `certified`,
-  `approvedSha`, `evidenceFiles[]` (names + sha256 only). `verdict` ∈
-  {`REPRODUCED`, `NOT_REPRODUCED`}.
+**Baseline-summary import** (as emitted by `scripts/f01-baseline.ts`):
+- Top level: exactly `runId`, `oracleExitCode` (number), `classification` (object),
+  `gitHead`, `fixtureTree`, `worktreeDirty` (boolean), `worktree` (object),
+  `certified` (boolean), `certificationReasons` (array of strings),
+  `artifacts` (array of `{path, sha256}`-shaped objects).
+- `classification`: exactly `verdict` ∈ {`REPRODUCED`, `NOT_REPRODUCED`,
+  `INCONCLUSIVE`}, `regression` ∈ {`PASS`, `FAIL`, `NOT_RUN`}, `interceptedBy`
+  (string|null), `reasons` (array of strings).
 
-**MP4 import:** container MP4, video codec H.264, duration ≤ 30 s, size ≤ 25 MB,
-  decodable first and last frames; SHA-256 computed locally for display. WebM,
-  over-long, oversized, corrupt, or non-H.264 files are refused with the specific
-  reason and recovery (mirrors the intake rules, reimplemented locally — the intake
-  package is not bundled).
+**Bounds** (both files): file ≤ 256 KiB, strings ≤ 4 KiB, arrays ≤ 64 items
+(`replays` ≤ 8), depth ≤ 4, no duplicate JSON keys, UTF-8 only.
 
-## 4. Untrusted-text rendering rules
+**MP4 import** (playback suitability only — not certified intake, see §5):
+file.type/extension MP4, size ≤ 25 MiB, container duration ≤ 30 s once metadata
+loads, `videoWidth`/`videoHeight` readable, `canPlayType('video/mp4;
+codecs="avc1.42E01E"')` consulted as a hint only (empty string ≠ refusal),
+seek-to-end fires `seeked` as best-effort last-frame-decodable evidence. Anything
+else — over-long, oversized, corrupt, undecodable, unsupported — is refused with
+the specific reason and recovery. A passing file earns the label "suitable for
+playback" and nothing stronger.
+
+## 4. Display view-model (projected after validation)
+
+The shell copies only these fields into the render model; every other accepted
+field is dropped at the boundary:
+
+```text
+ScoreboardView  = { label, approvedSha, createdAt, baselineReproduced,
+                    certifiedBaseline: n/a (scoreboards carry no certificate;
+                    certification is shown only from a baseline-summary import),
+                    rows: [{ id, description, status, replaysPassed,
+                             replaysAttempted }] }
+BaselineView    = { runId, verdict, regression, interceptedBy, certified,
+                    certificationReasons, artifactCount }
+```
+
+An imported `VERIFIED` row projects to `{ status: "VERIFIED (file-reported,
+unverified import)", trustedChip: false }` — the chip flag is not representable
+as true for any import. The committed example (detected via `_example`) projects
+with `sourceTag: "committed example"`; live-shaped files project with
+`sourceTag: "owner-imported evidence"`.
+
+## 5. Playback suitability is not certified intake
+
+The dashboard deliberately does not bundle the intake package, call ffprobe, or
+use a backend. Browser metadata plus a successful seek proves the file plays
+locally; it does not prove container/codec/decode conformance, exact-SHA
+certification, consent binding, or fixture identity. No `VALIDATED`,
+`CERTIFIED`, or provenance label is ever inferred from playback. Full intake
+remains the repository pipeline's job (`packages/intake/`, offline, owner-run).
+
+## 6. Untrusted-text rendering rules
 
 - Every model-derived or file-derived string is inserted via text nodes
-  (`textContent` or framework-escaped interpolation) — never `innerHTML`,
-  never as an attribute, URL, class name, or style value.
+  (`textContent` or framework-escaped interpolation) — never `innerHTML`, never
+  as an attribute, URL, class name, or style value.
 - The documented CSS adjustment is rendered inside `<pre><code>` as text. It is
   never placed in a `<style>` element, a `style` attribute, or a preview document.
+  Ordinary author styling of the dashboard itself is unaffected by this rule.
 - Hashes, ids, and counts are displayed as truncated text with the full reviewed
   value available as adjacent text, never as links.
 
-## 5. No-network invariant
+## 7. Network policy (loopback-only local origin, zero external traffic)
 
-The shell must make zero network requests: no fetch/XHR/WebSocket, no external
-fonts, images, scripts, or stylesheets, no analytics, no update checks. The shell
-phase adds a test asserting zero requests under a `fetch`/network trap during import,
-render, and error paths. The mockup already holds this (single file, inline CSS,
-zero scripts).
+The dashboard makes **zero requests to non-loopback origins**: no provider,
+backend, hosted deployment, auth service, analytics, external font/image/script,
+or CDN traffic — in dev, in the built artifact, and during import/validation.
+Local-origin loads required to serve the page itself (`http://127.0.0.1:<port>`
+or `http://localhost:<port>` document and asset loads, Vite HMR websocket in dev)
+are permitted and must stay within loopback. Distribution may additionally ship a
+self-contained single-file build openable over `file://` (literally zero
+requests). The shell phase tests the built artifact as well as dev: any request
+to a non-loopback host fails the suite.

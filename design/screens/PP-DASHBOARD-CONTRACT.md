@@ -35,12 +35,17 @@ beyond in-page zones, no forms that transmit anything, no network access at all.
 
 ## 2. Design language
 
-Restrained executive style, McKinsey/Apple-inspired: black `#111111`, white `#FFFFFF`,
-cyan accent `#22C6F0` used sparingly for provenance markers and key figures (never as
-the sole carrier of meaning). Strong typographic hierarchy (system stack, semibold
+Restrained executive style: black `#111111`, white `#FFFFFF`, neutral grays, and a
+cyan rule `#22C6F0` marking model-origin zones (never the sole carrier of meaning;
+red is reserved for errors). Strong typographic hierarchy (system stack, semibold
 section titles, tabular numerals for hashes/counts), generous whitespace, hairline
-borders, flat surfaces (no glow, no glass, no gradients). Verdict chips pair a text
-glyph with a text label: `✔ VERIFIED`, `✖ PATCH_FAILED`, `⚠ UNTRUSTED`, `■ INCONCLUSIVE`.
+borders, flat white surfaces (no glow, no glass, no gradients, no gold/yellow wash).
+Model-origin zones carry a neutral gray head wash with a cyan top rule; the evidence
+zone is white with a black top rule. Verdict chips pair a text glyph with a text
+label in restrained monochrome: `✔ VERIFIED` (black) · `✖ PATCH_FAILED` ·
+`⚠ UNTRUSTED` in dark cyan (+ qualifier) · `■ INCONCLUSIVE` ·
+`⛔ HARD-DISABLED` and errors in red ·
+`◇ UNVERIFIED IMPORT — FILE-REPORTED VERDICT` in dark cyan (never the trusted chip).
 
 ## 3. Layout (single scrolling page; two columns at ≥ 1024 px inside zones)
 
@@ -78,8 +83,10 @@ glyph with a text label: `✔ VERIFIED`, `✖ PATCH_FAILED`, `⚠ UNTRUSTED`, `�
 ```
 
 Zones 2–3 (model-originated) and zone 4 (trusted evidence) never share a container,
-chip style, or heading color treatment: model zones use the warning treatment, the
-evidence zone uses the success/neutral treatment.
+chip style, or heading treatment: model zones use the gray wash with a cyan top rule
+and dark-cyan UNTRUSTED chips; the evidence zone is white with a black top rule and
+black trusted chips. Owner-imported verdicts additionally carry the
+`◇ UNVERIFIED IMPORT` banner and never the trusted chip.
 
 ## 4. Content rules (inherited + dashboard-specific)
 

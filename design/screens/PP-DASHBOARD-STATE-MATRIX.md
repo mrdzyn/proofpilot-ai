@@ -12,7 +12,7 @@ review before any wiring.
 | Validation error | Typed reason + recovery (too large/long, not MP4, corrupt, wrong codec, unsafe) | n/a | n/a | Typed refusal: unknown key, bad provenance, model VERIFIED row, oversize; file verdict unchanged, table unchanged | n/a |
 | System error | Decode/playback failure named; metadata retained | n/a | n/a | Parse failure named; historical example retained | n/a |
 | Disabled | Picker disabled while zone 1 validation runs | n/a (no controls) | n/a (no controls) | Import disabled while validation runs | n/a |
-| Imported vs historical | n/a | n/a | n/a | Imported rows carry an "imported evidence" tag and keep their file verdict; historical rows carry the example run id | n/a |
+| Imported vs historical | n/a | n/a | n/a | Imported rows keep their file verdict text under an `UNVERIFIED IMPORT — FILE-REPORTED VERDICT` banner and carry an "imported evidence" tag; the trusted chip is withheld even for file-asserted `VERIFIED` rows (see T-IMPORT-FAKE). Historical rows carry the example run id and the trusted chip only where the source record earned it | n/a |
 
 Cross-zone rules:
 - No zone offers Run AI, Verify Model Proposal, Approve Patch, or Deploy in any

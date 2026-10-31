@@ -7,9 +7,12 @@
 ## 1. Startup (owner's machine, loopback only)
 
 1. Clean checkout of the approved dashboard commit; `git status` clean.
-2. Install with the frozen lockfile (Option A) or no install (Option B).
+2. Install with the frozen lockfile (Option A) or no install (Option B: plain JS).
 3. Serve on loopback only (Vite dev with `--host 127.0.0.1`, or any static server
-   bound to loopback). No LAN exposure, no tunnel, no hosted URL.
+   bound to loopback). No LAN exposure, no tunnel, no hosted URL. The document and
+   asset loads this serving requires are local-origin traffic; the dashboard itself
+   makes zero requests to non-loopback origins. A self-contained single-file build
+   opened over `file://` is the literally-zero-request alternative.
 4. Open `http://127.0.0.1:<port>` in a desktop and a mobile-width browser window.
 
 ## 2. Demonstration walkthrough (mirrors `docs/META-DEMO-RECORDING.md`, live page)
@@ -28,8 +31,9 @@
 
 ## 3. Pre-demo checks
 
-- Page loaded with devtools network panel recording: zero requests during the full
-  walkthrough (T-NET-1 invariant demonstrated).
+- Page loaded with devtools network panel recording: zero requests to non-loopback
+  origins during the full walkthrough (T-NET-1 invariant demonstrated); only
+  loopback document/asset loads (and dev HMR) appear.
 - No secrets, paths, or private directories visible; history values match the cited
   sources byte for byte (T-TRUTH-1).
 - Keyboard-only dry run completed; focus visible throughout; live regions announce.

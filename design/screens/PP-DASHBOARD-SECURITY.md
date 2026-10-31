@@ -2,8 +2,13 @@
 
 ## 1. Boundaries (hold in the shell exactly as specified; verified by the tests in §3)
 
-1. **No network.** Zero requests of any kind. No backend, hosted deployment, auth
-   service, analytics, external CDN font/image/script, or provider integration.
+1. **Loopback-only origin; zero external traffic.** No request to any non-loopback
+   origin — no provider, backend, hosted deployment, auth service, analytics,
+   external font/image/script, or CDN — in dev, in the built artifact, and during
+   import/validation. Document and asset loads from `http://127.0.0.1:<port>` or
+   `http://localhost:<port>` (plus the dev HMR socket) are the only permitted
+   traffic; a self-contained `file://` build is the literally-zero-request
+   distribution option.
 2. **No hidden-path access.** The shell never enumerates, opens, or derives paths
    under `.proofpilot/`, credentials, approvals, or reservations. Owner files arrive
    only through the browser file picker.
@@ -11,8 +16,9 @@
    readable, loadable, or renderable from the dashboard; zone 3 shows only the
    documented values transcribed from `docs/LIVE-C3-01-EXECUTION-REPORT.md`.
 4. **No verdict authority.** The dashboard renders verdicts it is given; it computes
-   none, upgrades none, and cannot display a model `VERIFIED` row (no such shape
-   exists in the import allowlist).
+   none and upgrades none. Imported `VERIFIED` strings render only as quoted claims
+   under the `UNVERIFIED IMPORT — FILE-REPORTED VERDICT` banner with the trusted
+   chip withheld — syntactic validity never authenticates evidence.
 5. **No execution surface.** Model-derived CSS is text only; no HTML injection, no
    dynamic CSS, no command execution, no arbitrary file paths in the DOM.
 6. **No forbidden controls.** Run AI, Verify Model Proposal, Approve Patch, and
@@ -30,17 +36,31 @@ supply-chain of the chosen frontend stack (reviewed at the stack decision).
 
 ## 3. Acceptance tests (specified here, implemented in the shell phase)
 
-- **T-IMPORT-1..N:** each allowlisted shape accepted; each refusal battery case
-  (unknown key, duplicate key, oversize, bad provenance, model VERIFIED row,
-  non-UTF-8, wrong MP4/codec/duration/size) refused with the exact typed error and
-  the zone's prior content unchanged.
+- **T-IMPORT-1..N:** each allowlisted shape accepted against the real schemas
+  (§3 of the import architecture: full scoreboard and baseline-summary key sets);
+  each refusal battery case (unknown key, duplicate key, oversize, over-depth,
+  non-UTF-8, wrong-typed value, bad MP4/duration/size/decodability) refused with
+  the exact typed error and the zone's prior content unchanged.
+- **T-IMPORT-REAL:** the committed example
+  (`docs/examples/c3-b1-scoreboard.example.json`, `_example` present → "committed
+  example" tag) and a live-shaped fixture (same keys minus `_example` → "owner-
+  imported evidence" tag) both import; both render the file's verdicts without the
+  trusted chip upgrade path.
+- **T-IMPORT-FAKE:** adversarial fake-but-schema-valid imports — a crafted
+  `hand-authored-control` + `VERIFIED` row, a forged `certified: true` baseline,
+  a duplicate of the historical PC-1 row under a different run id — each renders
+  as quoted claim text under the `UNVERIFIED IMPORT — FILE-REPORTED VERDICT`
+  banner; the trusted chip never appears and no provenance is upgraded.
 - **T-XSS-1:** injection battery (markup, event handlers, `javascript:` URLs, style
   directives, prototype keys) in every imported string renders as inert text; DOM
   contains no injected elements/attributes afterward.
-- **T-CSS-1:** the documented adjustment appears only as text nodes; no `<style>`
-  element or `style` attribute exists in the document after render.
+- **T-CSS-1:** no model-derived or file-derived string ever reaches a `<style>`
+  element, a `style` attribute, or a preview document; the documented adjustment
+  renders only as text nodes. Ordinary author styling of the dashboard itself is
+  unaffected by this test.
 - **T-NET-1:** full import/render/error walkthrough under a network trap records
-  zero requests.
+  zero requests to non-loopback origins, in dev and in the built artifact; loopback
+  document/asset/HMR loads are the only permitted traffic.
 - **T-ABSENT-1:** static scan of the shell source finds no Run/Verify/Approve/Deploy
   control, no provider endpoint string, no `.proofpilot` path literal, no credential
   or approval identifier.

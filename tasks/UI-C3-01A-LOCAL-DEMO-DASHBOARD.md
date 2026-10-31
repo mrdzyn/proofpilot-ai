@@ -76,8 +76,11 @@ Out of scope (explicitly NOT authorized):
   disabled for each zone; no happy-path-only design.
 - Security doc forbids the four unauthorized controls by name and lists executable
   acceptance tests for the shell phase.
-- Stack decision (React+Vite+Tailwind vs simpler alternative) is presented as an
-  owner decision with trade-offs, not pre-decided.
+- Stack decision recorded with the owner's recommendations (preferred:
+  React+Vite+Tailwind; light-only; no persisted history) while the accurately
+  specified lightweight alternative stays visible; final confirmation at the gate.
+- Imported `VERIFIED` strings render only as unverified claims (adversarial
+  fake-import acceptance test included); the trusted chip is withheld from imports.
 - Owner gives explicit visual approval in a reviewable record before any shell work.
 
 ## 5. Validation (Phase A)

@@ -37,18 +37,21 @@ markup, no community theme). Costs: three new dependency families plus a build s
 supply-chain and lockfile review required; the no-network invariant must cover the
 dev server and the build output (audited in T-NET-1).
 
-**Option B — Framework-free TypeScript, hand-rolled CSS from tokens (simpler).**
-Zero new runtime dependencies and no build step (the mockup already proves the page
-is expressible this way); smallest supply-chain surface; the mockup converts almost
-directly. Costs: manual component discipline without framework guardrails; diverges
-from the owner's stated stack preference.
+**Option B — Framework-free JavaScript with JSDoc, hand-rolled CSS from tokens
+(simpler, accurately specified).** Zero new dependencies and no build step: plain
+browser-supported JavaScript (typed with JSDoc, not TypeScript — TypeScript requires
+transpilation) renders the page exactly as the mockup proves. A TypeScript variant
+would compile with the repository's existing `tsc`, which is a build step and loses
+the no-build property. Costs: manual component discipline without framework
+guardrails; diverges from the owner's stack preference.
 
-**Recommendation requested, not made:** the analysis establishes Option B as the
-simpler, more maintainable alternative for a single static page, while Option A
-matches the owner's preference and scales better if the dashboard grows. The owner
-chooses at the design gate; the shell phase implements only the chosen option.
-Choosing A additionally requires owner acceptance of the new dependencies and the
-build toolchain.
+**Owner recommendations recorded (design input, not implementation approval):**
+preferred stack is Option A (React + TypeScript + Vite + Tailwind); light theme only
+for the hackathon MVP (confirmed — dark deferred, not assumed); no persisted run
+history (confirmed — state lives in the tab only, matching §1); portal fields remain
+PENDING. The owner still confirms the stack at the design gate; the shell phase
+implements only the chosen option. Choosing A additionally requires owner acceptance
+of the new dependencies and the build toolchain.
 
 ## 3. Non-decisions (fixed regardless of stack)
 

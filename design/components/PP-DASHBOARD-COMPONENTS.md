@@ -20,12 +20,32 @@ accessibility rules per the catalog's component contract.
 ## 2. VerdictChip
 
 - **Purpose:** the single allowed status display. Text label plus text glyph, never
-  color alone: `✔ VERIFIED` · `✖ PATCH_FAILED` · `⚠ UNTRUSTED` (+ qualifier) ·
-  `■ INCONCLUSIVE` · `⛔ HARD-DISABLED` · neutral informational chips.
+  color alone, in restrained monochrome (black text, gray border; red reserved for
+  errors): `✔ VERIFIED` · `✖ PATCH_FAILED` · `■ INCONCLUSIVE` · `⛔ HARD-DISABLED` ·
+  neutral informational chips.
 - **When not to use:** never for model content without the UNTRUSTED qualifier; never
-  a bare color dot.
+  a bare color dot; never for owner-imported verdicts (use UnverifiedImportChip).
 - **States:** default; high-contrast (forced-colors: border + text, no wash reliance).
 - **Accessibility:** plain text; no ARIA needed; contrast ≥ 4.5:1 (label) / 3:1 (border).
+
+## 2b. UnverifiedImportChip
+
+- **Purpose:** the only rendering allowed for verdict strings inside owner-imported
+  files: `◇ UNVERIFIED IMPORT — FILE-REPORTED VERDICT` in dark cyan (`#0B6E87`),
+  followed by the file's verdict quoted as claim text. The trusted VerdictChip never
+  appears beside an imported verdict, even when the file asserts hand-authored
+  provenance and `VERIFIED`.
+- **States:** default only; always paired with the "quoted as a claim, not
+  independently re-checked" sentence.
+- **Accessibility:** same text-contrast rules as VerdictChip; the banner is a real
+  heading-adjacent paragraph, announced with the row.
+
+## 2c. UntrustedMarker
+
+- **Purpose:** the marker for model-origin content: `⚠ UNTRUSTED` (+ qualifier,
+  e.g. `MODEL HYPOTHESIS`, `NOT VERIFIED`) in dark cyan (`#0B6E87`). Used in model
+  zone heads and beside every model-derived value. Never used for trusted evidence;
+  never combined with the trusted chip on the same row.
 
 ## 3. EvidenceTable
 
