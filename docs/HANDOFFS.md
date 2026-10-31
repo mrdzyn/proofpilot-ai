@@ -1497,4 +1497,76 @@ call). STOP before implementation or any live provider call.
 GPT-6 third review of PR #28; owner decisions D1–D7 and D9 (D8 recorded).
 STOP before implementation or any live provider call.
 
+## Handoff: UI-C3-02-I5
+
+- **Task / phase:** UI-C3-02-I234 consolidated offline execution (I2 companion + I3 Zone L + I4 mock adapter)
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** ONE independent GPT-6 security + functional audit, then project owner
+- **Branch:** `feat/ui-c3-02-i2i3i4-consolidated` (based on `main@2bbe696`; PRs #26/#27/#29/#30 untouched, unmerged, unretargeted)
+- **PR:** new consolidated Draft integration PR against `main` (to be opened)
+- **State:** IMPLEMENTATION COMPLETE (offline only). No live inference path exists. STOP for audit; no merge, no deploy.
+
+### What was built (all mock transport; D9 blocks any live call)
+
+- I2 companion: `packages/live-analysis/src/server.ts` (same-origin UI+API on
+  127.0.0.1 only, terminal pairing/permits, Host/Origin/fetch-metadata matrix,
+  trusted-boundary MP4 validation via the audited intake gate, SHA recompute,
+  staged-byte lifecycle with always-delete, cancel/timeout/concurrency/quota,
+  typed refusals) + `uploads.ts` + `scripts/c3-live-analysis.ts` (owner CLI).
+  Reuses I2 modules (`local-session`, `mock-permits`, `request-guard` + one
+  same-policy `'/api/cancel'` route, documented) and intake media validation.
+- I4 adapter: `mock-transport.ts` (canned fixtures, call counting, prompt
+  cancellation), `baseten-request.ts` (inline `video_url` encoding, size/token
+  caps, I1 fixed destination; no model field, no live assembly without D9),
+  `responses.ts` (strict sanitization; closed-grammar proposals via the
+  audited `parseProposal`; no retry, no persistence of raw bytes/text).
+- I3 Zone L: `dashboard/src/zones/LiveZone.tsx` wired into `App.tsx` (12
+  states; unpaired/pairing/config/ready/uploading/analyzing/complete/proposed/
+  refused/cancelled/quota/unavailable); historical zones byte-identical;
+  provider unnamed in shipped UI (T-ABSENT-1 preserved exactly as audited).
+- Deliberate narrowings (documented in `tasks/UI-C3-02-I234-CONSOLIDATED.md`):
+  cancel route added to the guard allowlist (no bypass); no provider naming in
+  shipped UI; no TTY requirement for terminal commands; demo quota is a flow
+  limiter, not spend control.
+
+### Validation (all observed, none fabricated)
+
+- `pnpm typecheck` clean; `pnpm lint` 241 files 0 problems.
+- Unit: 12 dashboard + 12 companion + 9 adapter + 6 I1-config + I2-security
+  green; full suite 459/475 — the 16 failures are `candidate-coordinator` +
+  `candidate-stage` socket tests that fail identically on pristine
+  `origin/main` (sandbox listen ban, pre-existing, unrelated).
+- Security: 139/139 (incl. extended offline boundary + one reviewed
+  inventory change for `scripts/c3-live-analysis.ts` with new assertions).
+- HTTP integration (real ffprobe, loopback, unsandboxed): 5/5 — static
+  same-origin, DNS-rebinding/null-Origin refusals, full mock run, cancel +
+  concurrency, double-bind refusal.
+- Zone L browser QA (real companion + dashboard, unsandboxed Chromium):
+  3/3 — unpaired render, pair→upload→permit→mock analyze with run identity,
+  mock propose triple; loopback-only traffic; desktop+mobile screenshots in
+  `/tmp/pp-live-zone-qa/` (desktop 106 KB, mobile 74 KB).
+- #27 dashboard browser regression: 11/11 PASS on the extended shell
+  (unsandboxed Chromium; an initial 2-failure run caught a real Zone L
+  defect — dormant "unavailable" state wrongly used role=alert, colliding
+  with the shell's refusal-alert convention — fixed by rendering the dormant
+  state neutrally, then re-run green).
+- CI: hosted gates own the full-suite verdict (f01:baseline is sandbox-blocked
+  locally, pre-existing).
+
+### Residuals and owner notes
+
+- Same-UID writer swap between upload and encode is detected (hash recheck)
+  but the writer itself is out of scope, as recorded for LIVE-C3-01.
+- CLI pairing/permit commands work over piped stdin (no TTY requirement):
+  deliberate, documented; codes stay single-use/TTL/rate-limited/localhost-only.
+- Demo quota resets on restart (flow limiter, not spend control).
+- Screenshots are supplementary; assertions (not pixels) are the verification.
+- Port 5173 (unrelated BossForge app) untouched; manual QA uses 5188 when free.
+
+### Next action
+
+ONE independent GPT-6 security + functional audit of the integration PR;
+owner decisions D1–D7 and D9 stay pending (D8 design-only). STOP: no merge,
+no live inference, no deploy. Do not self-certify.
+
 <!-- HANDOFF_ENTRIES_END -->
