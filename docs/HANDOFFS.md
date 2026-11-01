@@ -1714,5 +1714,35 @@ Independent GPT-6 exact-head re-audit of PR #31 at the new head; STOP afterwards
 
 ### Next action
 Independent GPT-6 exact-head re-audit of PR #31 at the new head; STOP afterwards — no merge, deploy, provider calls, or D9 activation.
+## Handoff: UI-C3-02-I10 — Local acceptance QA at tested HEAD 96cbf3e (PR #31)
+
+- **Task / phase:** `tasks/UI-C3-02-I234-CONSOLIDATED.md` (offline I2+I3+I4 only; D9 blocks any live call)
+- **From:** QA agent (Muse Code, powered by Muse Spark)
+- **To:** Project owner (review), then independent auditor as needed
+- **Branch:** `feat/ui-c3-02-i2i3i4-consolidated`
+- **Tested implementation HEAD:** `96cbf3eb28c7fa9e6973dd83e4eb57012b8a8908` (audited; GPT-6 verdict PASS; tree verified clean except pre-existing untracked `dashboard/dist/`)
+- **Docs HEAD:** `8dc5148a49f7c6c41425ee150abb65937dbcf047` (this handoff + STATUS QA item 7 only; no implementation change)
+- **PR:** #31 (Draft, unmerged)
+- **State:** QA COMPLETE — no failures found. No merge, deploy, provider calls, spend, credential access, D9 activation, or stored-proposal execution.
+
+### Completed (all at tested HEAD 96cbf3e, same Mac, escalated sandbox for loopback bind)
+- **HTTP companion** (`tests/integration/live-companion-http.test.ts`): 9/9 PASS over real loopback — unpaired/permit-first upload refusal, typed 413, full mock run with prompt runId, in-flight cancel (bytes deleted, quota kept), concurrent-analyze serialization, upload-during-run refusal + revoke-frees-slot, double-bind refusal.
+- **Zone L Chromium** (`tests/integration/live-zone-browser.test.ts`): 5/5 PASS in real Chromium headless-shell 156 — unpaired shell, permit→upload→mock analyze (run identity, `mock-fixture-model (D9 pending)`, usage, `live inference: no`, no VERIFIED chip), mock propose + terminal QUOTA_SPENT, Cancel click→CANCELLED, keyboard-only/320px/200%-text. Desktop + mobile screenshots written to `/tmp/pp-live-zone-qa/` and pixel-inspected: mock/D9 chips and quota-exhausted state visible.
+- **Shutdown** (`tests/integration/live-companion-shutdown.test.ts`): 1/1 PASS — SIGTERM with staged clip deletes staging, exit 0.
+- **Dashboard regression** (`tests/integration/dashboard-browser.test.ts`): 11/11 PASS — loopback-only dev+preview walkthrough (zero non-loopback requests asserted), MP4 playback/metadata/SHA-256, refusals, A→B digest race, >30 s refusal, import trust boundaries (fake VERIFIED never trusted), XSS/CSS inertness, keyboard/layout shots. Runner lingered ~30 min on orphaned vite child pipes after the final pass; orphans SIGTERMed (test-harness artifact, zero failures, unrelated projects untouched).
+- **D9 / mock-only:** `config.ts` refuses all model IDs (`blockedBy: 'D9'`); no `fetch`, no `process.env`, no credential reads in `packages/live-analysis/src`; transport label `mock-fixture`; browser assertions pin `live inference: no` and forbid non-loopback requests.
+- **Newer-upload survival:** covered by unit L-RACE-9a/9b, green in exact-head CI (493/493) at `96cbf3e`.
+
+### Validation
+- `git rev-parse HEAD` = `96cbf3e` before and after every suite; `git status` shows no tracked modifications (suites rebuild only untracked `dashboard/dist/`).
+- Local unit/security (informational, sandbox-blocked binds excluded): full unit 477/493 with the same 16 pre-existing sandbox failures, security 139/139 — unchanged from the remediation report; hosted CI (493/493, 139/139) is definitive.
+- Required exact-head CI: rerun pending on the docs-commit push (implementation bytes identical to `96cbf3e`).
+
+### Continuation notes
+- Chromium headless-shell 156 was installed via the repo-pinned `playwright@1.64.1` (`npx playwright install chromium`) for this QA; browsers remain user-machine state, not repo state.
+- `dashboard/dist/` remains uncommitted; `/tmp/pp-{live-zone,dashboard}-qa/` hold the inspected screenshots/clips (outside the repo).
+
+### Next action
+Owner review of this acceptance report; post to PR #31 and STOP — no merge, deploy, provider calls, or D9 activation.
 
 <!-- HANDOFF_ENTRIES_END -->
