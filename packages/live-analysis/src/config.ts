@@ -10,6 +10,20 @@ export const BASETEN_APPROVED_BASE_URL = 'https://inference.baseten.co/v1' as co
 export const BASETEN_APPROVED_ENDPOINT = 'https://inference.baseten.co/v1/chat/completions' as const;
 export const BASETEN_DOCUMENTED_DIRECT_MODEL = 'meta-models/muse-spark-open' as const;
 
+/**
+ * D9 live-model approval. PENDING (`null`): no model ID is approved, so no
+ * live request can be authorized. A separately authorized, independently
+ * reviewed D9 decision records the exact direct-Baseten identifier here;
+ * until then every live path refuses with MODEL_UNAVAILABLE_OR_UNAPPROVED.
+ * This constant is compared by exact string equality only — never assigned
+ * from configuration, never translated, never a fallback.
+ */
+export const D9_APPROVED_MODEL: string | null = null;
+
+export type LiveModelResult =
+  | Readonly<{ ok: true; model: string }>
+  | Readonly<{ ok: false; code: 'MODEL_UNAVAILABLE_OR_UNAPPROVED' }>;
+
 export type ConfigRefusalCode = 'ENDPOINT_UNAPPROVED' | 'MODEL_UNAVAILABLE_OR_UNAPPROVED';
 
 export type BaseUrlResult =
@@ -61,4 +75,24 @@ export function evaluateOfflineLiveConfiguration(input: Readonly<{ baseUrl: unkn
   // The model value is intentionally not echoed or treated as authority.
   void input.model;
   return { ok: false, code: 'MODEL_UNAVAILABLE_OR_UNAPPROVED', blockedBy: 'D9' };
+}
+
+/**
+ * D9 live-model gate: the single authorization point for Baseten live
+ * inference. While `D9_APPROVED_MODEL` is `null` (pending) every value —
+ * including the documented direct-Baseten ID — refuses. After a D9 decision
+ * records the exact ID, only that byte-identical value passes; aliases,
+ * translations, and fallbacks never do. Pure: no I/O, no env, no network.
+ */
+export function validateLiveModel(value: unknown): LiveModelResult {
+  if (typeof value !== 'string' || value.length === 0) {
+    return { ok: false, code: 'MODEL_UNAVAILABLE_OR_UNAPPROVED' };
+  }
+  if (D9_APPROVED_MODEL === null) {
+    return { ok: false, code: 'MODEL_UNAVAILABLE_OR_UNAPPROVED' };
+  }
+  if (value !== D9_APPROVED_MODEL) {
+    return { ok: false, code: 'MODEL_UNAVAILABLE_OR_UNAPPROVED' };
+  }
+  return { ok: true, model: value };
 }

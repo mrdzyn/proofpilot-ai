@@ -33,7 +33,11 @@ test('I2 helpers cannot read environment, start a listener, or contact providers
 // upload store, request encoder, sanitizer, and mock transport. The server
 // is the one reviewed exception that may listen — bound to 127.0.0.1 only —
 // and it must never imply a live model (no response_format/JSON-mode flag).
-const serverSide = ['server.ts', 'uploads.ts', 'baseten-request.ts', 'responses.ts', 'mock-transport.ts'];
+// UI-C3-02-BT-LIVE-01: `baseten-transport.ts` joins this list. It is the one
+// reviewed exception that may name an INJECTED fetch implementation — and it
+// still calls no ambient `fetch(`, reads no env/secret, names no endpoint
+// string, and describes no response format. Dedicated assertions below.
+const serverSide = ['server.ts', 'uploads.ts', 'baseten-request.ts', 'responses.ts', 'mock-transport.ts', 'baseten-transport.ts'];
 
 test('I2/I4 server modules stay offline, loopback-only, and D9-blocked', () => {
   for (const filename of serverSide) {
@@ -60,4 +64,18 @@ test('I2/I4 server modules stay offline, loopback-only, and D9-blocked', () => {
       assert.doesNotMatch(source, /\.listen\s*\(/, `${filename}: only server.ts may listen`);
     }
   }
+});
+
+// UI-C3-02-BT-LIVE-01: the live transport's pinned destination, explicit
+// injection, and redirect refusal. Destination and model come only from
+// reviewed constants; the network arrives only as the injected `fetchImpl`
+// (required, no default); redirects refuse instead of following.
+test('BT-LIVE-01 live transport is pinned, injected, and redirect-refusing', () => {
+  const body = readFileSync(path.join(root, 'baseten-transport.ts'), 'utf8');
+  const source = body.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  assert.match(source, /BASETEN_APPROVED_ENDPOINT/, 'destination is the pinned constant');
+  assert.match(source, /BASETEN_DOCUMENTED_DIRECT_MODEL/, 'model identity is the documented direct ID');
+  assert.match(source, /readonly fetchImpl: LiveFetch/, 'fetch implementation is required and explicit');
+  assert.match(source, /redirect: 'error'/, 'redirects refuse instead of following');
+  assert.doesNotMatch(source, /['"]https?:\/\//, 'no endpoint string literals in the transport');
 });

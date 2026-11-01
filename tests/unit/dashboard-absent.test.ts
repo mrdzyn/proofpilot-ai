@@ -1,7 +1,15 @@
-// UI-C3-01B T-ABSENT-1: static scan of the dashboard shell source.
+// UI-C3-02-BT-LIVE-01 T-ABSENT-1: static scan of the dashboard shell source.
 // The shell must contain no Run/Verify/Approve/Deploy control label, no
 // provider endpoint string, no `.proofpilot` path literal, and no credential
 // or approval identifier. Pure source scan: no browser, no provider.
+//
+// Deliberate narrowing (reviewed): the bare provider display name `baseten`
+// is allowed — Zone L must be able to NAME the live provider in result
+// labels (`LIVE VIA BASETEN …`, `provider: baseten`) per the approved spec
+// §5. What stays forbidden is anything exfiltratable or callable: endpoint
+// host/path strings (`inference.baseten.co`, `baseten.co/…`), other
+// providers' endpoints, credential shapes, and hidden paths. The word alone
+// cannot reach a network; T-NET proves zero non-loopback requests.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
@@ -46,7 +54,7 @@ for (const file of files) {
     );
     check(
       'provider-endpoint',
-      /baseten|modal\.com|api\.meta\.com|graph\.facebook\.com|openai\.com\/v1|anthropic\.com/i,
+      /inference\.baseten\.co|baseten\.co\/|modal\.com|api\.meta\.com|graph\.facebook\.com|openai\.com\/v1|anthropic\.com/i,
     );
     check('hidden-path', /\.proofpilot/);
     check(

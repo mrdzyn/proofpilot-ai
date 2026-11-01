@@ -16,13 +16,27 @@
 import { createServer as createHttpServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
-import { validateBasetenBaseUrl } from './config.ts';
+import { validateBasetenBaseUrl, validateLiveModel } from './config.ts';
 import { checkCompanionRequest, type LiveApiEndpoint } from './request-guard.ts';
 import { LocalSessionManager } from './local-session.ts';
 import { OfflineMockPermitLedger, type MockPermitKind } from './mock-permits.ts';
-import { createMockTransport, MockCancelled, type MockTransport } from './mock-transport.ts';
+import { createMockTransport, MockCancelled, MOCK_MODEL_LABEL, type MockTransport } from './mock-transport.ts';
 import { encodeVideoPart } from './baseten-request.ts';
-import { sanitizeAnalysisResponse, sanitizeProposalResponse } from './responses.ts';
+import {
+  sanitizeAnalysisResponse,
+  sanitizeLiveAnalysisResponse,
+  sanitizeLiveProposalResponse,
+  sanitizeProposalResponse,
+  type LiveSanitizeResult,
+  type SanitizeResult,
+  type SanitizedUsage,
+} from './responses.ts';
+import {
+  BasetenCancelled,
+  BasetenTimeout,
+  LiveTransportRefused,
+  type BasetenTransport,
+} from './baseten-transport.ts';
 import { MAX_STAGED_BYTES, StagedUploads } from './uploads.ts';
 import type { ValidatedVideo } from '../../intake/src/media.ts';
 
@@ -45,6 +59,15 @@ export interface CompanionOptions {
   transport?: MockTransport;
   /** Latency for the built-in cancelling mock transport; ignored when `transport` is supplied. */
   transportLatencyMs?: number;
+  /**
+   * Dormant Baseten live seam (test-only in this slice: the CLI never passes
+   * it). When present, the D9 gate must approve `liveModel` or the attempt
+   * refuses before any slot, permit, or quota is touched. Unreachable while
+   * D9 is pending.
+   */
+  liveTransport?: BasetenTransport | null;
+  /** Exact model ID the live transport claims; checked against the D9 approval. */
+  liveModel?: string;
   analysesLeft?: number;
   proposalsLeft?: number;
   runTimeoutMs?: number;
@@ -153,6 +176,10 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
   // transport (tests) owns its own policy.
   const customTransport = options.transport ?? null;
   const defaultLatencyMs = options.transportLatencyMs ?? 1200;
+  // Dormant live seam: never constructed by the CLI in this slice. D9
+  // approval (`validateLiveModel`) is checked per attempt below.
+  const liveTransport = options.liveTransport ?? null;
+  const liveModel = options.liveModel;
   let analysesLeft = options.analysesLeft ?? 3;
   let proposalsLeft = options.proposalsLeft ?? 1;
   const runTimeoutMs = options.runTimeoutMs ?? 120_000;
@@ -358,15 +385,44 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
   }
 
   /**
-   * Settle a background run: race the mock transport against the ceiling,
-   * record done/refused/cancelled/timeout on the run record, spend quota only
-   * on a sanitized success, and release the single-flight slot only when it
-   * still belongs to this run's epoch.
+   * Transport-native reply accepted by the settler: the mock `{mockModel,
+   * ...}` envelope or the normalized live `{model, ...}` reply. Both carry
+   * sanitized-later text and safe-int usage.
+   */
+  type SettleReply =
+    | { mockModel: string; text: string; usage: SanitizedUsage }
+    | { model: string; text: string; usage: SanitizedUsage };
+
+  /**
+   * Settle wiring: which sanitizer validates the reply, which identity the
+   * success record carries, and which provenance a refused record carries.
+   * The mock wiring is byte-identical to the historical behavior; the live
+   * wiring is used only when D9 approves the model (dormant in this slice).
+   */
+  interface SettleWiring {
+    readonly sanitize: (raw: SettleReply) => SanitizeResult | LiveSanitizeResult;
+    readonly identity: Record<string, unknown>;
+    readonly refusedBase: Record<string, unknown>;
+  }
+
+  const mockWiring = (kind: MockPermitKind): SettleWiring => ({
+    sanitize: kind === 'analyze' ? sanitizeAnalysisResponse : sanitizeProposalResponse,
+    identity: { mockModel: MOCK_MODEL_LABEL },
+    refusedBase: { transport: 'mock-fixture', liveInference: false },
+  });
+
+  /**
+   * Settle a background run: race the transport against the ceiling, record
+   * done/refused/cancelled/timeout on the run record, spend quota only on a
+   * sanitized success, and release the single-flight slot only when it still
+   * belongs to this run's epoch. Transport refusals (typed live errors)
+   * settle `refused` with their code and never spend quota.
    */
   async function settleRun(
     run: RunRecord,
     kind: MockPermitKind,
-    responsePromise: Promise<{ mockModel: string; text: string; usage: { promptTokens: number; completionTokens: number; totalTokens: number } }>,
+    responsePromise: Promise<SettleReply>,
+    wiring: SettleWiring,
   ): Promise<void> {
     const deadline = now() + runTimeoutMs;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -378,32 +434,39 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
       if (run.cancelled) {
         run.state = 'cancelled';
         run.finishedAt = now();
-        run.result = { ok: false as const, code: 'CANCELLED', detail: 'run cancelled before the mock response landed' };
+        run.result = { ok: false as const, code: 'CANCELLED', detail: 'run cancelled before the response landed' };
         // Epoch-scoped: a stale run must never delete a newer epoch's staging.
         await discardStagingIfOwned(run.epoch, run.stagedUploadId ?? null);
         return;
       }
-      const sanitized = kind === 'analyze'
-        ? sanitizeAnalysisResponse({ mockModel: response.mockModel, text: response.text, usage: response.usage })
-        : sanitizeProposalResponse({ mockModel: response.mockModel, text: response.text, usage: response.usage });
+      const sanitized = wiring.sanitize(response);
       if (!sanitized.ok) {
         run.state = 'refused';
         run.finishedAt = now();
         run.result = {
-          ok: false, code: sanitized.code, detail: sanitized.detail, transport: 'mock-fixture', liveInference: false,
+          ok: false, code: sanitized.code, detail: sanitized.detail, ...wiring.refusedBase,
         };
         return;
       }
       spendQuota(kind);
       run.state = 'done';
       run.finishedAt = now();
-      run.result = { ok: true, ...sanitized.value, runId: run.runId, sha256: run.sha256, mockModel: response.mockModel };
+      run.result = { ok: true, ...sanitized.value, runId: run.runId, sha256: run.sha256, ...wiring.identity };
     } catch (error) {
+      if (error instanceof LiveTransportRefused) {
+        run.state = 'refused';
+        run.finishedAt = now();
+        run.result = {
+          ok: false, code: error.code, detail: error.message,
+          transport: 'baseten-live', liveInference: true, provider: 'baseten',
+        };
+        return;
+      }
       run.state = 'cancelled';
       run.finishedAt = now();
       const message = error instanceof Error ? error.message : '';
-      const timedOut = message.includes('ceiling');
-      const cancelled = error instanceof MockCancelled || message.includes('cancelled');
+      const timedOut = message.includes('ceiling') || error instanceof BasetenTimeout;
+      const cancelled = error instanceof MockCancelled || error instanceof BasetenCancelled || message.includes('cancelled');
       run.result = (cancelled || timedOut)
         ? { ok: false, code: timedOut ? 'TIMEOUT' : 'CANCELLED', detail: 'run cancelled or timed out; staged bytes already deleted' }
         : { ok: false, code: 'TRANSPORT_REFUSED', detail: 'mock transport refused the internal request' };
@@ -413,6 +476,27 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
       if (timer !== undefined) clearTimeout(timer);
       releaseFlight(run.epoch);
     }
+  }
+
+  /**
+   * Register an accepted run: id issuance, map insertion, and size pruning.
+   * Shared by the mock and live branches so both carry identical run identity.
+   */
+  function registerRun(kind: MockPermitKind, sha256: string, ownerEpoch: number): RunRecord {
+    runCounter += 1;
+    const runId = `local-${new Date(now()).toISOString().slice(0, 10)}-${String(runCounter).padStart(3, '0')}`;
+    // Pinned to the attempt's original epoch (never the current global):
+    // settle may only release or clean up this epoch's slot and staging.
+    const run: RunRecord = {
+      runId, kind, sha256, state: 'analyzing', createdAt: now(), finishedAt: null,
+      cancelled: false, result: null, epoch: ownerEpoch, stagedUploadId: null,
+    };
+    runs.set(runId, run);
+    if (runs.size > 20) {
+      const oldest = [...runs.values()].filter((r) => r.state !== 'analyzing').sort((a, b) => (a.finishedAt ?? 0) - (b.finishedAt ?? 0))[0];
+      if (oldest !== undefined) runs.delete(oldest.runId);
+    }
+    return run;
   }
 
   /**
@@ -430,6 +514,14 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
     if (typeof uploadId !== 'string' || typeof sha256 !== 'string' || !Number.isSafeInteger(bytes)) {
       return refusal('BAD_PAYLOAD', 'uploadId, sha256 and bytes are required', 400);
     }
+    // D9-first live gate: a supplied live transport without a D9-approved
+    // model refuses before any slot, permit, or quota is touched. Unreachable
+    // while D9 is pending; the mock path below is unaffected.
+    const liveGate = liveTransport !== null ? validateLiveModel(liveModel) : null;
+    if (liveGate !== null && !liveGate.ok) {
+      return refusal('MODEL_UNAVAILABLE_OR_UNAPPROVED', 'D9 pending: live Baseten inference is not approved; no live request was made', 403);
+    }
+    const liveApprovedModel: string | null = liveGate !== null && liveGate.ok ? liveGate.model : null;
     if (quotaFor(kind) <= 0) {
       return refusal('QUOTA_SPENT', 'demo quota exhausted; mock runs stop here', 429);
     }
@@ -494,31 +586,50 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
       releaseFlight(myEpoch);
       return refusal(part.code, 'verified bytes failed wire encoding', 422);
     }
-    runCounter += 1;
-    const runId = `local-${new Date(now()).toISOString().slice(0, 10)}-${String(runCounter).padStart(3, '0')}`;
-    // Pinned to the attempt's original epoch (never the current global):
-    // settle may only release or clean up this epoch's slot and staging.
-    const run: RunRecord = {
-      runId, kind, sha256, state: 'analyzing', createdAt: now(), finishedAt: null,
-      cancelled: false, result: null, epoch: myEpoch, stagedUploadId: null,
-    };
-    runs.set(runId, run);
-    if (runs.size > 20) {
-      const oldest = [...runs.values()].filter((r) => r.state !== 'analyzing').sort((a, b) => (a.finishedAt ?? 0) - (b.finishedAt ?? 0))[0];
-      if (oldest !== undefined) runs.delete(oldest.runId);
+    // Dormant live branch: reachable only when D9 approves the model
+    // (impossible in this slice). It reuses the same permit, quota,
+    // single-flight, epoch, cancellation, and settle machinery as mock.
+    if (liveTransport !== null && liveApprovedModel !== null) {
+      const approved = liveApprovedModel;
+      const run = registerRun(kind, sha256, myEpoch);
+      const sanitize = (
+        raw: { mockModel: string; text: string; usage: SanitizedUsage } | { model: string; text: string; usage: SanitizedUsage },
+      ): SanitizeResult | LiveSanitizeResult =>
+        kind === 'analyze'
+          ? sanitizeLiveAnalysisResponse(raw, approved)
+          : sanitizeLiveProposalResponse(raw, approved);
+      const settled = settleRun(run, kind,
+        liveTransport.respond(
+          { kind, runId: run.runId, sha256, videoBytes: bytes as number, videoPart: part.part },
+          { isCancelled: () => run.cancelled },
+        ).then((reply) => {
+          if (!reply.ok) throw new LiveTransportRefused(reply.code, reply.detail);
+          return { model: reply.model, text: reply.text, usage: reply.usage };
+        }),
+        {
+          sanitize,
+          identity: { model: approved },
+          refusedBase: { transport: 'baseten-live', liveInference: true, provider: 'baseten' },
+        });
+      inflight.add(settled);
+      void settled.finally(() => {
+        inflight.delete(settled);
+      });
+      return jsonResponse(200, { ok: true, runId: run.runId, state: 'analyzing' as const, model: approved, provider: 'baseten', transport: 'baseten-live' });
     }
+    const run = registerRun(kind, sha256, myEpoch);
     // Per-run transport: cancellation observes only this run's flag, never a
     // stale run's. Caller-supplied transports keep their own policy.
     const runTransport = customTransport ?? createMockTransport({
       latencyMs: defaultLatencyMs,
       shouldCancel: () => run.cancelled,
     });
-    const settled = settleRun(run, kind, runTransport.respond({ kind, runId, sha256, videoBytes: bytes as number }));
+    const settled = settleRun(run, kind, runTransport.respond({ kind, runId: run.runId, sha256, videoBytes: bytes as number }), mockWiring(kind));
     inflight.add(settled);
     void settled.finally(() => {
       inflight.delete(settled);
     });
-    return jsonResponse(200, { ok: true, runId, state: 'analyzing' as const });
+    return jsonResponse(200, { ok: true, runId: run.runId, state: 'analyzing' as const });
   }
 
   function handleCancel(payload: unknown): ApiResult {
