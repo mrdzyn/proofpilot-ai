@@ -1626,5 +1626,34 @@ no live inference, no deploy. Do not self-certify.
   footer absent in sandbox (per-test verdicts quoted, not hidden).
 - **STOP:** independent GPT-6 re-audit. No merge, deploy, provider calls,
   credential reads, spend, model-ID activation, or stored-proposal execution.
+## Handoff: UI-C3-02-I7 — PR #31 remaining MAJOR-1/2 remediation (re-audit comment 6547497463)
+
+- **Task / phase:** `tasks/UI-C3-02-I234-CONSOLIDATED.md` (offline I2+I3+I4 only; D9 blocks any live call)
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** ONE independent GPT-6 security + functional re-audit, then project owner
+- **Branch:** `feat/ui-c3-02-i2i3i4-consolidated`
+- **Implementation head:** `1c5c7a143dc9579ca4f86e92312d53d0d8e2f132` (on top of audited `c4e5aac`)
+- **PR:** #31 (Draft, unmerged)
+- **State:** READY FOR REVIEW. No merge, deploy, provider calls, spend, or D9 activation.
+
+### Completed
+- **MAJOR-1 (upload single-flight):** `handleUpload` peeks permit eligibility synchronously (zero work for unpermitted attempts), then acquires the same exclusive slot synchronously before its first await and releases in a `finally`; revoked-in-flight uploads fail closed (`CANCELLED`) without publishing. New barrier test L-RACE-5 (gated probe holds verification; racing upload + analyze both see `RUN_BUSY`; single probe call; surviving staging completes a run).
+- **MAJOR-2 (epoch cleanup + cancellation):** `StagedUploads.discardIfStaged` + `currentUploadId`; `stagedEpoch` with `clearStagedFieldsIfOwned`/`discardStagingIfOwned` owned-guards on every cleanup site (`releaseAndRefuse`, settle paths, upload failures, analyze consume); `terminalRevoke` captures the doomed staging identity so its async delete cannot touch newer bytes; per-run mock transport observes only its own run flag (global cross-run `shouldCancel` removed). New tests L-RACE-6a (overlap: new upload + analyze while old pending → new `done`, old `CANCELLED`, quota 2) and L-RACE-6b (old settles while new staging present → bytes survive, run completes).
+- **Regression proof:** L-RACE-5/6a/6b all FAIL on the unfixed tree (stashed src) and PASS with the fix; full unit file 24/24; prior behavior (browser cancel, permit-first, uploadId binding, shutdown cleanup, forward-merged ancestry) untouched.
+
+### Validation
+- `pnpm lint` clean (policy lint 0 problems); root + dashboard typecheck clean.
+- Unit: 473/489 PASS — the same 16 failures as pristine base (sandbox-blocked listeners/ports, confirmed identical via stash; base 470/486, fix adds the 3 new passing tests).
+- Security: 139/139 PASS.
+- HTTP/browser/shutdown suites: cannot bind in this sandbox (`EPERM`, identical on pristine base); hosted CI owns those gates.
+- Required CI: pending — pushed branch triggers PR #31 checks; results to be posted.
+- Zero provider calls, credential reads, spend, quota/activation changes, or stored-proposal access.
+
+### Continuation notes
+- `dashboard/dist/` remains uncommitted (as before).
+- Old cancelled runs settle fast (per-run `MockCancelled` within one 50 ms slice); new-epoch runs are unaffected.
+
+### Next action
+Independent GPT-6 exact-head re-audit of PR #31 at the new head; STOP afterwards — no merge, deploy, provider calls, or D9 activation.
 
 <!-- HANDOFF_ENTRIES_END -->
