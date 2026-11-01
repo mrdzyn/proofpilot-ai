@@ -1684,5 +1684,35 @@ Independent GPT-6 exact-head re-audit of PR #31 at the new head; STOP afterwards
 
 ### Next action
 Independent GPT-6 exact-head re-audit of PR #31 at the new head; STOP afterwards — no merge, deploy, provider calls, or D9 activation.
+## Handoff: UI-C3-02-I9 — PR #31 async storage-cleanup ownership (re-audit comment 6560560916)
+
+- **Task / phase:** `tasks/UI-C3-02-I234-CONSOLIDATED.md` (offline I2+I3+I4 only; D9 blocks any live call)
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** ONE independent GPT-6 security + functional re-audit, then project owner
+- **Branch:** `feat/ui-c3-02-i2i3i4-consolidated`
+- **Implementation head:** `ce17f77beb686543abff4bfab06514e3cd180c0c` (on top of audited `ee6a4ce`; plus a handoff-only docs commit)
+- **PR:** #31 (Draft, unmerged)
+- **State:** READY FOR REVIEW. No merge, deploy, provider calls, spend, or D9 activation.
+
+### Completed
+- **MAJOR (deferred delete):** `#removeStagedUnchecked` and `discardIfStaged` now snapshot the exact staged record (`doomed`), delete its dir, and clear the field after the await only on reference identity (`this.#staged === doomed`). A newer publication landing mid-delete is never erased; ticket/generation semantics and permit-first/zero-work behavior unchanged.
+- **Test seam:** `UploadStoreDeps.removeTree` (default recursive force `rm`; only tracked-staging deletions route through it — own-droppings and whole-tree destroy keep direct `rm`). Tests inject a gate suspending the FIRST removal inside the real `rm`.
+- **L-RACE-9a (revoke-discard):** P staged → revoke starts async discard suspended in `rm(P)` → epoch B uploads/publishes → old delete resumes → `currentUploadId()===B`, dir listing `[B]`, B analyzes to `done`.
+- **L-RACE-9b (replacement-delete):** P staged → upload A suspended in `rm(P)` → revoke → epoch B uploads/publishes → A resumes → A `CANCELLED`, B intact and analyzes to `done`.
+- **Fail-before:** old logic + seam only fails both tests by fast assertion (identity erased); full new tests also fail on the unmodified tree. Pass-after with fix; companion file 28/28.
+- **Preserved:** L-RACE-1–8, permit-first, browser cancel shape, uploadId binding, D9 hard-disable, ancestry (no rebase; ahead-only).
+
+### Validation
+- `pnpm lint` clean; root + dashboard typecheck clean.
+- Full unit: 477/493 — the same 16 failures as pristine base (sandbox-blocked listeners/ports; zero live-analysis failures). Security: 139/139.
+- HTTP/browser/shutdown suites: unrunnable in this sandbox (bind EPERM, identical on base); exact-head hosted CI pending on push. Earlier real-loopback/Chromium QA belongs to previous heads and is labeled as such — no unexecuted validation claimed.
+- Zero provider calls, credential reads, spend, quota/activation changes, D9-gate touches, or stored-proposal access.
+
+### Continuation notes
+- `dashboard/dist/` remains uncommitted (as before).
+- Every tracked-staging deletion now goes through the identity-guarded pattern; keep it that way for any future removal path.
+
+### Next action
+Independent GPT-6 exact-head re-audit of PR #31 at the new head; STOP afterwards — no merge, deploy, provider calls, or D9 activation.
 
 <!-- HANDOFF_ENTRIES_END -->
