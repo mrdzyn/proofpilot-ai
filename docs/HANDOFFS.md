@@ -1744,5 +1744,37 @@ Independent GPT-6 exact-head re-audit of PR #31 at the new head; STOP afterwards
 
 ### Next action
 Owner review of this acceptance report; post to PR #31 and STOP — no merge, deploy, provider calls, or D9 activation.
+## Handoff: UI-C3-02-I11 — BT-LIVE-01 dormant live-inference readiness (for GPT-6 audit)
+
+- **Task / phase:** `tasks/UI-C3-02-BT-LIVE-01.md` (bounded contract; D1–D7 and D9 pending, D8 design-only)
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** ONE independent GPT-6 security + functional audit, then project owner
+- **Branch:** `phase/ui-c3-02-bt-live-01-readiness` (from `main@c2bff7d`)
+- **Implementation head:** `ff76d58c9d99a3042f91072650c07cf175550baa` (plus a handoff-only docs commit)
+- **PR:** #32 (Draft, unmerged)
+- **State:** READY FOR REVIEW. No merge, deploy, provider calls, key reads, spend, or D9 activation.
+
+### Completed
+- **Dormant transport** (`packages/live-analysis/src/baseten-transport.ts`, new): pinned endpoint constant, exact documented model enforced at construction (aliases/superseded refused), injected fetch only (no ambient `fetch(`, no env, no key literal, no `response_format`), single POST with `redirect: 'error'`, AbortController deadline + `isCancelled` abort, strict response validation (2xx, model echo, non-empty text, safe-int usage, string finish_reason), typed refusals, redacted details, no retries.
+- **D9 gate** (`config.ts`): `D9_APPROVED_MODEL: null` (pending) + `validateLiveModel` (exact match only). Server refuses any live-configured attempt with MODEL_UNAVAILABLE_OR_UNAPPROVED before slot, permit, or quota is touched; the live settle branch reuses permit/quota/flight/epoch/cancel machinery and is unreachable while D9 is pending (proven by zero-fetch-call tests).
+- **Live sanitizers** (`responses.ts`, appended): same rules as mock plus exact model echo and Baseten provenance (`provider/model/transport/liveInference`).
+- **Settle generalization** (`server.ts`): wiring param (sanitizer + identity + refusedBase); mock path byte-identical (full existing battery green).
+- **Zone L** (`liveProvenance.ts` new + `LiveZone.tsx` branch): mock rendering byte-identical; live rows show provider, exact model, run id, reported usage, UNVERIFIED chips; `MODEL_UNAVAILABLE_OR_UNAPPROVED` recovery; T-ABSENT-1 narrowed from bare `baseten` word to endpoint strings (documented in-test).
+- **D9 proposal recorded** (task file §D9): `meta-models/muse-spark-open`, chat-completions endpoint, `video_url` data-URL by documented `*_url` analogy (live acceptance pending authorization), $1.25/$4.25 per 1M, no structured output, n=1 — PROPOSED, not approved.
+
+### Validation
+- Lint clean; root typecheck clean (dashboard typecheck after `dashboard/` install).
+- Unit 510/510, security 140/140 (incl. 9 transport-contract, 2 dormancy, 2 live-sanitize, 3 provenance, 1 D9-matrix, 1 endpoint-pinning tests).
+- New tests fail-before (observed): with implementation reverted, the 4 new test files fail 4/4 (missing modules/exports); restored, they pass 16/16. Pre-existing suites unchanged and green (mock behavior preserved).
+- HTTP/browser/shutdown/dashboard suites: NOT runnable in this sandbox (loopback bind EPERM; escalated execution needs human approval, prompts disabled). Mock-path preservation is argued, not assumed: Zone L mock strings are byte-identical and asserted by helper unit tests; the full mock battery (incl. browser-asserted flows at the parent HEAD) is unchanged in code.
+- Required hosted CI: pending on Draft PR push (`lint`, `typecheck`, `test:unit`, `test:security`, `f01:baseline`, pin lineage).
+
+### Continuation notes
+- `dashboard/node_modules/` installed locally for typecheck (untracked); `dashboard/dist/` remains uncommitted.
+- The ONLY live-network seam is the injected `fetchImpl` param (tests only); production passes nothing. The ONLY authorization point is `validateLiveModel` cited by the server gate.
+- A future D9 decision records the exact ID in ONE const; this slice refuses everything.
+
+### Next action
+Independent GPT-6 audit of the Draft PR at its exact head; STOP afterwards — no merge, deploy, provider calls, key reads, or D9 activation.
 
 <!-- HANDOFF_ENTRIES_END -->
