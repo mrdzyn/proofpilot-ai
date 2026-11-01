@@ -1497,7 +1497,7 @@ call). STOP before implementation or any live provider call.
 GPT-6 third review of PR #28; owner decisions D1–D7 and D9 (D8 recorded).
 STOP before implementation or any live provider call.
 
-## Handoff: UI-C3-02-I1-C1
+## Handoff: UI-C3-02-I1-C1 (merged via PR #29 as `821171a`)
 
 - **Task:** `tasks/UI-C3-02-I1-OFFLINE-CONFIG.md`; owner-authorized **offline-only** implementation kickoff.
 - **Branch:** `feat/ui-c3-02-i1-offline-config` from `main@2bbe696` (PR #28 docs-only merge).
@@ -1507,5 +1507,242 @@ STOP before implementation or any live provider call.
 - **Config behavior:** approve only an exact `https://inference.baseten.co/v1` (optional one trailing slash), construct the pinned Chat Completions destination, fail closed on every URL mismatch. Model approval always refuses pending owner D9, including `meta/muse-spark-open` and the documented direct ID; no alias translation.
 - **Test objective:** L-CFG-1 refusal matrix plus TypeScript, lint and required GitHub CI. Do not claim executed checks until actual logs are available.
 - **Next action:** independent audit after successful required evidence; owner merge decision separately. Later I2/I3 must honor dashboard-branch sequencing; no live request before D1–D7, D9 and per-run approval.
+
+## Handoff: UI-C3-02-I5
+
+- **Task / phase:** UI-C3-02-I234 consolidated offline execution (I2 companion + I3 Zone L + I4 mock adapter)
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** ONE independent GPT-6 security + functional audit, then project owner
+- **Branch:** `feat/ui-c3-02-i2i3i4-consolidated` (based on `main@2bbe696`; PRs #26/#27/#29/#30 untouched, unmerged, unretargeted)
+- **PR:** new consolidated Draft integration PR against `main` (to be opened)
+- **State:** IMPLEMENTATION COMPLETE (offline only). No live inference path exists. STOP for audit; no merge, no deploy.
+
+### What was built (all mock transport; D9 blocks any live call)
+
+- I2 companion: `packages/live-analysis/src/server.ts` (same-origin UI+API on
+  127.0.0.1 only, terminal pairing/permits, Host/Origin/fetch-metadata matrix,
+  trusted-boundary MP4 validation via the audited intake gate, SHA recompute,
+  staged-byte lifecycle with always-delete, cancel/timeout/concurrency/quota,
+  typed refusals) + `uploads.ts` + `scripts/c3-live-analysis.ts` (owner CLI).
+  Reuses I2 modules (`local-session`, `mock-permits`, `request-guard` + one
+  same-policy `'/api/cancel'` route, documented) and intake media validation.
+- I4 adapter: `mock-transport.ts` (canned fixtures, call counting, prompt
+  cancellation), `baseten-request.ts` (inline `video_url` encoding, size/token
+  caps, I1 fixed destination; no model field, no live assembly without D9),
+  `responses.ts` (strict sanitization; closed-grammar proposals via the
+  audited `parseProposal`; no retry, no persistence of raw bytes/text).
+- I3 Zone L: `dashboard/src/zones/LiveZone.tsx` wired into `App.tsx` (12
+  states; unpaired/pairing/config/ready/uploading/analyzing/complete/proposed/
+  refused/cancelled/quota/unavailable); historical zones byte-identical;
+  provider unnamed in shipped UI (T-ABSENT-1 preserved exactly as audited).
+- Deliberate narrowings (documented in `tasks/UI-C3-02-I234-CONSOLIDATED.md`):
+  cancel route added to the guard allowlist (no bypass); no provider naming in
+  shipped UI; no TTY requirement for terminal commands; demo quota is a flow
+  limiter, not spend control.
+
+### Validation (all observed, none fabricated)
+
+- `pnpm typecheck` clean; `pnpm lint` 241 files 0 problems.
+- Unit: 12 dashboard + 12 companion + 9 adapter + 6 I1-config + I2-security
+  green; full suite 459/475 — the 16 failures are `candidate-coordinator` +
+  `candidate-stage` socket tests that fail identically on pristine
+  `origin/main` (sandbox listen ban, pre-existing, unrelated).
+- Security: 139/139 (incl. extended offline boundary + one reviewed
+  inventory change for `scripts/c3-live-analysis.ts` with new assertions).
+- HTTP integration (real ffprobe, loopback, unsandboxed): 5/5 — static
+  same-origin, DNS-rebinding/null-Origin refusals, full mock run, cancel +
+  concurrency, double-bind refusal.
+- Zone L browser QA (real companion + dashboard, unsandboxed Chromium):
+  3/3 — unpaired render, pair→upload→permit→mock analyze with run identity,
+  mock propose triple; loopback-only traffic; desktop+mobile screenshots in
+  `/tmp/pp-live-zone-qa/` (desktop 106 KB, mobile 74 KB).
+- #27 dashboard browser regression: 11/11 PASS on the extended shell
+  (unsandboxed Chromium; an initial 2-failure run caught a real Zone L
+  defect — dormant "unavailable" state wrongly used role=alert, colliding
+  with the shell's refusal-alert convention — fixed by rendering the dormant
+  state neutrally, then re-run green).
+- CI: hosted gates own the full-suite verdict (f01:baseline is sandbox-blocked
+  locally, pre-existing).
+
+### Residuals and owner notes
+
+- Same-UID writer swap between upload and encode is detected (hash recheck)
+  but the writer itself is out of scope, as recorded for LIVE-C3-01.
+- CLI pairing/permit commands work over piped stdin (no TTY requirement):
+  deliberate, documented; codes stay single-use/TTL/rate-limited/localhost-only.
+- Demo quota resets on restart (flow limiter, not spend control).
+- Screenshots are supplementary; assertions (not pixels) are the verification.
+- Port 5173 (unrelated BossForge app) untouched; manual QA uses 5188 when free.
+
+### Next action
+
+ONE independent GPT-6 security + functional audit of the integration PR;
+owner decisions D1–D7 and D9 stay pending (D8 design-only). STOP: no merge,
+no live inference, no deploy. Do not self-certify.
+
+## Handoff: UI-C3-02-I6 — GPT-6 remediation of PR #31 (FIX REQUIRED → remediated)
+
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** ONE independent GPT-6 security + functional re-audit, then project owner
+- **Branch:** `feat/ui-c3-02-i2i3i4-consolidated` (merge `306fb32` reconciles with
+  `main@821171a`; PRs #26/#27/#29/#30 untouched, unmerged, unretargeted; no
+  rebase/force-push)
+- **Audit basis:** [independent GPT-6 audit](https://github.com/mrdzyn/proofpilot-ai/pull/31#issuecomment-6546549691) at `01c700d` — 4 MAJOR + 2 MINOR.
+- **MAJOR-1 (real Cancel):** `/api/analyze|propose` accept promptly with a
+  `runId` (state `analyzing`) and settle in the background; Zone L tracks the
+  active runId and polls in flight. Proven by Chromium Cancel-click test and
+  HTTP in-flight cancel test (cancel → CANCELLED in ms, quota kept, bytes gone).
+- **MAJOR-2 (single-flight):** one slot for upload/analyze/propose acquired
+  synchronously before the first await; revoke bumps an epoch so a stale run
+  can never release a newer slot. Deterministic tests: two concurrent analyzes
+  (one accepted, one RUN_BUSY), second-valid-permit waits then proceeds,
+  upload-during-analyze 409, revoke/re-pair race.
+- **MAJOR-3 (permit-before-upload):** browser hashes locally (Web Crypto),
+  owner issues a hash/byte/action-bound terminal permit, companion peeks
+  eligibility via read-only `peekEligiblePermit` (no consumption, no spent
+  marking) before staging or decoding anything; consumption stays at the
+  attempt, single-use preserved. Unpermitted upload → NO_PERMIT with zero
+  staged bytes and zero decode work (staging dir + probe counter asserted).
+- **MAJOR-4 (merge ancestry):** forward merge of `origin/main@821171a`; I1
+  files byte-identical with merged PR #29; STATUS/HANDOFFS conflicts resolved
+  keeping both histories; stale refs fixed (#29 merged, SEC-P2-02 merged as #24).
+- **MINOR-1:** SIGINT/SIGTERM handlers + eager close; SIGKILL-class stale sweep
+  (`sweepStaleStagingDirs`, unit-tested) + SIGTERM-with-staged-clip integration
+  test (exit 0, staging gone); typed 413 BAD_BODY_SIZE on drained oversize
+  bodies (HTTP test); JSON-null guard on `/api/pair`; `uploadId` bound to the
+  staged upload (foreign id spends the permit, then fails closed).
+- **MINOR-2:** misleading tests renamed/rewritten (cancel, concurrency);
+  Zone L browser adds Cancel click (20 s-latency companion), 320px reflow +
+  200% text scoped to Zone L (pre-existing shell fixtures documented),
+  keyboard-only pairing, quota exhaustion; STATUS stale refs fixed.
+- **Validation (all observed):** `pnpm lint` 247 files 0 problems; root +
+  dashboard typecheck clean; unit 470/486 (16 pre-existing sandbox listen
+  failures identical on pristine main); security 139/139; HTTP 9/9 over real
+  loopback; Zone L browser 5/5 (EXIT 0) + desktop/mobile screenshots;
+  dashboard regression 11/11 pass lines; shutdown SIGTERM 1/1.
+- **Residuals:** same-UID writer swap detected but writer containment out of
+  scope; CLI piped-stdin deliberate; demo quota in-memory; SIGKILL-class
+  deaths rely on next-startup sweep (documented); dashboard regression runner
+  footer absent in sandbox (per-test verdicts quoted, not hidden).
+- **STOP:** independent GPT-6 re-audit. No merge, deploy, provider calls,
+  credential reads, spend, model-ID activation, or stored-proposal execution.
+## Handoff: UI-C3-02-I7 — PR #31 remaining MAJOR-1/2 remediation (re-audit comment 6547497463)
+
+- **Task / phase:** `tasks/UI-C3-02-I234-CONSOLIDATED.md` (offline I2+I3+I4 only; D9 blocks any live call)
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** ONE independent GPT-6 security + functional re-audit, then project owner
+- **Branch:** `feat/ui-c3-02-i2i3i4-consolidated`
+- **Implementation head:** `1c5c7a143dc9579ca4f86e92312d53d0d8e2f132` (on top of audited `c4e5aac`)
+- **PR:** #31 (Draft, unmerged)
+- **State:** READY FOR REVIEW. No merge, deploy, provider calls, spend, or D9 activation.
+
+### Completed
+- **MAJOR-1 (upload single-flight):** `handleUpload` peeks permit eligibility synchronously (zero work for unpermitted attempts), then acquires the same exclusive slot synchronously before its first await and releases in a `finally`; revoked-in-flight uploads fail closed (`CANCELLED`) without publishing. New barrier test L-RACE-5 (gated probe holds verification; racing upload + analyze both see `RUN_BUSY`; single probe call; surviving staging completes a run).
+- **MAJOR-2 (epoch cleanup + cancellation):** `StagedUploads.discardIfStaged` + `currentUploadId`; `stagedEpoch` with `clearStagedFieldsIfOwned`/`discardStagingIfOwned` owned-guards on every cleanup site (`releaseAndRefuse`, settle paths, upload failures, analyze consume); `terminalRevoke` captures the doomed staging identity so its async delete cannot touch newer bytes; per-run mock transport observes only its own run flag (global cross-run `shouldCancel` removed). New tests L-RACE-6a (overlap: new upload + analyze while old pending → new `done`, old `CANCELLED`, quota 2) and L-RACE-6b (old settles while new staging present → bytes survive, run completes).
+- **Regression proof:** L-RACE-5/6a/6b all FAIL on the unfixed tree (stashed src) and PASS with the fix; full unit file 24/24; prior behavior (browser cancel, permit-first, uploadId binding, shutdown cleanup, forward-merged ancestry) untouched.
+
+### Validation
+- `pnpm lint` clean (policy lint 0 problems); root + dashboard typecheck clean.
+- Unit: 473/489 PASS — the same 16 failures as pristine base (sandbox-blocked listeners/ports, confirmed identical via stash; base 470/486, fix adds the 3 new passing tests).
+- Security: 139/139 PASS.
+- HTTP/browser/shutdown suites: cannot bind in this sandbox (`EPERM`, identical on pristine base); hosted CI owns those gates.
+- Required CI: pending — pushed branch triggers PR #31 checks; results to be posted.
+- Zero provider calls, credential reads, spend, quota/activation changes, or stored-proposal access.
+
+### Continuation notes
+- `dashboard/dist/` remains uncommitted (as before).
+- Old cancelled runs settle fast (per-run `MockCancelled` within one 50 ms slice); new-epoch runs are unaffected.
+
+### Next action
+Independent GPT-6 exact-head re-audit of PR #31 at the new head; STOP afterwards — no merge, deploy, provider calls, or D9 activation.
+## Handoff: UI-C3-02-I8 — PR #31 revocation-during-pre-run remediation (re-audit comment 6560205881)
+
+- **Task / phase:** `tasks/UI-C3-02-I234-CONSOLIDATED.md` (offline I2+I3+I4 only; D9 blocks any live call)
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** ONE independent GPT-6 security + functional re-audit, then project owner
+- **Branch:** `feat/ui-c3-02-i2i3i4-consolidated`
+- **Implementation head:** `934e9eaea465e19b5a7986d6244dfc3dd0f1fd90` (on top of audited `3e095f4`; plus a handoff-only docs commit)
+- **PR:** #31 (Draft, unmerged)
+- **State:** READY FOR REVIEW. No merge, deploy, provider calls, spend, or D9 activation.
+
+### Completed
+- **MAJOR-1 (deferred stage):** `StagedUploads.stage()` takes an ownership ticket cut synchronously with slot acquisition; `terminalRevoke` retires tickets synchronously via `invalidateStaged()`; the ticket is re-validated before and during the mutation (refuses `STALE_OWNER`, touches nothing, cleans only its own droppings). Plain deletes never bump the generation (an async delete must not stale a newer ticket — found live by L-RACE-8's setup). New test L-RACE-7 (gate inside `stage()`, revoke, full new-epoch upload, resume: A `CANCELLED`, B staged and analyzable).
+- **MAJOR-2 (deferred read):** analyze rechecks `myEpoch !== epoch` immediately after `readBytes` and again after the consume, before creating a run or invoking transport; stale attempts refuse `CANCELLED` with no transport call, quota spend, field mutation, or slot release; runs are created with `epoch: myEpoch`. New test L-RACE-8 (gated `readBytes` with snapshotted bytes, revoke, full new-epoch flow, release: A `CANCELLED`, exactly one transport call — B's — B `done`, quota 2).
+- **Regression proof:** L-RACE-7/8 FAIL on the unfixed tree (stashed src) and PASS with the fix; companion file 26/26; all prior tests (L-RACE-1–6b, permit-first, cancel, binding, shutdown-shape) untouched and green.
+- **Evidence hygiene (audit MINOR):** `Active handoff` now points here (was stale at I6 while I7 existed); the I7 "CI pending" line is superseded — run `41321950795` at `3e095f4` passed both jobs. Hosted CI scope is lint + typecheck + unit + security + `f01:baseline` only; it never ran the HTTP/browser/shutdown suites. Real-loopback/Chromium QA numbers from earlier handoffs belong to previous heads and are labeled as such; they were not re-runnable here (sandbox bind EPERM, identical on base).
+
+### Validation
+- `pnpm lint` clean; root + dashboard typecheck clean.
+- Companion unit file: 26/26 PASS. Full unit: 475/491 — the same 16 failures as pristine base (sandbox-blocked listeners/ports; zero live-analysis failures).
+- Security: 139/139 PASS.
+- HTTP/browser/shutdown suites: unrunnable in this sandbox (EPERM, identical on base); exact-head hosted CI pending on push.
+- Zero provider calls, credential reads, spend, quota/activation changes, D9-gate touches, or stored-proposal access.
+
+### Continuation notes
+- `dashboard/dist/` remains uncommitted (as before).
+- If future work adds another store mutation path, it must either take the ticket or bump via `invalidateStaged()` semantics — plain deletes stay generation-neutral by design.
+
+### Next action
+Independent GPT-6 exact-head re-audit of PR #31 at the new head; STOP afterwards — no merge, deploy, provider calls, or D9 activation.
+## Handoff: UI-C3-02-I9 — PR #31 async storage-cleanup ownership (re-audit comment 6560560916)
+
+- **Task / phase:** `tasks/UI-C3-02-I234-CONSOLIDATED.md` (offline I2+I3+I4 only; D9 blocks any live call)
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** ONE independent GPT-6 security + functional re-audit, then project owner
+- **Branch:** `feat/ui-c3-02-i2i3i4-consolidated`
+- **Implementation head:** `ce17f77beb686543abff4bfab06514e3cd180c0c` (on top of audited `ee6a4ce`; plus a handoff-only docs commit)
+- **PR:** #31 (Draft, unmerged)
+- **State:** READY FOR REVIEW. No merge, deploy, provider calls, spend, or D9 activation.
+
+### Completed
+- **MAJOR (deferred delete):** `#removeStagedUnchecked` and `discardIfStaged` now snapshot the exact staged record (`doomed`), delete its dir, and clear the field after the await only on reference identity (`this.#staged === doomed`). A newer publication landing mid-delete is never erased; ticket/generation semantics and permit-first/zero-work behavior unchanged.
+- **Test seam:** `UploadStoreDeps.removeTree` (default recursive force `rm`; only tracked-staging deletions route through it — own-droppings and whole-tree destroy keep direct `rm`). Tests inject a gate suspending the FIRST removal inside the real `rm`.
+- **L-RACE-9a (revoke-discard):** P staged → revoke starts async discard suspended in `rm(P)` → epoch B uploads/publishes → old delete resumes → `currentUploadId()===B`, dir listing `[B]`, B analyzes to `done`.
+- **L-RACE-9b (replacement-delete):** P staged → upload A suspended in `rm(P)` → revoke → epoch B uploads/publishes → A resumes → A `CANCELLED`, B intact and analyzes to `done`.
+- **Fail-before:** old logic + seam only fails both tests by fast assertion (identity erased); full new tests also fail on the unmodified tree. Pass-after with fix; companion file 28/28.
+- **Preserved:** L-RACE-1–8, permit-first, browser cancel shape, uploadId binding, D9 hard-disable, ancestry (no rebase; ahead-only).
+
+### Validation
+- `pnpm lint` clean; root + dashboard typecheck clean.
+- Full unit: 477/493 — the same 16 failures as pristine base (sandbox-blocked listeners/ports; zero live-analysis failures). Security: 139/139.
+- HTTP/browser/shutdown suites: unrunnable in this sandbox (bind EPERM, identical on base); exact-head hosted CI pending on push. Earlier real-loopback/Chromium QA belongs to previous heads and is labeled as such — no unexecuted validation claimed.
+- Zero provider calls, credential reads, spend, quota/activation changes, D9-gate touches, or stored-proposal access.
+
+### Continuation notes
+- `dashboard/dist/` remains uncommitted (as before).
+- Every tracked-staging deletion now goes through the identity-guarded pattern; keep it that way for any future removal path.
+
+### Next action
+Independent GPT-6 exact-head re-audit of PR #31 at the new head; STOP afterwards — no merge, deploy, provider calls, or D9 activation.
+## Handoff: UI-C3-02-I10 — Local acceptance QA at tested HEAD 96cbf3e (PR #31)
+
+- **Task / phase:** `tasks/UI-C3-02-I234-CONSOLIDATED.md` (offline I2+I3+I4 only; D9 blocks any live call)
+- **From:** QA agent (Muse Code, powered by Muse Spark)
+- **To:** Project owner (review), then independent auditor as needed
+- **Branch:** `feat/ui-c3-02-i2i3i4-consolidated`
+- **Tested implementation HEAD:** `96cbf3eb28c7fa9e6973dd83e4eb57012b8a8908` (audited; GPT-6 verdict PASS; tree verified clean except pre-existing untracked `dashboard/dist/`)
+- **Docs HEAD:** this handoff-only commit on top of `96cbf3e` (STATUS QA item 7 + this handoff only; no implementation change; implementation bytes identical to the tested HEAD)
+- **PR:** #31 (Draft, unmerged)
+- **State:** QA COMPLETE — no failures found. No merge, deploy, provider calls, spend, credential access, D9 activation, or stored-proposal execution.
+
+### Completed (all at tested HEAD 96cbf3e, same Mac, escalated sandbox for loopback bind)
+- **HTTP companion** (`tests/integration/live-companion-http.test.ts`): 9/9 PASS over real loopback — unpaired/permit-first upload refusal, typed 413, full mock run with prompt runId, in-flight cancel (bytes deleted, quota kept), concurrent-analyze serialization, upload-during-run refusal + revoke-frees-slot, double-bind refusal.
+- **Zone L Chromium** (`tests/integration/live-zone-browser.test.ts`): 5/5 PASS in real Chromium headless-shell 156 — unpaired shell, permit→upload→mock analyze (run identity, `mock-fixture-model (D9 pending)`, usage, `live inference: no`, no VERIFIED chip), mock propose + terminal QUOTA_SPENT, Cancel click→CANCELLED, keyboard-only/320px/200%-text. Desktop + mobile screenshots written to `/tmp/pp-live-zone-qa/` and pixel-inspected: mock/D9 chips and quota-exhausted state visible.
+- **Shutdown** (`tests/integration/live-companion-shutdown.test.ts`): 1/1 PASS — SIGTERM with staged clip deletes staging, exit 0.
+- **Dashboard regression** (`tests/integration/dashboard-browser.test.ts`): 11/11 PASS — loopback-only dev+preview walkthrough (zero non-loopback requests asserted), MP4 playback/metadata/SHA-256, refusals, A→B digest race, >30 s refusal, import trust boundaries (fake VERIFIED never trusted), XSS/CSS inertness, keyboard/layout shots. Runner lingered ~30 min on orphaned vite child pipes after the final pass; orphans SIGTERMed (test-harness artifact, zero failures, unrelated projects untouched).
+- **D9 / mock-only:** `config.ts` refuses all model IDs (`blockedBy: 'D9'`); no `fetch`, no `process.env`, no credential reads in `packages/live-analysis/src`; transport label `mock-fixture`; browser assertions pin `live inference: no` and forbid non-loopback requests.
+- **Newer-upload survival:** covered by unit L-RACE-9a/9b, green in exact-head CI (493/493) at `96cbf3e`.
+
+### Validation
+- `git rev-parse HEAD` = `96cbf3e` before and after every suite; `git status` shows no tracked modifications (suites rebuild only untracked `dashboard/dist/`).
+- Local unit/security (informational, sandbox-blocked binds excluded): full unit 477/493 with the same 16 pre-existing sandbox failures, security 139/139 — unchanged from the remediation report; hosted CI (493/493, 139/139) is definitive.
+- Required exact-head CI: rerun pending on the docs-commit push (implementation bytes identical to `96cbf3e`).
+
+### Continuation notes
+- Chromium headless-shell 156 was installed via the repo-pinned `playwright@1.64.1` (`npx playwright install chromium`) for this QA; browsers remain user-machine state, not repo state.
+- `dashboard/dist/` remains uncommitted; `/tmp/pp-{live-zone,dashboard}-qa/` hold the inspected screenshots/clips (outside the repo).
+
+### Next action
+Owner review of this acceptance report; post to PR #31 and STOP — no merge, deploy, provider calls, or D9 activation.
 
 <!-- HANDOFF_ENTRIES_END -->
