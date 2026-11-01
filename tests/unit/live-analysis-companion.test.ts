@@ -545,6 +545,127 @@ test('L-TIMEOUT-1: runs exceeding the total ceiling fail closed without a respon
   assert.equal(((record as unknown as { result: { code: string } }).result).code, 'TIMEOUT');
 });
 
+test('L-RACE-5: concurrent upload/upload serialize — one accepted, one RUN_BUSY, no staging corruption', async () => {
+  // Barrier-controlled: the first upload's trusted-boundary probe waits on a
+  // gate, holding the single-flight slot in verification while the second
+  // upload (and an analyze) are dispatched against the same slot.
+  let gateOpen = false;
+  const gate = { probeCalls: 0 };
+  const gatedMedia: MediaDeps = {
+    probe: async () => {
+      gate.probeCalls += 1;
+      const start = Date.now();
+      while (!gateOpen) {
+        if (Date.now() - start > 10_000) throw new Error('probe gate timed out');
+        await new Promise((r) => setTimeout(r, 10));
+      }
+      return {
+        formatName: 'mp4',
+        formatDurationSec: 3,
+        streams: [{ codecType: 'video', codecName: 'h264', durationSec: 3, width: 390, height: 844 }],
+      };
+    },
+    decodeCheck: async () => ({ ok: true, detail: '' }),
+  };
+  const app = await freshApp({ mediaDeps: gatedMedia });
+  const session = await pair(app);
+  permit(app, 'analyze', shaOf(GOOD_BYTES), GOOD_BYTES.length);
+  const firstFlight = app.dispatch(
+    meta({ ...declareUpload(shaOf(GOOD_BYTES), GOOD_BYTES.length, 'analyze') }, session),
+    GOOD_BYTES,
+  );
+  // Wait until the first upload is inside verification (slot held).
+  const start = Date.now();
+  while (gate.probeCalls === 0) {
+    if (Date.now() - start > 10_000) throw new Error('first upload never reached verification');
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  // A second valid, permit-eligible upload must observe the busy slot — it
+  // must not stage, verify, or replace anything.
+  const clash = await app.dispatch(
+    meta({ ...declareUpload(shaOf(GOOD_BYTES), GOOD_BYTES.length, 'analyze') }, session),
+    GOOD_BYTES,
+  );
+  assert.equal(clash.status, 409);
+  assert.equal((clash.body as { code: string }).code, 'RUN_BUSY');
+  // An analyze racing the pending upload validation is likewise refused.
+  const racer = await analyze(app, session, {
+    uploadId: 'up-0123456789ab-cdef9876', sha256: shaOf(GOOD_BYTES), bytes: GOOD_BYTES.length,
+  });
+  assert.equal(racer.status, 409);
+  assert.equal((racer.body as { code: string }).code, 'RUN_BUSY');
+  // Neither refused attempt did trusted-boundary work or consumed the permit.
+  assert.equal(gate.probeCalls, 1);
+  gateOpen = true;
+  const first = await firstFlight;
+  assert.equal(first.status, 200, JSON.stringify(first.body));
+  const up = first.body as { uploadId: string; sha256: string; bytes: number };
+  // The surviving staging belongs to the first upload; the run completes.
+  assert.equal(app.uploads.currentUploadId(), up.uploadId);
+  const run = await analyze(app, session, up);
+  assert.equal(run.status, 200, JSON.stringify(run.body));
+  await awaitRunState(app, session, (run.body as { runId: string }).runId, 'done', 15_000);
+});
+
+test('L-RACE-6a: overlapping revoke → re-pair → upload → analyze while the old run is still pending', async () => {
+  // The new run starts while the old transport is still pending. The old
+  // global shouldCancel predicate would cancel the new run too; per-run
+  // cancellation lets the new run complete while the old settles cancelled.
+  const app = await freshApp({ transportLatencyMs: 2000 });
+  const session = await pair(app);
+  permit(app, 'analyze', shaOf(GOOD_BYTES), GOOD_BYTES.length);
+  const up = await uploadVideo(app, GOOD_BYTES, session, { sha256: shaOf(GOOD_BYTES), bytes: GOOD_BYTES.length, kind: 'analyze' });
+  const first = await analyze(app, session, up);
+  assert.equal(first.status, 200);
+  const oldRunId = (first.body as { runId: string }).runId;
+  // Revoke WITHOUT waiting for the old run to settle, then immediately
+  // re-pair and run the full new flow while the old run is still pending.
+  app.terminalRevoke();
+  const session2 = await pair(app);
+  permit(app, 'analyze', shaOf(GOOD_BYTES), GOOD_BYTES.length);
+  const up2 = await uploadVideo(app, GOOD_BYTES, session2, { sha256: shaOf(GOOD_BYTES), bytes: GOOD_BYTES.length, kind: 'analyze' });
+  assert.equal(app.uploads.currentUploadId(), up2.uploadId);
+  const second = await analyze(app, session2, up2);
+  assert.equal(second.status, 200, JSON.stringify(second.body));
+  const newRunId = (second.body as { runId: string }).runId;
+  const [oldRec, newRec] = await Promise.all([
+    awaitRunState(app, session2, oldRunId, 'cancelled', 15_000),
+    awaitRunState(app, session2, newRunId, 'done', 15_000),
+  ]);
+  assert.equal(((oldRec as unknown as { result: { code: string } }).result).code, 'CANCELLED');
+  const newResult = (newRec as unknown as { result: Record<string, unknown> }).result;
+  assert.equal(newResult['transport'], 'mock-fixture');
+  // Only the new run spent quota; the cancelled old run spent nothing.
+  const status = await app.dispatch(meta({ method: 'GET', path: '/api/status' }, session2), EMPTY);
+  assert.equal(((status.body as { quota: { analysesLeft: number } }).quota).analysesLeft, 2);
+});
+
+test('L-RACE-6b: a stale settling run never deletes newer staged media', async () => {
+  // Revoke, stage a new upload, and let the OLD run settle while the new
+  // staging is still present (no new analysis yet). The new bytes must
+  // survive; only then does the new analysis consume them.
+  const app = await freshApp({ transportLatencyMs: 2000 });
+  const session = await pair(app);
+  permit(app, 'analyze', shaOf(GOOD_BYTES), GOOD_BYTES.length);
+  const up = await uploadVideo(app, GOOD_BYTES, session, { sha256: shaOf(GOOD_BYTES), bytes: GOOD_BYTES.length, kind: 'analyze' });
+  const first = await analyze(app, session, up);
+  assert.equal(first.status, 200);
+  const oldRunId = (first.body as { runId: string }).runId;
+  app.terminalRevoke();
+  const session2 = await pair(app);
+  permit(app, 'analyze', shaOf(GOOD_BYTES), GOOD_BYTES.length);
+  const up2 = await uploadVideo(app, GOOD_BYTES, session2, { sha256: shaOf(GOOD_BYTES), bytes: GOOD_BYTES.length, kind: 'analyze' });
+  // Let the old run settle while the new staging sits untouched.
+  const oldRec = await awaitRunState(app, session2, oldRunId, 'cancelled', 15_000);
+  assert.equal(((oldRec as unknown as { result: { code: string } }).result).code, 'CANCELLED');
+  assert.equal(app.uploads.currentUploadId(), up2.uploadId);
+  assert.deepEqual(readdirSync(app.uploads.stagingRoot), [up2.uploadId]);
+  // The new analysis consumes the surviving bytes and completes.
+  const second = await analyze(app, session2, up2);
+  assert.equal(second.status, 200, JSON.stringify(second.body));
+  await awaitRunState(app, session2, (second.body as { runId: string }).runId, 'done', 15_000);
+});
+
 test('L-AUTH-1: expired sessions are rejected', async () => {
   let clock = 1_000_000;
   const app = await freshApp({ session: new LocalSessionManager(() => clock) });

@@ -101,6 +101,8 @@ interface RunRecord {
   result: unknown;
   /** Companion epoch that owned the slot when this run started (revoke bumps it). */
   epoch: number;
+  /** Staging identity consumed by this run (null: staging already consumed at accept). */
+  stagedUploadId: string | null;
 }
 
 function jsonResponse(status: number, body: unknown): ApiResult {
@@ -144,12 +146,13 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
   const uploads = options.uploads ?? (await StagedUploads.create());
   const now = options.now ?? Date.now;
   const runs = new Map<string, RunRecord>();
-  // The default transport aborts promptly when the in-flight run is cancelled;
-  // a caller-supplied transport (tests) owns its own policy.
-  const transport = options.transport ?? createMockTransport({
-    latencyMs: options.transportLatencyMs ?? 1200,
-    shouldCancel: () => [...runs.values()].some((r) => r.state === 'analyzing' && r.cancelled),
-  });
+  // Cancellation is per-run: each analyzing run gets its own mock transport
+  // whose shouldCancel observes only that run's cancelled flag. A stale
+  // cancelled run therefore can never cancel a newer epoch's run (the old
+  // global "any run cancelled" predicate is gone). A caller-supplied
+  // transport (tests) owns its own policy.
+  const customTransport = options.transport ?? null;
+  const defaultLatencyMs = options.transportLatencyMs ?? 1200;
   let analysesLeft = options.analysesLeft ?? 3;
   let proposalsLeft = options.proposalsLeft ?? 1;
   const runTimeoutMs = options.runTimeoutMs ?? 120_000;
@@ -158,6 +161,30 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
   const inflight = new Set<Promise<void>>();
   let verified: ValidatedVideo | null = null;
   let stagedUploadId: string | null = null;
+  // Epoch that owns the currently staged bytes (null when nothing staged).
+  // Cleanup (revoke, stale settle, refused analyze) only touches staging and
+  // the verified fields when they still belong to its own epoch.
+  let stagedEpoch: number | null = null;
+
+  function clearStagedFieldsIfOwned(ownerEpoch: number): void {
+    if (stagedEpoch === ownerEpoch) {
+      verified = null;
+      stagedUploadId = null;
+      stagedEpoch = null;
+    }
+  }
+
+  async function discardStagingIfOwned(ownerEpoch: number, ownerUploadId: string | null): Promise<void> {
+    if (stagedEpoch !== ownerEpoch) return;
+    if (ownerUploadId === null || stagedUploadId !== ownerUploadId) return;
+    if (uploads.currentUploadId() !== ownerUploadId) {
+      // Uploads layer already moved on; drop only our cached fields.
+      clearStagedFieldsIfOwned(ownerEpoch);
+      return;
+    }
+    await uploads.discardIfStaged(ownerUploadId);
+    clearStagedFieldsIfOwned(ownerEpoch);
+  }
   let permitCounter = 0;
   let runCounter = 0;
   // Single-flight slot for upload/analyze/propose, acquired synchronously
@@ -193,17 +220,27 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
     permits.revokePending();
     pendingByKey.clear();
     // Bump the epoch and free the slot: stale in-flight runs settle as
-    // CANCELLED but can never release a newer run's slot (see settleRun).
+    // CANCELLED but can never release a newer run's slot, touch newer staged
+    // bytes, or clear newer verified fields (see settleRun + discard guards).
+    // The doomed staging identity is captured synchronously so the async
+    // delete can never touch bytes staged by a newer epoch afterwards.
+    const doomedUploadId = stagedUploadId;
+    const doomedEpoch = stagedEpoch;
     epoch += 1;
     flight = null;
     verified = null;
     stagedUploadId = null;
+    stagedEpoch = null;
     for (const run of runs.values()) {
       if (run.state === 'analyzing') {
         run.cancelled = true;
       }
     }
-    void uploads.discard();
+    if (doomedUploadId !== null && doomedEpoch !== null) {
+      void uploads.discardIfStaged(doomedUploadId);
+    } else {
+      void uploads.discardIfStaged(null);
+    }
   }
 
   function publicStatus(authenticated: boolean): Record<string, unknown> {
@@ -222,6 +259,11 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
    * Permit-before-upload: the request declares the exact (sha256, bytes,
    * action) the owner permitted in the terminal. Without a live eligible
    * permit nothing is staged and no trusted-boundary decode work happens.
+   * Permit eligibility is checked synchronously before the single-flight
+   * slot is acquired, so unpermitted attempts do zero work and never take
+   * the slot; the slot itself is acquired synchronously before the first
+   * await so two concurrent uploads (or an upload racing an analyze) can
+   * never interleave staging/verification on the shared slot.
    */
   async function handleUpload(
     body: Uint8Array,
@@ -249,28 +291,50 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
     if (!eligible.ok) {
       return refusal(eligible.code, 'the terminal permit for this file and action is not usable', 403);
     }
-    const staged = await uploads.stage(body);
-    if (!staged.ok) return refusal(staged.code, staged.detail, 422);
-    const checked = await uploads.verify(staged.uploadId);
-    if (!checked.ok) {
-      return refusal(checked.code, checked.detail, 422);
+    // Synchronous acquisition: no await precedes it, so a concurrent upload
+    // or analyze observes the busy slot.
+    flight = { epoch };
+    const myEpoch = epoch;
+    try {
+      const staged = await uploads.stage(body);
+      if (!staged.ok) return refusal(staged.code, staged.detail, 422);
+      if (myEpoch !== epoch) {
+        await uploads.discardIfStaged(staged.uploadId);
+        return refusal('CANCELLED', 'upload revoked before validation completed', 409);
+      }
+      const checked = await uploads.verify(staged.uploadId);
+      if (!checked.ok) {
+        // Verify already removed only its own staging identity; drop cached
+        // fields only when they still belong to this upload's epoch.
+        clearStagedFieldsIfOwned(myEpoch);
+        return refusal(checked.code, checked.detail, 422);
+      }
+      if (myEpoch !== epoch) {
+        await uploads.discardIfStaged(staged.uploadId);
+        return refusal('CANCELLED', 'upload revoked before validation completed', 409);
+      }
+      if (checked.video.sha256 !== sha || checked.video.bytes !== declaredBytes) {
+        await uploads.discardIfStaged(staged.uploadId);
+        clearStagedFieldsIfOwned(myEpoch);
+        return refusal('MEDIA_CHANGED', 'staged bytes differ from the declared upload', 422);
+      }
+      verified = checked.video;
+      stagedUploadId = staged.uploadId;
+      stagedEpoch = myEpoch;
+      const out = jsonResponse(200, {
+        ok: true,
+        uploadId: staged.uploadId,
+        sha256: verified.sha256,
+        bytes: verified.bytes,
+        durationSec: verified.durationSec,
+        width: verified.width,
+        height: verified.height,
+        codec: verified.videoCodec,
+      });
+      return out;
+    } finally {
+      releaseFlight(myEpoch);
     }
-    if (checked.video.sha256 !== sha || checked.video.bytes !== declaredBytes) {
-      await uploads.discard();
-      return refusal('MEDIA_CHANGED', 'staged bytes differ from the declared upload', 422);
-    }
-    verified = checked.video;
-    stagedUploadId = staged.uploadId;
-    return jsonResponse(200, {
-      ok: true,
-      uploadId: staged.uploadId,
-      sha256: verified.sha256,
-      bytes: verified.bytes,
-      durationSec: verified.durationSec,
-      width: verified.width,
-      height: verified.height,
-      codec: verified.videoCodec,
-    });
   }
 
   function quotaFor(kind: MockPermitKind): number {
@@ -304,7 +368,8 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
         run.state = 'cancelled';
         run.finishedAt = now();
         run.result = { ok: false as const, code: 'CANCELLED', detail: 'run cancelled before the mock response landed' };
-        await uploads.discard();
+        // Epoch-scoped: a stale run must never delete a newer epoch's staging.
+        await discardStagingIfOwned(run.epoch, run.stagedUploadId ?? null);
         return;
       }
       const sanitized = kind === 'analyze'
@@ -331,7 +396,8 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
       run.result = (cancelled || timedOut)
         ? { ok: false, code: timedOut ? 'TIMEOUT' : 'CANCELLED', detail: 'run cancelled or timed out; staged bytes already deleted' }
         : { ok: false, code: 'TRANSPORT_REFUSED', detail: 'mock transport refused the internal request' };
-      await uploads.discard();
+      // Epoch-scoped: a stale run must never delete a newer epoch's staging.
+      await discardStagingIfOwned(run.epoch, run.stagedUploadId ?? null);
     } finally {
       if (timer !== undefined) clearTimeout(timer);
       releaseFlight(run.epoch);
@@ -365,10 +431,11 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
     // Epoch captured at acquisition: after an await, a revoke may have freed
     // this slot and a newer run may own it — never clear another epoch's slot.
     const myEpoch = epoch;
+    // Owned staging snapshot: cleanup only touches staging/verified fields
+    // when they still belong to this attempt's epoch.
+    const ownedUploadId = stagedUploadId;
     const releaseAndRefuse = async (code: string, detail: string, status: number): Promise<ApiResult> => {
-      await uploads.discard();
-      verified = null;
-      stagedUploadId = null;
+      await discardStagingIfOwned(myEpoch, ownedUploadId);
       releaseFlight(myEpoch);
       return refusal(code, detail, status);
     };
@@ -396,9 +463,8 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
       return releaseAndRefuse('MEDIA_CHANGED', 'staged bytes changed before encoding', 422);
     }
     const part = encodeVideoPart(new Uint8Array(bytesToEncode.buffer, bytesToEncode.byteOffset, bytesToEncode.byteLength));
-    await uploads.discard();
-    verified = null;
-    stagedUploadId = null;
+    await uploads.discardIfStaged(ownedUploadId);
+    clearStagedFieldsIfOwned(myEpoch);
     if (!part.ok) {
       releaseFlight(myEpoch);
       return refusal(part.code, 'verified bytes failed wire encoding', 422);
@@ -407,14 +473,20 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
     const runId = `local-${new Date(now()).toISOString().slice(0, 10)}-${String(runCounter).padStart(3, '0')}`;
     const run: RunRecord = {
       runId, kind, sha256, state: 'analyzing', createdAt: now(), finishedAt: null,
-      cancelled: false, result: null, epoch,
+      cancelled: false, result: null, epoch, stagedUploadId: null,
     };
     runs.set(runId, run);
     if (runs.size > 20) {
       const oldest = [...runs.values()].filter((r) => r.state !== 'analyzing').sort((a, b) => (a.finishedAt ?? 0) - (b.finishedAt ?? 0))[0];
       if (oldest !== undefined) runs.delete(oldest.runId);
     }
-    const settled = settleRun(run, kind, transport.respond({ kind, runId, sha256, videoBytes: bytes as number }));
+    // Per-run transport: cancellation observes only this run's flag, never a
+    // stale run's. Caller-supplied transports keep their own policy.
+    const runTransport = customTransport ?? createMockTransport({
+      latencyMs: defaultLatencyMs,
+      shouldCancel: () => run.cancelled,
+    });
+    const settled = settleRun(run, kind, runTransport.respond({ kind, runId, sha256, videoBytes: bytes as number }));
     inflight.add(settled);
     void settled.finally(() => {
       inflight.delete(settled);

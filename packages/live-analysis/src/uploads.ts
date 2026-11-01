@@ -158,6 +158,7 @@ export class StagedUploads {
     if (this.#staged === null || this.#staged.uploadId !== uploadId) {
       return refusal('UPLOAD_NOT_FOUND', 'no such staged upload');
     }
+    const stagedId = this.#staged.uploadId;
     try {
       const video = await validateVideoFile(path.join(this.#staged.dir, 'upload.mp4'), {
         allowedRoot: this.stagingRoot,
@@ -166,7 +167,7 @@ export class StagedUploads {
       });
       return { ok: true, video };
     } catch (error) {
-      await this.discard();
+      await this.discardIfStaged(stagedId);
       return refusal(mediaRefusal(error), 'staged upload failed trusted-boundary validation');
     }
   }
@@ -176,12 +177,31 @@ export class StagedUploads {
     return readVerifiedVideoBytes(video);
   }
 
+  /** Currently staged upload id, or null when nothing is staged. */
+  currentUploadId(): string | null {
+    return this.#staged?.uploadId ?? null;
+  }
+
   /** Delete staged bytes. Safe to call when nothing is staged. */
   async discard(): Promise<void> {
     if (this.#staged !== null) {
       await rm(this.#staged.dir, { recursive: true, force: true });
       this.#staged = null;
     }
+  }
+
+  /**
+   * Delete staged bytes only when they are still the expected staging
+   * identity. A newer staging (different uploadId) is left untouched, so a
+   * stale run or revoke can never delete a newer epoch's bytes. A null
+   * expectation only succeeds when nothing is staged.
+   */
+  async discardIfStaged(expectedUploadId: string | null): Promise<boolean> {
+    if (this.#staged === null) return expectedUploadId === null;
+    if (expectedUploadId === null || this.#staged.uploadId !== expectedUploadId) return false;
+    await rm(this.#staged.dir, { recursive: true, force: true });
+    this.#staged = null;
+    return true;
   }
 
   /** Delete the whole staging tree (shutdown/revoke path). */
