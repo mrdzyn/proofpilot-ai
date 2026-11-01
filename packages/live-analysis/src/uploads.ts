@@ -29,11 +29,22 @@ export type UploadRefusal =
   | 'UPLOAD_EMPTY'
   | 'NOT_MP4'
   | 'MEDIA_INVALID'
-  | 'UPLOAD_NOT_FOUND';
+  | 'UPLOAD_NOT_FOUND'
+  | 'STALE_OWNER';
 
 export type StageResult =
   | Readonly<{ ok: true; uploadId: string; bytes: number }>
   | Readonly<{ ok: false; code: UploadRefusal; detail: string }>;
+
+/**
+ * Ownership ticket for one staging operation. Captured synchronously before
+ * the first await; a revoked-then-superseded operation resumes with a stale
+ * ticket and must not mutate the store.
+ */
+export interface StageTicket {
+  readonly generation: number;
+  readonly priorUploadId: string | null;
+}
 
 export type VerifyResult =
   | Readonly<{ ok: true; video: ValidatedVideo }>
@@ -107,6 +118,15 @@ export class StagedUploads {
   readonly stagingRoot: string;
   readonly #deps: UploadStoreDeps;
   #staged: { uploadId: string; dir: string } | null = null;
+  /**
+   * Ownership generation. Bumped only by stage() publishing new bytes and
+   * by invalidateStaged(); a ticketed operation re-validates after each
+   * await, so a revoked operation resuming late can never delete, replace,
+   * or publish over newer staging. Plain deletes never bump: revocation
+   * retires tickets synchronously first, and an async delete must not stale
+   * a newer ticket cut after that retirement.
+   */
+  #generation = 0;
 
   private constructor(stagingRoot: string, deps: UploadStoreDeps) {
     this.stagingRoot = stagingRoot;
@@ -125,9 +145,42 @@ export class StagedUploads {
     return new StagedUploads(stagingRoot, deps ?? {});
   }
 
-  /** Stage raw request bytes. Replaces (and deletes) any previous staging. */
-  async stage(bytes: Uint8Array): Promise<StageResult> {
-    await this.discard();
+  /**
+   * Capture a staging ownership ticket synchronously. The caller must do this
+   * in the same synchronous critical section where it acquires the
+   * single-flight slot, before the first await.
+   */
+  createStageTicket(): StageTicket {
+    return { generation: this.#generation, priorUploadId: this.#staged?.uploadId ?? null };
+  }
+
+  /**
+   * Synchronously retire all outstanding tickets without touching bytes.
+   * Revocation calls this first so a suspended staging operation resumes
+   * stale even when the async delete has not run yet; the next epoch's
+   * staging then proceeds on a newer generation.
+   */
+  invalidateStaged(): void {
+    this.#generation += 1;
+  }
+
+  /**
+   * Stage raw request bytes. Replaces (and deletes) the exact prior staging
+   * named by the ticket; any generation or identity drift before or during
+   * the mutation refuses with STALE_OWNER and touches nothing, cleaning up
+   * only the operation's own droppings. Unticketed callers keep the legacy
+   * replace semantics (no concurrent owner can exist for them).
+   */
+  async stage(bytes: Uint8Array, ticket?: StageTicket): Promise<StageResult> {
+    let expected: string | null | undefined = ticket?.priorUploadId;
+    const owned = (): boolean =>
+      expected === undefined ||
+      (ticket !== undefined &&
+        ticket.generation === this.#generation &&
+        (this.#staged?.uploadId ?? null) === expected);
+    if (!owned()) {
+      return refusal('STALE_OWNER', 'staging ownership changed (revoked); refusing to mutate');
+    }
     if (!(bytes instanceof Uint8Array) || bytes.length === 0) {
       return refusal('UPLOAD_EMPTY', 'upload body is empty');
     }
@@ -136,6 +189,11 @@ export class StagedUploads {
     }
     if (detectContainer(bytes.subarray(0, 64)).kind !== 'mp4') {
       return refusal('NOT_MP4', 'upload bytes are not a supported MP4 (container signature check failed)');
+    }
+    await this.#removeStagedUnchecked();
+    expected = null;
+    if (!owned()) {
+      return refusal('STALE_OWNER', 'staging ownership changed (revoked); refusing to mutate');
     }
     const uploadId = `up-${createHash('sha256').update(bytes).digest('hex').slice(0, 12)}-${randomBytes(4).toString('hex')}`;
     const dir = path.join(this.stagingRoot, uploadId);
@@ -146,7 +204,12 @@ export class StagedUploads {
       await rm(dir, { recursive: true, force: true });
       return refusal('MEDIA_INVALID', 'staged bytes could not be written');
     }
+    if (!owned()) {
+      await rm(dir, { recursive: true, force: true });
+      return refusal('STALE_OWNER', 'staging ownership changed (revoked); refusing to publish');
+    }
     this.#staged = { uploadId, dir };
+    this.#generation += 1;
     return { ok: true, uploadId, bytes: bytes.length };
   }
 
@@ -182,11 +245,23 @@ export class StagedUploads {
     return this.#staged?.uploadId ?? null;
   }
 
-  /** Delete staged bytes. Safe to call when nothing is staged. */
-  async discard(): Promise<void> {
+  /** Unchecked removal: deletes the staged dir without retiring tickets. */
+  async #removeStagedUnchecked(): Promise<void> {
     if (this.#staged !== null) {
       await rm(this.#staged.dir, { recursive: true, force: true });
       this.#staged = null;
+    }
+  }
+
+  /**
+   * Delete staged bytes. Safe to call when nothing is staged. Never bumps
+   * the generation: revocation retires tickets synchronously via
+   * invalidateStaged(), so an async delete must not stale a newer ticket
+   * cut after that invalidation (it would refuse a live new-epoch upload).
+   */
+  async discard(): Promise<void> {
+    if (this.#staged !== null) {
+      await this.#removeStagedUnchecked();
     }
   }
 

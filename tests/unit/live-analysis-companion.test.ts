@@ -13,14 +13,16 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, rmSync, readdirSync } from 'node:fs';
+import { mkdtempSync, rmSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createCompanion, type ApiMeta, type Companion } from '../../packages/live-analysis/src/server.ts';
 import { LocalSessionManager } from '../../packages/live-analysis/src/local-session.ts';
 import { OfflineMockPermitLedger } from '../../packages/live-analysis/src/mock-permits.ts';
-import { StagedUploads } from '../../packages/live-analysis/src/uploads.ts';
+import { createMockTransport, type MockTransport, type MockTransportRequest } from '../../packages/live-analysis/src/mock-transport.ts';
+import { StagedUploads, type StageTicket } from '../../packages/live-analysis/src/uploads.ts';
 import type { MediaDeps } from '../../packages/intake/src/media.ts';
+import type { ValidatedVideo } from '../../packages/intake/src/media.ts';
 
 const PORT = 5188;
 const HOST = `127.0.0.1:${PORT}`;
@@ -61,6 +63,7 @@ async function freshApp(extra?: {
   mediaDeps?: MediaDeps;
   analysesLeft?: number;
   proposalsLeft?: number;
+  transport?: MockTransport;
 }): Promise<Companion> {
   const sub = mkdtempSync(path.join(root, 'app-'));
   const app = await createCompanion({
@@ -68,6 +71,7 @@ async function freshApp(extra?: {
     bind: false,
     serveRoot: null,
     uploads: StagedUploads.openDir(sub, { mediaDeps: extra?.mediaDeps ?? stubMedia }),
+    transport: extra?.transport,
     transportLatencyMs: extra?.transportLatencyMs ?? 0,
     runTimeoutMs: extra?.runTimeoutMs ?? 5000,
     session: extra?.session,
@@ -664,6 +668,113 @@ test('L-RACE-6b: a stale settling run never deletes newer staged media', async (
   const second = await analyze(app, session2, up2);
   assert.equal(second.status, 200, JSON.stringify(second.body));
   await awaitRunState(app, session2, (second.body as { runId: string }).runId, 'done', 15_000);
+});
+
+test('L-RACE-7: a revoked upload resuming late cannot delete or replace newer staging', async () => {
+  // Deferred-stage schedule: suspend upload A inside the storage stage()
+  // mutation, revoke, complete a full new-epoch upload B, then resume A.
+  // A must refuse; B's bytes stay staged and usable.
+  const app = await freshApp();
+  const session = await pair(app);
+  permit(app, 'analyze', shaOf(GOOD_BYTES), GOOD_BYTES.length);
+  let stageEntered = false;
+  let gateOpen = false;
+  const origStage = app.uploads.stage.bind(app.uploads);
+  app.uploads.stage = async (bytes: Uint8Array, ticket?: StageTicket) => {
+    if (!stageEntered) {
+      stageEntered = true;
+      const start = Date.now();
+      while (!gateOpen) {
+        if (Date.now() - start > 10_000) throw new Error('stage gate timed out');
+        await new Promise((r) => setTimeout(r, 10));
+      }
+    }
+    return origStage(bytes, ticket);
+  };
+  const flightA = app.dispatch(
+    meta({ ...declareUpload(shaOf(GOOD_BYTES), GOOD_BYTES.length, 'analyze') }, session),
+    GOOD_BYTES,
+  );
+  const start = Date.now();
+  while (!stageEntered) {
+    if (Date.now() - start > 10_000) throw new Error('upload A never entered stage');
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  app.terminalRevoke();
+  const session2 = await pair(app);
+  permit(app, 'analyze', shaOf(GOOD_BYTES), GOOD_BYTES.length);
+  const upB = await uploadVideo(app, GOOD_BYTES, session2, { sha256: shaOf(GOOD_BYTES), bytes: GOOD_BYTES.length, kind: 'analyze' });
+  assert.equal(app.uploads.currentUploadId(), upB.uploadId);
+  gateOpen = true;
+  const outA = await flightA;
+  assert.equal(outA.status, 409);
+  assert.equal((outA.body as { code: string }).code, 'CANCELLED');
+  assert.equal(app.uploads.currentUploadId(), upB.uploadId);
+  assert.deepEqual(readdirSync(app.uploads.stagingRoot), [upB.uploadId]);
+  const run = await analyze(app, session2, upB);
+  assert.equal(run.status, 200, JSON.stringify(run.body));
+  await awaitRunState(app, session2, (run.body as { runId: string }).runId, 'done', 15_000);
+});
+
+test('L-RACE-8: a revoked analyze resuming after readBytes refuses without transport, quota, or slot theft', async () => {
+  // Deferred-read schedule: hold analyze A in readBytes (its read was
+  // already underway and completes successfully), revoke, run the full
+  // new-epoch flow, then release A's read. A must refuse before creating a
+  // run or invoking transport; B keeps the slot and completes.
+  const calls: MockTransportRequest[] = [];
+  const inner = createMockTransport({ latencyMs: 300 });
+  const counting: MockTransport = {
+    label: inner.label,
+    calls,
+    respond: (req) => {
+      calls.push({ ...req });
+      return inner.respond(req);
+    },
+  };
+  const app = await freshApp({ transport: counting });
+  const session = await pair(app);
+  permit(app, 'analyze', shaOf(GOOD_BYTES), GOOD_BYTES.length);
+  const upA = await uploadVideo(app, GOOD_BYTES, session, { sha256: shaOf(GOOD_BYTES), bytes: GOOD_BYTES.length, kind: 'analyze' });
+  let readEntered = false;
+  let gateOpen = false;
+  const origRead = app.uploads.readBytes.bind(app.uploads);
+  app.uploads.readBytes = async (video: ValidatedVideo) => {
+    if (!readEntered) {
+      readEntered = true;
+      const snapshot = Buffer.from(readFileSync(video.path));
+      const start = Date.now();
+      while (!gateOpen) {
+        if (Date.now() - start > 10_000) throw new Error('read gate timed out');
+        await new Promise((r) => setTimeout(r, 10));
+      }
+      return snapshot;
+    }
+    return origRead(video);
+  };
+  const flightA = analyze(app, session, upA);
+  const start = Date.now();
+  while (!readEntered) {
+    if (Date.now() - start > 10_000) throw new Error('analyze A never reached readBytes');
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  app.terminalRevoke();
+  const session2 = await pair(app);
+  permit(app, 'analyze', shaOf(GOOD_BYTES), GOOD_BYTES.length);
+  const upB = await uploadVideo(app, GOOD_BYTES, session2, { sha256: shaOf(GOOD_BYTES), bytes: GOOD_BYTES.length, kind: 'analyze' });
+  const runB = await analyze(app, session2, upB);
+  assert.equal(runB.status, 200, JSON.stringify(runB.body));
+  const runIdB = (runB.body as { runId: string }).runId;
+  const busy = await analyze(app, session2, upB);
+  assert.equal((busy.body as { code: string }).code, 'RUN_BUSY');
+  gateOpen = true;
+  const outA = await flightA;
+  assert.equal(outA.status, 409);
+  assert.equal((outA.body as { code: string }).code, 'CANCELLED');
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0]?.runId, runIdB);
+  await awaitRunState(app, session2, runIdB, 'done', 15_000);
+  const status = await app.dispatch(meta({ method: 'GET', path: '/api/status' }, session2), EMPTY);
+  assert.equal(((status.body as { quota: { analysesLeft: number } }).quota).analysesLeft, 2);
 });
 
 test('L-AUTH-1: expired sessions are rejected', async () => {

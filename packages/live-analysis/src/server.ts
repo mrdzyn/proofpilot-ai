@@ -224,6 +224,9 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
     // bytes, or clear newer verified fields (see settleRun + discard guards).
     // The doomed staging identity is captured synchronously so the async
     // delete can never touch bytes staged by a newer epoch afterwards.
+    // Retire outstanding staging tickets first: a suspended upload resumes
+    // stale even when the async delete below has not run yet.
+    uploads.invalidateStaged();
     const doomedUploadId = stagedUploadId;
     const doomedEpoch = stagedEpoch;
     epoch += 1;
@@ -292,12 +295,20 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
       return refusal(eligible.code, 'the terminal permit for this file and action is not usable', 403);
     }
     // Synchronous acquisition: no await precedes it, so a concurrent upload
-    // or analyze observes the busy slot.
+    // or analyze observes the busy slot. The staging ticket is captured in
+    // the same critical section: a revoke retires it, so a suspended stage
+    // resumes stale and can neither delete nor replace newer bytes.
     flight = { epoch };
     const myEpoch = epoch;
+    const ticket = uploads.createStageTicket();
     try {
-      const staged = await uploads.stage(body);
-      if (!staged.ok) return refusal(staged.code, staged.detail, 422);
+      const staged = await uploads.stage(body, ticket);
+      if (!staged.ok) {
+        if (staged.code === 'STALE_OWNER') {
+          return refusal('CANCELLED', 'upload revoked before staging completed', 409);
+        }
+        return refusal(staged.code, staged.detail, 422);
+      }
       if (myEpoch !== epoch) {
         await uploads.discardIfStaged(staged.uploadId);
         return refusal('CANCELLED', 'upload revoked before validation completed', 409);
@@ -462,18 +473,34 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
     } catch {
       return releaseAndRefuse('MEDIA_CHANGED', 'staged bytes changed before encoding', 422);
     }
+    // Revocation recheck: the run does not exist yet, so a revoke that
+    // landed during readBytes is observable only here. A stale attempt must
+    // not encode, create a run, invoke transport, spend quota, mutate newer
+    // fields, or release a newer slot.
+    if (myEpoch !== epoch) {
+      releaseFlight(myEpoch);
+      return refusal('CANCELLED', 'analyze revoked while reading staged bytes', 409);
+    }
     const part = encodeVideoPart(new Uint8Array(bytesToEncode.buffer, bytesToEncode.byteOffset, bytesToEncode.byteLength));
     await uploads.discardIfStaged(ownedUploadId);
     clearStagedFieldsIfOwned(myEpoch);
+    // A revoke may also have landed during the consume above; recheck before
+    // creating a run or invoking transport.
+    if (myEpoch !== epoch) {
+      releaseFlight(myEpoch);
+      return refusal('CANCELLED', 'analyze revoked before the run started', 409);
+    }
     if (!part.ok) {
       releaseFlight(myEpoch);
       return refusal(part.code, 'verified bytes failed wire encoding', 422);
     }
     runCounter += 1;
     const runId = `local-${new Date(now()).toISOString().slice(0, 10)}-${String(runCounter).padStart(3, '0')}`;
+    // Pinned to the attempt's original epoch (never the current global):
+    // settle may only release or clean up this epoch's slot and staging.
     const run: RunRecord = {
       runId, kind, sha256, state: 'analyzing', createdAt: now(), finishedAt: null,
-      cancelled: false, result: null, epoch, stagedUploadId: null,
+      cancelled: false, result: null, epoch: myEpoch, stagedUploadId: null,
     };
     runs.set(runId, run);
     if (runs.size > 20) {
