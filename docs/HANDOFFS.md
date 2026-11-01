@@ -1655,5 +1655,34 @@ no live inference, no deploy. Do not self-certify.
 
 ### Next action
 Independent GPT-6 exact-head re-audit of PR #31 at the new head; STOP afterwards — no merge, deploy, provider calls, or D9 activation.
+## Handoff: UI-C3-02-I8 — PR #31 revocation-during-pre-run remediation (re-audit comment 6560205881)
+
+- **Task / phase:** `tasks/UI-C3-02-I234-CONSOLIDATED.md` (offline I2+I3+I4 only; D9 blocks any live call)
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** ONE independent GPT-6 security + functional re-audit, then project owner
+- **Branch:** `feat/ui-c3-02-i2i3i4-consolidated`
+- **Implementation head:** `934e9eaea465e19b5a7986d6244dfc3dd0f1fd90` (on top of audited `3e095f4`; plus a handoff-only docs commit)
+- **PR:** #31 (Draft, unmerged)
+- **State:** READY FOR REVIEW. No merge, deploy, provider calls, spend, or D9 activation.
+
+### Completed
+- **MAJOR-1 (deferred stage):** `StagedUploads.stage()` takes an ownership ticket cut synchronously with slot acquisition; `terminalRevoke` retires tickets synchronously via `invalidateStaged()`; the ticket is re-validated before and during the mutation (refuses `STALE_OWNER`, touches nothing, cleans only its own droppings). Plain deletes never bump the generation (an async delete must not stale a newer ticket — found live by L-RACE-8's setup). New test L-RACE-7 (gate inside `stage()`, revoke, full new-epoch upload, resume: A `CANCELLED`, B staged and analyzable).
+- **MAJOR-2 (deferred read):** analyze rechecks `myEpoch !== epoch` immediately after `readBytes` and again after the consume, before creating a run or invoking transport; stale attempts refuse `CANCELLED` with no transport call, quota spend, field mutation, or slot release; runs are created with `epoch: myEpoch`. New test L-RACE-8 (gated `readBytes` with snapshotted bytes, revoke, full new-epoch flow, release: A `CANCELLED`, exactly one transport call — B's — B `done`, quota 2).
+- **Regression proof:** L-RACE-7/8 FAIL on the unfixed tree (stashed src) and PASS with the fix; companion file 26/26; all prior tests (L-RACE-1–6b, permit-first, cancel, binding, shutdown-shape) untouched and green.
+- **Evidence hygiene (audit MINOR):** `Active handoff` now points here (was stale at I6 while I7 existed); the I7 "CI pending" line is superseded — run `41321950795` at `3e095f4` passed both jobs. Hosted CI scope is lint + typecheck + unit + security + `f01:baseline` only; it never ran the HTTP/browser/shutdown suites. Real-loopback/Chromium QA numbers from earlier handoffs belong to previous heads and are labeled as such; they were not re-runnable here (sandbox bind EPERM, identical on base).
+
+### Validation
+- `pnpm lint` clean; root + dashboard typecheck clean.
+- Companion unit file: 26/26 PASS. Full unit: 475/491 — the same 16 failures as pristine base (sandbox-blocked listeners/ports; zero live-analysis failures).
+- Security: 139/139 PASS.
+- HTTP/browser/shutdown suites: unrunnable in this sandbox (EPERM, identical on base); exact-head hosted CI pending on push.
+- Zero provider calls, credential reads, spend, quota/activation changes, D9-gate touches, or stored-proposal access.
+
+### Continuation notes
+- `dashboard/dist/` remains uncommitted (as before).
+- If future work adds another store mutation path, it must either take the ticket or bump via `invalidateStaged()` semantics — plain deletes stay generation-neutral by design.
+
+### Next action
+Independent GPT-6 exact-head re-audit of PR #31 at the new head; STOP afterwards — no merge, deploy, provider calls, or D9 activation.
 
 <!-- HANDOFF_ENTRIES_END -->
