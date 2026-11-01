@@ -14,6 +14,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, rmSync, readdirSync, readFileSync } from 'node:fs';
+import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createCompanion, type ApiMeta, type Companion } from '../../packages/live-analysis/src/server.ts';
@@ -64,13 +65,14 @@ async function freshApp(extra?: {
   analysesLeft?: number;
   proposalsLeft?: number;
   transport?: MockTransport;
+  removeTree?: (dir: string) => Promise<void>;
 }): Promise<Companion> {
   const sub = mkdtempSync(path.join(root, 'app-'));
   const app = await createCompanion({
     port: PORT,
     bind: false,
     serveRoot: null,
-    uploads: StagedUploads.openDir(sub, { mediaDeps: extra?.mediaDeps ?? stubMedia }),
+    uploads: StagedUploads.openDir(sub, { mediaDeps: extra?.mediaDeps ?? stubMedia, removeTree: extra?.removeTree }),
     transport: extra?.transport,
     transportLatencyMs: extra?.transportLatencyMs ?? 0,
     runTimeoutMs: extra?.runTimeoutMs ?? 5000,
@@ -775,6 +777,101 @@ test('L-RACE-8: a revoked analyze resuming after readBytes refuses without trans
   await awaitRunState(app, session2, runIdB, 'done', 15_000);
   const status = await app.dispatch(meta({ method: 'GET', path: '/api/status' }, session2), EMPTY);
   assert.equal(((status.body as { quota: { analysesLeft: number } }).quota).analysesLeft, 2);
+});
+
+/**
+ * Deferred filesystem-delete gate: suspends the FIRST tracked-staging
+ * removal inside the real `rm`, letting revocation and republication land
+ * while the older deletion is still pending. Later removals run ungated.
+ */
+function deferredDeleteGate(): {
+  removeTree: (dir: string) => Promise<void>;
+  entered: () => boolean;
+  open: () => void;
+} {
+  let entered = false;
+  let gateOpen = false;
+  let gatedOnce = false;
+  return {
+    entered: () => entered,
+    open: () => { gateOpen = true; },
+    removeTree: async (dir: string) => {
+      if (!gatedOnce) {
+        gatedOnce = true;
+        entered = true;
+        const start = Date.now();
+        while (!gateOpen) {
+          if (Date.now() - start > 10_000) throw new Error('delete gate timed out');
+          await new Promise((r) => setTimeout(r, 10));
+        }
+      }
+      await rm(dir, { recursive: true, force: true });
+    },
+  };
+}
+
+async function waitForGate(entry: () => boolean, what: string): Promise<void> {
+  const start = Date.now();
+  while (!entry()) {
+    if (Date.now() - start > 10_000) throw new Error(`${what} never arrived`);
+    await new Promise((r) => setTimeout(r, 10));
+  }
+}
+
+test('L-RACE-9a: revoke-discard suspended mid-delete cannot erase a newer upload', async () => {
+  // P staged. Revoke starts an async discard of P suspended inside the real
+  // rm; epoch B publishes a full new upload; the old delete resumes and
+  // must leave B's identity and bytes untouched.
+  const gate = deferredDeleteGate();
+  const app = await freshApp({ removeTree: gate.removeTree });
+  const session = await pair(app);
+  permit(app, 'analyze', shaOf(GOOD_BYTES), GOOD_BYTES.length);
+  await uploadVideo(app, GOOD_BYTES, session, { sha256: shaOf(GOOD_BYTES), bytes: GOOD_BYTES.length, kind: 'analyze' });
+  app.terminalRevoke();
+  await waitForGate(gate.entered, 'revoke deletion of P');
+  const session2 = await pair(app);
+  permit(app, 'analyze', shaOf(GOOD_BYTES), GOOD_BYTES.length);
+  const upB = await uploadVideo(app, GOOD_BYTES, session2, { sha256: shaOf(GOOD_BYTES), bytes: GOOD_BYTES.length, kind: 'analyze' });
+  assert.equal(app.uploads.currentUploadId(), upB.uploadId);
+  gate.open();
+  // Let the resumed old deletion run to completion (microtask chain after
+  // the real rm; 150 ms dwarfs it deterministically).
+  await new Promise((r) => setTimeout(r, 150));
+  assert.equal(app.uploads.currentUploadId(), upB.uploadId);
+  assert.deepEqual(readdirSync(app.uploads.stagingRoot), [upB.uploadId]);
+  const run = await analyze(app, session2, upB);
+  assert.equal(run.status, 200, JSON.stringify(run.body));
+  await awaitRunState(app, session2, (run.body as { runId: string }).runId, 'done', 15_000);
+});
+
+test('L-RACE-9b: replacement-delete suspended mid-delete cannot erase a newer upload', async () => {
+  // P staged. Upload A starts replacing P and suspends inside the real
+  // rm(P); revoke retires A's ticket and clears the slot; epoch B uploads
+  // and publishes; A resumes and must refuse without touching B.
+  const gate = deferredDeleteGate();
+  const app = await freshApp({ removeTree: gate.removeTree });
+  const session = await pair(app);
+  permit(app, 'analyze', shaOf(GOOD_BYTES), GOOD_BYTES.length);
+  await uploadVideo(app, GOOD_BYTES, session, { sha256: shaOf(GOOD_BYTES), bytes: GOOD_BYTES.length, kind: 'analyze' });
+  // No second permit: uploads only peek, so the same pending permit covers A.
+  const flightA = app.dispatch(
+    meta({ ...declareUpload(shaOf(GOOD_BYTES), GOOD_BYTES.length, 'analyze') }, session),
+    GOOD_BYTES,
+  );
+  await waitForGate(gate.entered, 'replacement deletion of P');
+  app.terminalRevoke();
+  const session2 = await pair(app);
+  permit(app, 'analyze', shaOf(GOOD_BYTES), GOOD_BYTES.length);
+  const upB = await uploadVideo(app, GOOD_BYTES, session2, { sha256: shaOf(GOOD_BYTES), bytes: GOOD_BYTES.length, kind: 'analyze' });
+  gate.open();
+  const outA = await flightA;
+  assert.equal(outA.status, 409);
+  assert.equal((outA.body as { code: string }).code, 'CANCELLED');
+  assert.equal(app.uploads.currentUploadId(), upB.uploadId);
+  assert.deepEqual(readdirSync(app.uploads.stagingRoot), [upB.uploadId]);
+  const run = await analyze(app, session2, upB);
+  assert.equal(run.status, 200, JSON.stringify(run.body));
+  await awaitRunState(app, session2, (run.body as { runId: string }).runId, 'done', 15_000);
 });
 
 test('L-AUTH-1: expired sessions are rejected', async () => {

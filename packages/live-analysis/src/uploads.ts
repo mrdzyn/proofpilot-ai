@@ -53,6 +53,13 @@ export type VerifyResult =
 export interface UploadStoreDeps {
   mediaDeps?: MediaDeps;
   now?: () => Date;
+  /**
+   * Staged-bytes removal. Defaults to recursive force `rm`; tests inject a
+   * deferred gate here to hold a real deletion pending across revocation
+   * and republication. Own-droppings and whole-tree destroy keep direct
+   * `rm` — only tracked-staging deletions go through this seam.
+   */
+  removeTree?: (dir: string) => Promise<void>;
 }
 
 function refusal(code: UploadRefusal, detail: string): StageResult & VerifyResult {
@@ -128,9 +135,12 @@ export class StagedUploads {
    */
   #generation = 0;
 
+  readonly #removeTree: (dir: string) => Promise<void>;
+
   private constructor(stagingRoot: string, deps: UploadStoreDeps) {
     this.stagingRoot = stagingRoot;
     this.#deps = deps;
+    this.#removeTree = deps.removeTree ?? ((dir: string) => rm(dir, { recursive: true, force: true }));
   }
 
   static async create(deps?: UploadStoreDeps): Promise<StagedUploads> {
@@ -245,12 +255,17 @@ export class StagedUploads {
     return this.#staged?.uploadId ?? null;
   }
 
-  /** Unchecked removal: deletes the staged dir without retiring tickets. */
+  /**
+   * Unchecked removal: deletes the staged dir without retiring tickets.
+   * Captures the exact record first and clears the field after the await
+   * only when it still names that record — a newer publication that landed
+   * while the deletion was pending is never erased.
+   */
   async #removeStagedUnchecked(): Promise<void> {
-    if (this.#staged !== null) {
-      await rm(this.#staged.dir, { recursive: true, force: true });
-      this.#staged = null;
-    }
+    const doomed = this.#staged;
+    if (doomed === null) return;
+    await this.#removeTree(doomed.dir);
+    if (this.#staged === doomed) this.#staged = null;
   }
 
   /**
@@ -272,10 +287,11 @@ export class StagedUploads {
    * expectation only succeeds when nothing is staged.
    */
   async discardIfStaged(expectedUploadId: string | null): Promise<boolean> {
-    if (this.#staged === null) return expectedUploadId === null;
-    if (expectedUploadId === null || this.#staged.uploadId !== expectedUploadId) return false;
-    await rm(this.#staged.dir, { recursive: true, force: true });
-    this.#staged = null;
+    const doomed = this.#staged;
+    if (doomed === null) return expectedUploadId === null;
+    if (expectedUploadId === null || doomed.uploadId !== expectedUploadId) return false;
+    await this.#removeTree(doomed.dir);
+    if (this.#staged === doomed) this.#staged = null;
     return true;
   }
 
