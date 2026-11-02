@@ -135,9 +135,9 @@ export function sanitizeProposalResponse(raw: unknown): SanitizeResult {
 }
 
 /**
- * UI-C3-02-BT-LIVE-01: live result sanitizers. Dormant in this slice: the
- * only caller is the D9-gated live settle branch, unreachable while D9 is
- * pending. Rules mirror the mock path exactly (quoted observations, closed
+ * UI-C3-02-D9 (activation): live result sanitizers. The
+ * only caller is the D9-gated live settle branch, reachable only with the
+ * pinned model. Rules mirror the mock path exactly (quoted observations, closed
  * grammar, safe-int usage, length caps), except the envelope carries the
  * provider `model` echo instead of `mockModel`, and success values carry
  * live provenance (`provider: 'baseten'`, exact model, `transport:

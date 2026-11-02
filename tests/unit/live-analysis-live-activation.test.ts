@@ -1,9 +1,9 @@
-// UI-C3-02-D9-I1: live activation readiness at the server boundary.
-// Everything here runs with D9 pending (null), injected fetch doubles, and
-// temp-dir records — zero provider calls, zero credentials. The live branch
-// itself stays unreachable; these tests pin the gates around it: startup
-// refusal without a record, corrupt-record fail-closed, effective budgets
-// minus durable spend, the precheck decision table, and status provenance.
+// UI-C3-02-D9 (activation): live activation readiness at the server
+// boundary. D9 approved, injected fetch doubles only, and
+// temp-dir records — zero provider calls, zero credentials. These tests pin
+// the gates around the live branch: startup refusal without a record,
+// corrupt-record fail-closed, effective budgets minus durable spend, the
+// precheck decision table, and approved status provenance.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -288,16 +288,16 @@ test('L-ACT-5: effective budget subtracts durable spend; restart cannot re-arm',
   assert.equal(live.spentRecord, 'configured');
   assert.equal(live.mediaPin, false);
   assert.equal(live.poisoned, false);
-  // MINOR-1: status words reflect the real gate — D9 pending, not hardcoded.
-  assert.equal(live.transport, 'baseten-live (D9-gated)');
-  assert.equal(live.d9, 'pending (blocks any live call)');
-  assert.equal(live.modelOk, false);
+  // MINOR-1: status words reflect the real gate — D9 approved, not hardcoded.
+  assert.equal(live.transport, 'baseten-live (owner-approved)');
+  assert.equal(live.d9, 'approved');
+  assert.equal(live.modelOk, true);
   const config = (status.body as { config: { modelOk: boolean; d9: string } }).config;
-  assert.equal(config.modelOk, false);
-  assert.equal(config.d9, 'pending (blocks any live call)');
+  assert.equal(config.modelOk, true);
+  assert.equal(config.d9, 'approved');
   assert.equal(
     (status.body as { transport: string }).transport,
-    'mock-fixture + baseten-live (D9-gated; no live call without owner approval)',
+    'mock-fixture + baseten-live (owner-approved)',
   );
   const quota = (status.body as { quota: { analysesLeft: number } }).quota;
   assert.equal(quota.analysesLeft, 3, 'mock quota untouched by recorded live spend');

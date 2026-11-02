@@ -3,15 +3,14 @@
 // outbound-send boundary, and never restored by timeout, cancellation,
 // transport failure, or sanitizer refusal.
 //
-// The live branch is unreachable while D9 is pending (D9_APPROVED_MODEL is
-// null), so end-to-end live-branch tests cannot execute in this slice.
-// These tests pin the units the live branch is wired from: the ledger, the
-// exactly-once send spender, the absence of any refund path, and the dormant
-// server proof that nothing is spent before authorization.
+// D9 approved: the live branch is exercised end to end with injected fetch
+// doubles (L-ATT-6). The remaining tests pin the units the live branch is
+// wired from: the ledger, the exactly-once send spender, and the absence of
+// any refund path.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import {
@@ -163,10 +162,8 @@ test('L-ATT-10: the authorize callback composes with the durable record', () => 
   }
 });
 
-// Dormant server proof: with a live transport injected and a seeded attempt
-// budget, analyze still refuses at the D9 gate — zero provider calls, the
-// seeded budget unconsumed (the only spend site is the transport onSend
-// hook, which never fires), and the mock success quota untouched.
+// D9 approved: the live branch is exercised end to end with injected fetch
+// doubles (fake key, pinned endpoint/model assertions inside the double).
 const HOST = '127.0.0.1:5189';
 const ORIGIN = `http://${HOST}`;
 
@@ -191,10 +188,11 @@ const stubMedia: MediaDeps = {
 let root = '';
 const closers: Array<() => Promise<void>> = [];
 
-function countingDouble(calls: { count: number }): LiveFetch {
+function countingDouble(calls: { count: number; bodies: unknown[] }): LiveFetch {
   return (url, init) => {
     calls.count += 1;
     assert.equal(url, BASETEN_APPROVED_ENDPOINT);
+    calls.bodies.push(JSON.parse(init.body));
     const response: LiveFetchResponse = {
       status: 200,
       url,
@@ -204,12 +202,11 @@ function countingDouble(calls: { count: number }): LiveFetch {
         usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
       }),
     };
-    void init;
     return Promise.resolve(response);
   };
 }
 
-function liveTransportDouble(calls: { count: number }): BasetenTransport {
+function liveTransportDouble(calls: { count: number; bodies: unknown[] }): BasetenTransport {
   const created = createBasetenTransport({
     model: BASETEN_DOCUMENTED_DIRECT_MODEL,
     apiKey: 'NOT-A-REAL-KEY-0000',
@@ -238,9 +235,32 @@ const meta = (parts: Partial<ApiMeta>, sessionToken?: string): ApiMeta => ({
 });
 const json = (value: unknown): Uint8Array => new Uint8Array(Buffer.from(JSON.stringify(value), 'utf8'));
 
-test('L-ATT-6: dormant server spends neither the live budget nor mock quota before authorization', async () => {
-  const calls = { count: 0 };
+async function awaitLiveRun(app: Companion, session: string, runId: string): Promise<Record<string, unknown>> {
+  const start = Date.now();
+  for (;;) {
+    const events = await app.dispatch(meta({ method: 'GET', path: '/api/events' }, session), new Uint8Array(0));
+    const record = ((events.body as { runs: Array<{ runId: string; state: string }> }).runs).find((r) => r.runId === runId);
+    if (record !== undefined && record.state === 'done') return record as unknown as Record<string, unknown>;
+    if (record !== undefined && record.state !== 'analyzing') {
+      throw new Error(`live run ${runId} settled as ${record.state}, wanted done`);
+    }
+    if (Date.now() - start > 10_000) throw new Error(`timed out waiting for live run ${runId}`);
+    await new Promise((r) => setTimeout(r, 25));
+  }
+}
+
+// D9 approved end to end: the pinned demo media flows pair → permit → upload
+// → analyze through the live branch with an injected fetch double. Exactly
+// the approved model goes out, the spend is durably recorded, the result
+// carries baseten-live provenance with reported usage, mock quota is
+// untouched, a foreign-bytes attempt is pinned out with zero extra egress,
+// and the exhausted budget refuses without another POST.
+test('L-ATT-6: approved D9 sends one live request — pin, permit, spend, provenance', async () => {
+  const calls = { count: 0, bodies: [] as unknown[] };
   const sub = mkdtempSync(path.join(root, 'app-'));
+  // The record lives outside the staging dir: close() sweeps staging.
+  const recordPath = path.join(root, 'att-6-spent.jsonl');
+  const sha = shaOf(GOOD_BYTES);
   const app: Companion = await createCompanion({
     port: 5189,
     bind: false,
@@ -251,10 +271,11 @@ test('L-ATT-6: dormant server spends neither the live budget nor mock quota befo
     permits: new OfflineMockPermitLedger(),
     liveTransport: liveTransportDouble(calls),
     liveModel: BASETEN_DOCUMENTED_DIRECT_MODEL,
-    liveAnalysesLeft: 1,
-    liveProposalsLeft: 1,
-    liveSpentRecordPath: path.join(sub, 'spent.jsonl'),
+    liveAnalysesLeft: 2,
+    liveProposalsLeft: 0,
+    liveSpentRecordPath: recordPath,
     liveBootstrapApprovalId: 'd9i1-test-bootstrap-att-6',
+    liveMediaSha256: sha,
   });
   closers.push(() => app.close().catch(() => undefined));
   const code = app.sessions.issueTerminalCode();
@@ -264,7 +285,6 @@ test('L-ATT-6: dormant server spends neither the live budget nor mock quota befo
   );
   assert.equal(pairOut.status, 200, JSON.stringify(pairOut.body));
   const session = (pairOut.body as { sessionToken: string }).sessionToken;
-  const sha = shaOf(GOOD_BYTES);
   assert.equal(app.terminalPermit('analyze', sha, GOOD_BYTES.length).ok, true);
   const up = await app.dispatch(
     meta({ method: 'POST', path: '/api/upload', origin: ORIGIN, contentType: 'application/octet-stream', declaredSha256: sha, declaredBytes: String(GOOD_BYTES.length), declaredKind: 'analyze' }, session),
@@ -275,9 +295,81 @@ test('L-ATT-6: dormant server spends neither the live budget nor mock quota befo
     meta({ method: 'POST', path: '/api/analyze', origin: ORIGIN, contentType: 'application/json' }, session),
     json({ uploadId: (up.body as { uploadId: string }).uploadId, sha256: sha, bytes: GOOD_BYTES.length }),
   );
-  assert.equal(out.status, 403, JSON.stringify(out.body));
-  assert.equal((out.body as { code: string }).code, 'MODEL_UNAVAILABLE_OR_UNAPPROVED');
-  assert.equal(calls.count, 0, 'no provider call, so the send hook never fired and the seeded attempt is intact');
+  assert.equal(out.status, 200, JSON.stringify(out.body));
+  assert.deepEqual(
+    { model: (out.body as { model: string }).model, provider: (out.body as { provider: string }).provider, transport: (out.body as { transport: string }).transport },
+    { model: 'meta-models/muse-spark-open', provider: 'baseten', transport: 'baseten-live' },
+    'the accept names the exact approved model and live provenance',
+  );
+  const record = await awaitLiveRun(app, session, (out.body as { runId: string }).runId);
+  const result = record['result'] as Record<string, unknown>;
+  assert.equal(result['transport'], 'baseten-live');
+  assert.equal(result['liveInference'], true);
+  assert.equal(result['provider'], 'baseten');
+  assert.equal(result['model'], 'meta-models/muse-spark-open');
+  assert.equal(result['observations'], 'live tap then count one');
+  assert.deepEqual(result['usage'], { promptTokens: 10, completionTokens: 5, totalTokens: 15 }, 'reported usage, never billing');
+  assert.equal(calls.count, 1, 'exactly one outbound POST for the authorized attempt');
+  assert.equal((calls.bodies[0] as { model: string }).model, 'meta-models/muse-spark-open', 'the egress names the exact approved model');
+  const spends = readFileSync(recordPath, 'utf8').split('\n').filter((l) => l.includes('"entry":"spend"'));
+  assert.equal(spends.length, 1, 'the send-boundary spend is durably recorded while the companion holds the lock');
   const status = await app.dispatch(meta({ method: 'GET', path: '/api/status' }, session), new Uint8Array(0));
-  assert.equal(((status.body as { quota: { analysesLeft: number } }).quota).analysesLeft, 3, 'mock success quota untouched');
+  assert.equal(((status.body as { quota: { analysesLeft: number } }).quota).analysesLeft, 3, 'mock success quota untouched by the live send');
+  // Media pinning: foreign bytes are refused before any second egress.
+  const other = ftyp(2048);
+  const sha2 = shaOf(other);
+  assert.equal(app.terminalPermit('analyze', sha2, other.length).ok, true);
+  const up2 = await app.dispatch(
+    meta({ method: 'POST', path: '/api/upload', origin: ORIGIN, contentType: 'application/octet-stream', declaredSha256: sha2, declaredBytes: String(other.length), declaredKind: 'analyze' }, session),
+    other,
+  );
+  assert.equal(up2.status, 200, JSON.stringify(up2.body));
+  const pinned = await app.dispatch(
+    meta({ method: 'POST', path: '/api/analyze', origin: ORIGIN, contentType: 'application/json' }, session),
+    json({ uploadId: (up2.body as { uploadId: string }).uploadId, sha256: sha2, bytes: other.length }),
+  );
+  assert.equal(pinned.status, 422, JSON.stringify(pinned.body));
+  assert.equal((pinned.body as { code: string }).code, 'MEDIA_NOT_PINNED');
+  assert.equal(calls.count, 1, 'the pinned-out attempt sends nothing');
+  // The refused permit stays pending by design; the owner revokes, re-pairs,
+  // and re-permits. Budget: the second authorized analysis sends once more,
+  // then refuses.
+  app.terminalRevoke();
+  const code2 = app.sessions.issueTerminalCode();
+  const pairOut2 = await app.dispatch(
+    meta({ method: 'POST', path: '/api/pair', origin: ORIGIN, contentType: 'application/json' }),
+    json({ code: code2 }),
+  );
+  assert.equal(pairOut2.status, 200, JSON.stringify(pairOut2.body));
+  const session2 = (pairOut2.body as { sessionToken: string }).sessionToken;
+  assert.equal(app.terminalPermit('analyze', sha, GOOD_BYTES.length).ok, true);
+  const up3 = await app.dispatch(
+    meta({ method: 'POST', path: '/api/upload', origin: ORIGIN, contentType: 'application/octet-stream', declaredSha256: sha, declaredBytes: String(GOOD_BYTES.length), declaredKind: 'analyze' }, session2),
+    GOOD_BYTES,
+  );
+  assert.equal(up3.status, 200, JSON.stringify(up3.body));
+  const out2 = await app.dispatch(
+    meta({ method: 'POST', path: '/api/analyze', origin: ORIGIN, contentType: 'application/json' }, session2),
+    json({ uploadId: (up3.body as { uploadId: string }).uploadId, sha256: sha, bytes: GOOD_BYTES.length }),
+  );
+  assert.equal(out2.status, 200, JSON.stringify(out2.body));
+  await awaitLiveRun(app, session2, (out2.body as { runId: string }).runId);
+  assert.equal(calls.count, 2, 'the two authorized attempts send exactly twice');
+  assert.equal(app.terminalPermit('analyze', sha, GOOD_BYTES.length).ok, true);
+  const up4 = await app.dispatch(
+    meta({ method: 'POST', path: '/api/upload', origin: ORIGIN, contentType: 'application/octet-stream', declaredSha256: sha, declaredBytes: String(GOOD_BYTES.length), declaredKind: 'analyze' }, session2),
+    GOOD_BYTES,
+  );
+  assert.equal(up4.status, 200, JSON.stringify(up4.body));
+  const spent = await app.dispatch(
+    meta({ method: 'POST', path: '/api/analyze', origin: ORIGIN, contentType: 'application/json' }, session2),
+    json({ uploadId: (up4.body as { uploadId: string }).uploadId, sha256: sha, bytes: GOOD_BYTES.length }),
+  );
+  assert.equal(spent.status, 403, JSON.stringify(spent.body));
+  assert.equal((spent.body as { code: string }).code, 'QUOTA_SPENT');
+  assert.equal(calls.count, 2, 'the exhausted budget sends nothing more');
+  await app.close();
+  const stored = openSpentRecord(recordPath);
+  assert.equal(stored.countSpent('analyze'), 2, 'both authorized sends are durably recorded');
+  stored.release();
 });

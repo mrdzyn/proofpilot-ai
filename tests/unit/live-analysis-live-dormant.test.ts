@@ -1,7 +1,8 @@
-// UI-C3-02-BT-LIVE-01: live dormancy at the server boundary. The injected
-// Baseten transport (mock fetch double, fake key) must never be invoked
-// while D9 is pending: attempts refuse MODEL_UNAVAILABLE_OR_UNAPPROVED
-// before any slot, permit, or quota is touched. Socket-free dispatch only.
+// UI-C3-02-D9 (activation): zero-budget live refusal at the server boundary.
+// The injected Baseten transport (mock fetch double, fake key) must never be
+// invoked without a budgeted attempt: attempts refuse QUOTA_SPENT before any
+// slot, permit, or quota is touched. Socket-free dispatch only. (D9 approved;
+// the D9-first refusal is pinned by L-ACT-1 and the CLI gates by L-CLI-5.)
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -127,7 +128,7 @@ async function pair(app: Companion): Promise<string> {
   return (out.body as { sessionToken: string }).sessionToken;
 }
 
-test('L-LIVE-1: live analyze refuses D9-first with zero provider calls and no slot, permit, or quota spent', async () => {
+test('L-LIVE-1: zero-budget live analyze refuses with zero provider calls and no slot, permit, or quota spent', async () => {
   const calls = { count: 0 };
   const app = await freshLiveApp(calls);
   const session = await pair(app);
@@ -143,7 +144,7 @@ test('L-LIVE-1: live analyze refuses D9-first with zero provider calls and no sl
     json({ uploadId: (up.body as { uploadId: string }).uploadId, sha256: sha, bytes: GOOD_BYTES.length }),
   );
   assert.equal(out.status, 403, JSON.stringify(out.body));
-  assert.equal((out.body as { code: string }).code, 'MODEL_UNAVAILABLE_OR_UNAPPROVED');
+  assert.equal((out.body as { code: string }).code, 'QUOTA_SPENT');
   assert.equal(calls.count, 0, 'the live transport was never invoked');
   const status = await app.dispatch(meta({ method: 'GET', path: '/api/status' }, session), new Uint8Array(0));
   assert.equal(((status.body as { quota: { analysesLeft: number } }).quota).analysesLeft, 3, 'no quota spent');
@@ -153,7 +154,7 @@ test('L-LIVE-1: live analyze refuses D9-first with zero provider calls and no sl
   assert.equal((second as { ok: false; code: string }).code, 'PERMIT_PENDING');
 });
 
-test('L-LIVE-2: live propose refuses the same way; concurrent live attempts serialize as refusals', async () => {
+test('L-LIVE-2: zero-budget live propose refuses the same way; concurrent attempts serialize as refusals', async () => {
   const calls = { count: 0 };
   const app = await freshLiveApp(calls);
   const session = await pair(app);
@@ -171,7 +172,7 @@ test('L-LIVE-2: live propose refuses the same way; concurrent live attempts seri
   const [first, second] = await Promise.all([attempt(), attempt()]);
   assert.equal(first.status, 403);
   assert.equal(second.status, 403);
-  assert.equal((first.body as { code: string }).code, 'MODEL_UNAVAILABLE_OR_UNAPPROVED');
-  assert.equal((second.body as { code: string }).code, 'MODEL_UNAVAILABLE_OR_UNAPPROVED');
+  assert.equal((first.body as { code: string }).code, 'QUOTA_SPENT');
+  assert.equal((second.body as { code: string }).code, 'QUOTA_SPENT');
   assert.equal(calls.count, 0, 'no provider call under concurrency either');
 });

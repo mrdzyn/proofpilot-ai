@@ -1,24 +1,28 @@
 /**
- * UI-C3-02-I1: pure, OFFLINE-ONLY Baseten configuration preflight.
+ * UI-C3-02-D9 (activation): pure, OFFLINE-ONLY Baseten configuration preflight.
  *
  * This module NEVER reads process.env, credentials, a file, or the network.
- * D9 model approval is deliberately absent: no model can pass the production
- * live gate until a separately authorized, independently reviewed change
- * records the exact direct-Baseten model identifier.
+ * D9 model approval is recorded below as the exact direct-Baseten identifier
+ * (owner decision 2026-11-02, PR #34 authorization; corroborated by the
+ * official Baseten Model APIs documentation). The approval is a single
+ * source literal compared by exact string equality only — never assigned
+ * from configuration, never translated, never a fallback.
  */
 export const BASETEN_APPROVED_BASE_URL = 'https://inference.baseten.co/v1' as const;
 export const BASETEN_APPROVED_ENDPOINT = 'https://inference.baseten.co/v1/chat/completions' as const;
 export const BASETEN_DOCUMENTED_DIRECT_MODEL = 'meta-models/muse-spark-open' as const;
 
 /**
- * D9 live-model approval. PENDING (`null`): no model ID is approved, so no
- * live request can be authorized. A separately authorized, independently
- * reviewed D9 decision records the exact direct-Baseten identifier here;
- * until then every live path refuses with MODEL_UNAVAILABLE_OR_UNAPPROVED.
- * This constant is compared by exact string equality only — never assigned
- * from configuration, never translated, never a fallback.
+ * D9 live-model approval. APPROVED: exactly one direct-Baseten identifier
+ * may pass the live gate — `meta-models/muse-spark-open`, byte-identical to
+ * `BASETEN_DOCUMENTED_DIRECT_MODEL` (asserted in tests). Any other value —
+ * aliases (`meta/muse-spark-open`), dated variants, empty, or non-strings —
+ * refuses with MODEL_UNAVAILABLE_OR_UNAPPROVED. Compared by exact string
+ * equality only: never assigned from configuration, never translated, never
+ * a fallback. The null-approval path no longer exists: every live gate
+ * compares against this literal, so removing it fails the build.
  */
-export const D9_APPROVED_MODEL: string | null = null;
+export const D9_APPROVED_MODEL: string = 'meta-models/muse-spark-open';
 
 export type LiveModelResult =
   | Readonly<{ ok: true; model: string }>
@@ -63,8 +67,10 @@ export function validateBasetenBaseUrl(value: unknown): BaseUrlResult {
 }
 
 /**
- * Pre-D9 production boundary: all model IDs are refused, INCLUDING the
- * documented direct-Baseten ID. No model alias, fallback, provider mapping,
+ * Offline production boundary: evaluated WITHOUT credentials, this function
+ * NEVER authorizes a live call — every input refuses, before and after D9.
+ * Offline evaluation cannot see the owner-started key, so no offline answer
+ * may imply live permission. No model alias, fallback, provider mapping,
  * environment override, or implicit approval is possible here.
  */
 export function evaluateOfflineLiveConfiguration(input: Readonly<{ baseUrl: unknown; model: unknown }>): LiveConfigurationResult {
@@ -79,16 +85,12 @@ export function evaluateOfflineLiveConfiguration(input: Readonly<{ baseUrl: unkn
 
 /**
  * D9 live-model gate: the single authorization point for Baseten live
- * inference. While `D9_APPROVED_MODEL` is `null` (pending) every value —
- * including the documented direct-Baseten ID — refuses. After a D9 decision
- * records the exact ID, only that byte-identical value passes; aliases,
- * translations, and fallbacks never do. Pure: no I/O, no env, no network.
+ * inference. Only the byte-identical D9-approved ID passes; aliases,
+ * translations, fallbacks, empty, and non-strings refuse. Pure: no I/O,
+ * no env, no network.
  */
 export function validateLiveModel(value: unknown): LiveModelResult {
   if (typeof value !== 'string' || value.length === 0) {
-    return { ok: false, code: 'MODEL_UNAVAILABLE_OR_UNAPPROVED' };
-  }
-  if (D9_APPROVED_MODEL === null) {
     return { ok: false, code: 'MODEL_UNAVAILABLE_OR_UNAPPROVED' };
   }
   if (value !== D9_APPROVED_MODEL) {

@@ -39,7 +39,7 @@ export interface MockTransport {
 }
 
 export const MOCK_TRANSPORT_LABEL = 'mock-fixture' as const;
-export const MOCK_MODEL_LABEL = 'mock-fixture-model (D9 pending: not a live model)' as const;
+export const MOCK_MODEL_LABEL = 'mock-fixture-model (not a live model)' as const;
 
 const ANALYZE_FIXTURE_TEXT = [
   'MOCK FIXTURE observation (not a provider response): the synthetic F01 clip',

@@ -60,7 +60,7 @@ test('L-CFG-1: URL rejection precedes the D9 model-ID block', () => {
   });
 });
 
-test('L-CFG-1: D9 pending rejects the reported OpenRouter model and the superseded model', () => {
+test('L-CFG-1: offline evaluation rejects the reported OpenRouter model and the superseded model', () => {
   for (const model of ['meta/muse-spark-open', 'meta-models/muse-spark-open-1026', '', null]) {
     assert.deepEqual(evaluateOfflineLiveConfiguration({ baseUrl: BASETEN_APPROVED_BASE_URL, model }), {
       ok: false,
@@ -70,7 +70,7 @@ test('L-CFG-1: D9 pending rejects the reported OpenRouter model and the supersed
   }
 });
 
-test('L-CFG-1: even the publicly documented direct-Baseten ID is not approved for a live call until D9', () => {
+test('L-CFG-1: offline evaluation never authorizes a live call, even for the documented ID', () => {
   assert.deepEqual(evaluateOfflineLiveConfiguration({
     baseUrl: BASETEN_APPROVED_BASE_URL,
     model: BASETEN_DOCUMENTED_DIRECT_MODEL,
@@ -97,12 +97,18 @@ test('L-CFG-1: this module exposes neither a transport nor a positive live autho
   }
 });
 
-test('L-CFG-2: D9 is pending, so validateLiveModel refuses everything including the documented ID', () => {
-  assert.equal(D9_APPROVED_MODEL, null);
+test('L-CFG-2: D9 approves exactly one byte-identical model ID', () => {
+  assert.equal(D9_APPROVED_MODEL, 'meta-models/muse-spark-open');
+  assert.equal(D9_APPROVED_MODEL, BASETEN_DOCUMENTED_DIRECT_MODEL, 'the pin is the documented direct-Baseten ID');
+  assert.deepEqual(validateLiveModel(BASETEN_DOCUMENTED_DIRECT_MODEL), {
+    ok: true,
+    model: 'meta-models/muse-spark-open',
+  });
   for (const value of [
-    BASETEN_DOCUMENTED_DIRECT_MODEL,
     'meta/muse-spark-open',
     'meta-models/muse-spark-open-1026',
+    'META-MODELS/MUSE-SPARK-OPEN',
+    ' meta-models/muse-spark-open',
     '',
     null,
     undefined,

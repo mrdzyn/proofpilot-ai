@@ -6,8 +6,8 @@
  * 'baseten-live'` with `provider: 'baseten'`, the exact echoed model id,
  * and `liveInference: true`. `UNVERIFIED` is a status label for live
  * output, never a verdict. Unit-tested with fixtures (mock + synthetic
- * live); the live branch is unreachable via the companion while D9 is
- * pending.
+ * live); the live branch renders only for runs an owner-started `--live`
+ * companion produced.
  */
 export interface RunProvenance {
   readonly isLive: boolean;
@@ -20,7 +20,7 @@ export interface RunProvenance {
   readonly resultHead: string;
 }
 
-const MOCK_MODEL_TEXT = 'mock-fixture-model (D9 pending: not a live model)';
+const MOCK_MODEL_TEXT = 'mock-fixture-model (not a live model)';
 
 export function describeRunProvenance(result: Record<string, unknown>): RunProvenance {
   if (result['transport'] === 'baseten-live') {

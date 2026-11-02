@@ -223,7 +223,7 @@ test('L-SWEEP-1: stale staging roots are swept; fresh roots and foreign dirs sur
   }
 });
 
-test('L-ONE-1: no I2 positive permit can authorize inference before D9', () => {
+test('L-ONE-1: no I2 positive permit can authorize inference from offline evaluation', () => {
   const permits = new OfflineMockPermitLedger(() => 10_000);
   assert.deepEqual(permits.issueTerminalMockPermit(identity), { ok: true });
   assert.deepEqual(permits.consumeMockAttempt(identity), { ok: true });

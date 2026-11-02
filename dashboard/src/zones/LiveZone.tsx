@@ -69,7 +69,7 @@ const RECOVERY: Record<string, string> = {
   CANCELLED: 'The run was cancelled. Staged bytes were deleted.',
   TIMEOUT: 'The run exceeded its ceiling. Hash again, register a fresh permit, upload again.',
   LOCAL_HASH_FAILED: 'The browser could not hash the file locally. Reload this page from the loopback companion and try again.',
-  MODEL_UNAVAILABLE_OR_UNAPPROVED: 'D9 pending: live Baseten inference is not approved. The mock path is unaffected.',
+  MODEL_UNAVAILABLE_OR_UNAPPROVED: 'Live Baseten inference is not approved for this run. The mock path is unaffected.',
 };
 
 async function api<T>(path: string, init?: RequestInit, session?: string | null): Promise<T> {
@@ -137,7 +137,7 @@ export function LiveZone() {
           out.sessionToken,
         );
         if (status.ok && status.config?.modelOk === false) {
-          // D9 pending: live inference blocked; the mock demo below still runs.
+          // Live model not approved for this companion; the mock demo below still runs.
           setPhase('ready');
         } else if (status.ok) {
           setPhase('ready');
@@ -291,8 +291,8 @@ export function LiveZone() {
   const result = (run?.result ?? {}) as Record<string, unknown>;
   const usage = (result['usage'] ?? {}) as { promptTokens?: number; completionTokens?: number; totalTokens?: number };
   // Mock vs live provenance for the result table. The live branch renders
-  // only when a run record carries `transport: 'baseten-live'`, which the
-  // companion cannot produce while D9 is pending.
+  // only when a run record carries `transport: 'baseten-live'`, which only
+  // an owner-started `--live` companion produces.
   const prov = describeRunProvenance(result);
 
   return (
@@ -303,7 +303,7 @@ export function LiveZone() {
       blurb={
         <>
           Optional loopback companion demo. <NeutralChip>MOCK FIXTURE — NOT A PROVIDER RESPONSE</NeutralChip>{' '}
-          <NeutralChip>D9 PENDING — NO LIVE MODEL</NeutralChip>
+          <NeutralChip>D9 APPROVED — LIVE OWNER-ONLY</NeutralChip>
         </>
       }
     >
@@ -351,8 +351,8 @@ export function LiveZone() {
       {(phase === 'ready' || phase === 'uploading' || phase === 'analyzing' || phase === 'complete' || phase === 'proposed' || phase === 'refused' || phase === 'cancelled' || phase === 'quota') && (
         <div>
           <Note>
-            D9 is pending, so no live model exists in this slice: every run below uses the in-process mock transport and canned fixture text. Model identity,
-            usage, and run id are echoed from the sanitized mock record.
+            Every run below uses the in-process mock transport and canned fixture text unless this page is paired with an owner-started `--live`
+            companion. Model identity, usage, and run id are echoed from the sanitized record.
           </Note>
           <div className="mt-3">
             <span className="text-sm font-semibold" id="live-action-label">Action (named in the terminal permit)</span>
@@ -443,7 +443,7 @@ export function LiveZone() {
               <Row head="Verdict">
                 <ErrorChip>{phase === 'complete' ? prov.verdictChip : prov.proposalChip}</ErrorChip>
               </Row>
-              <Row head="Model">{prov.isLive ? prov.model : String(result['mockModel'] ?? 'mock-fixture-model (D9 pending: not a live model)')}</Row>
+              <Row head="Model">{prov.isLive ? prov.model : String(result['mockModel'] ?? 'mock-fixture-model (not a live model)')}</Row>
               <Row head="Run">{prov.isLive
                 ? `${run.runId} · provider: baseten · model: ${prov.model} · transport: baseten-live · live inference: yes`
                 : `${run.runId} · transport: ${String(result['transport'] ?? 'mock-fixture')} · live inference: no`}</Row>
