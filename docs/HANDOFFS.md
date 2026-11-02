@@ -2181,11 +2181,15 @@ Independent exact-HEAD audit of the new Draft PR; STOP afterwards — no merge, 
 - **PR:** (new Draft PR number to fill on open; Draft, unmerged)
 - **State:** READY FOR REVIEW. Specification only — no code, provider, spend, proposal access, or ledger change. `.env.local` never listed, read, or referenced. Scope deliberately excludes the stored real proposal body: this handoff and the spec cite only its run id, label, and already-published adjustment values.
 
-### Findings delivered
-- **Premise correction:** no ACCEPTED Baseten F01 analysis exists in-repo (QA-01: TRUNCATED, 0 accepted); verification candidates are the stored `c3-live-meta-001` (Option A, specified) or a future authorized Baseten send (Option B, deferred).
-- **Capability audit:** 12/20 readiness items exist merged+audited (oracle, staging, coordinator, scoreboard, grammar, Zone P/P1, P2 reader, E1 identity, E2 pipeline, SEC-P2-02 auth, hard-disable, F01 baseline); 8 missing are decisions + one narrow enabling change, not infrastructure.
-- **Isolation:** minimum boundary = protected checkout + single-writer window + evidence hygiene (owner-operated); separate-UID/snapshot recommended; reader hardening and signatures explicitly not represented as a sandbox.
-- **Assessment:** CONDITIONAL GO (offline demo now; real run only after owner decisions D-R1…D-R5 + review). NO-GO on execution, spend, enrollment, or verdict transfer until then.
+### Findings delivered (remediated per independent security audit of PR #43)
+- **Attempt-2 reconciliation (PR #42, open/unmerged):** owner-reported accepted F01 analysis (1631/1309/2940, UNVERIFIED), ledger readback pending; accepted observation is not an AI-generated correction. Candidates remain stored `c3-live-meta-001` (Option A) or a future authorized send (Option B, deferred).
+- **MAJOR-1:** Option A now uses the authenticated command (`c3-b2b-verify-authenticated.ts`, manifest vs pinned roots before any read); legacy unauthenticated CLI explicitly excluded as the enabling vehicle.
+- **MAJOR-2:** enabling mechanism preserves default-deny at both CLI and exported `verifyRegisteredProposal` (authorized-set-gated, no flags/env/bypass); `REAL_ARTIFACT_DISABLED` accounted for.
+- **MAJOR-3:** exact test-file allowlist (authorization, authentication, direct-call bypass, refusal-drill integration) in a separate implementation PR; synthetic suites untouched.
+- **MINOR-1/2/3:** pre-Attempt-2 snapshot language retained as snapshot; STATUS primary branch = merged `main@b1bb51f`; five-flag contract kept exact (values cross-checked, no path flags); checklist ref corrected to `tasks/PP-META-I2-C3-B2B.md` §9.
+- **Capability audit:** 12/20 readiness items exist merged+audited; 8 missing are decisions + one narrow enabling change, not infrastructure.
+- **Isolation:** minimum boundary = protected checkout + single-writer window + evidence hygiene (owner-operated); separate-UID/snapshot recommended.
+- **Assessment:** CONDITIONAL GO (offline demo now; real run only after owner decisions D-R1…D-R5 + review, spec §6). NO-GO on execution, spend, enrollment, or verdict transfer until then.
 
 ### Validation
 - `pnpm lint` + `git diff --check` on the pushed head (docs-only change set; no executable surface). Required hosted CI: see the new Draft PR checks.
