@@ -14,7 +14,7 @@ import { APPROVED_F01_MEDIA_SHA256 } from '../../packages/live-analysis/src/conf
 const SCRIPT = path.resolve(import.meta.dirname, '../../scripts/c3-live-analysis.ts');
 const FAKE_KEY = 'NOT-A-REAL-KEY-0000-D9I1';
 const FAKE_BASE = 'https://inference.baseten.co/v1';
-const FAKE_MODEL = 'meta-models/muse-spark-open';
+const FAKE_MODEL = 'meta-models/muse-spark-open-1026';
 // Owner-approved F01 media pin under test (byte-identical to the certified
 // F01 mobile recording; asserted in L-CFG). Never a real credential.
 const F01_PIN = APPROVED_F01_MEDIA_SHA256;
@@ -75,7 +75,7 @@ test('L-CLI-1: --live passes the D9 pin and arms with zero budgets, without leak
   assert.equal(out.code, 0, `zero-budget live companion starts and exits cleanly (got ${out.code}): ${out.stdout} ${out.stderr}`);
   const combined = `${out.stdout}\n${out.stderr}`;
   assert.match(combined, /LIVE Baseten path ARMED/, 'armed banner shown after the pin');
-  assert.match(combined, /model=meta-models\/muse-spark-open/, 'banner names the exact approved model');
+  assert.match(combined, /model=meta-models\/muse-spark-open-1026/, 'banner names the exact hackathon-approved model');
   assert.match(combined, /budget=analyses:0 proposals:0/, 'live budgets stay zero by default');
   assertNoKeyLeak('live startup', combined);
 });
@@ -96,6 +96,17 @@ test('L-CLI-4: --live refuses a mismatched model and a budget without a record',
   assert.equal(wrongModel.code, 2, `alias model refuses (got ${wrongModel.code})`);
   assert.match(`${wrongModel.stdout}\n${wrongModel.stderr}`, /live model is not approved/, 'no alias, no translation');
   assertNoKeyLeak('model refusal', `${wrongModel.stdout}\n${wrongModel.stderr}`);
+  // The unsuffixed public ID was approved in error (PR #36); the
+  // hackathon-issued key authorizes only the -1026 ID, so it refuses here —
+  // in --live and in --preflight — with no listener and no network.
+  for (const mode of [['--live', '--port', '0'], ['--preflight']] as const) {
+    const generic = await runCli([...mode], { ...fakeEnv(), BASETEN_MODEL: 'meta-models/muse-spark-open' });
+    const combined = `${generic.stdout}\n${generic.stderr}`;
+    assert.equal(generic.code, 2, `unsuffixed public ID refuses in ${mode[0]} (got ${generic.code})`);
+    assert.match(combined, /live model is not approved/, 'no public-listing fallback, no translation');
+    assert.ok(!combined.includes('on http://127.0.0.1'), 'no listener starts on refusal');
+    assertNoKeyLeak('unsuffixed-model refusal', combined);
+  }
   const noRecord = await runCli(['--live', '--port', '0', '--live-analyses', '1', '--live-media-sha256', F01_PIN], fakeEnv());
   assert.equal(noRecord.code, 2, `nonzero budget without a record refuses (got ${noRecord.code})`);
   assert.match(`${noRecord.stdout}\n${noRecord.stderr}`, /--live-spent-record/, 'restart cannot re-arm an in-memory-only budget');

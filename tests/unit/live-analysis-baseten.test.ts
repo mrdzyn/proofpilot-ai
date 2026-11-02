@@ -18,6 +18,7 @@ import {
 import {
   BASETEN_APPROVED_ENDPOINT,
   BASETEN_DOCUMENTED_DIRECT_MODEL,
+  D9_APPROVED_MODEL,
 } from '../../packages/live-analysis/src/config.ts';
 import {
   BasetenCancelled,
@@ -44,7 +45,9 @@ import {
 const RACER = path.resolve(import.meta.dirname, '../helpers/record-racer.ts');
 
 const FAKE_KEY = 'NOT-A-REAL-KEY-0000';
-const APPROVED = BASETEN_DOCUMENTED_DIRECT_MODEL;
+// The transport enforces the hackathon-approved D9 ID, never the generic
+// public-documentation listing.
+const APPROVED = D9_APPROVED_MODEL;
 
 const ftyp = (size: number): Uint8Array => {
   const buf = Buffer.alloc(size);
@@ -151,11 +154,13 @@ function trackedHooks(cancelled: () => boolean = neverCancelled): {
   return { hooks: { isCancelled: cancelled, onSend: () => { sent.count += 1; return { ok: true }; } }, sent };
 }
 
-test('L-BT-1: construction pins the exact documented model and refuses aliases', () => {
+test('L-BT-1: construction pins the exact hackathon model and refuses the public ID', () => {
   const { fetchImpl } = makeDouble();
   for (const bad of [
     'meta/muse-spark-open',
-    'meta-models/muse-spark-open-1026',
+    // The unsuffixed public ID was approved in error (PR #36); the
+    // hackathon-issued key authorizes only the -1026 ID.
+    BASETEN_DOCUMENTED_DIRECT_MODEL,
     'meta-models/other-model',
     // D9-I1 reconciled lookalikes (public-docs discrepancy): refused, never substituted.
     'meta/Muse-Spark-Open-816B-A42B',

@@ -18,7 +18,7 @@ import {
 } from '../../packages/live-analysis/src/server.ts';
 import { LocalSessionManager } from '../../packages/live-analysis/src/local-session.ts';
 import { OfflineMockPermitLedger } from '../../packages/live-analysis/src/mock-permits.ts';
-import { BASETEN_DOCUMENTED_DIRECT_MODEL } from '../../packages/live-analysis/src/config.ts';
+import { D9_APPROVED_MODEL } from '../../packages/live-analysis/src/config.ts';
 import {
   createBasetenTransport,
   type BasetenTransport,
@@ -59,7 +59,7 @@ function countingDouble(calls: { count: number }): LiveFetch {
       status: 200,
       url,
       json: () => Promise.resolve({
-        model: BASETEN_DOCUMENTED_DIRECT_MODEL,
+        model: D9_APPROVED_MODEL,
         choices: [{ message: { content: 'live tap then count one' }, finish_reason: 'stop' }],
         usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
       }),
@@ -71,7 +71,7 @@ function countingDouble(calls: { count: number }): LiveFetch {
 
 function liveTransportDouble(calls: { count: number }): BasetenTransport {
   const created = createBasetenTransport({
-    model: BASETEN_DOCUMENTED_DIRECT_MODEL,
+    model: D9_APPROVED_MODEL,
     apiKey: 'NOT-A-REAL-KEY-0000',
     fetchImpl: countingDouble(calls),
     timeoutMs: 2000,
@@ -149,7 +149,7 @@ test('L-ACT-2: nonzero live budget without a record path refuses startup', async
       session: new LocalSessionManager(),
       permits: new OfflineMockPermitLedger(),
       liveTransport: liveTransportDouble(calls),
-      liveModel: BASETEN_DOCUMENTED_DIRECT_MODEL,
+      liveModel: D9_APPROVED_MODEL,
       liveAnalysesLeft: 1,
     }),
     (error: unknown) => (error as { code?: string }).code === 'LIVE_BUDGET_REQUIRES_RECORD',
@@ -170,7 +170,7 @@ test('L-ACT-3: malformed media pin refuses startup', async () => {
         session: new LocalSessionManager(),
         permits: new OfflineMockPermitLedger(),
         liveTransport: liveTransportDouble(calls),
-        liveModel: BASETEN_DOCUMENTED_DIRECT_MODEL,
+        liveModel: D9_APPROVED_MODEL,
         liveSpentRecordPath: path.join(root, 'pin-record.jsonl'),
         liveMediaSha256: pin as string,
       }),
@@ -195,7 +195,7 @@ test('L-ACT-4: corrupt spent record refuses startup', async () => {
       session: new LocalSessionManager(),
       permits: new OfflineMockPermitLedger(),
       liveTransport: liveTransportDouble(calls),
-      liveModel: BASETEN_DOCUMENTED_DIRECT_MODEL,
+      liveModel: D9_APPROVED_MODEL,
       liveAnalysesLeft: 1,
       liveSpentRecordPath: corrupt,
     }),
@@ -216,7 +216,7 @@ test('L-ACT-4b: missing record without a bootstrap approval refuses startup', as
       session: new LocalSessionManager(),
       permits: new OfflineMockPermitLedger(),
       liveTransport: liveTransportDouble(calls),
-      liveModel: BASETEN_DOCUMENTED_DIRECT_MODEL,
+      liveModel: D9_APPROVED_MODEL,
       liveAnalysesLeft: 1,
       liveSpentRecordPath: path.join(root, 'never-created.jsonl'),
     }),
@@ -239,7 +239,7 @@ test('L-ACT-4c: two companions cannot share one record; the second is refused', 
     session: new LocalSessionManager(),
     permits: new OfflineMockPermitLedger(),
     liveTransport: liveTransportDouble(calls),
-    liveModel: BASETEN_DOCUMENTED_DIRECT_MODEL,
+    liveModel: D9_APPROVED_MODEL,
     liveAnalysesLeft: 1,
     liveSpentRecordPath: recordPath,
   }).then(
@@ -267,7 +267,7 @@ test('L-ACT-5: effective budget subtracts durable spend; restart cannot re-arm',
     session: new LocalSessionManager(),
     permits: new OfflineMockPermitLedger(),
     liveTransport: liveTransportDouble(calls),
-    liveModel: BASETEN_DOCUMENTED_DIRECT_MODEL,
+    liveModel: D9_APPROVED_MODEL,
     liveAnalysesLeft: 1,
     liveProposalsLeft: 2,
     liveSpentRecordPath: recordPath,
@@ -312,7 +312,7 @@ test('L-ACT-5: effective budget subtracts durable spend; restart cannot re-arm',
     session: new LocalSessionManager(),
     permits: new OfflineMockPermitLedger(),
     liveTransport: liveTransportDouble(calls),
-    liveModel: BASETEN_DOCUMENTED_DIRECT_MODEL,
+    liveModel: D9_APPROVED_MODEL,
     liveAnalysesLeft: 1,
     liveSpentRecordPath: recordPath,
   });

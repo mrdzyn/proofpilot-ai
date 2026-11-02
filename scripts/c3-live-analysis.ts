@@ -40,7 +40,6 @@ import {
 import {
   APPROVED_F01_MEDIA_SHA256,
   BASETEN_APPROVED_BASE_URL,
-  BASETEN_DOCUMENTED_DIRECT_MODEL,
   D9_APPROVED_MODEL,
   validateBasetenBaseUrl,
   validateLiveModel,
@@ -141,7 +140,10 @@ if (liveRequested || preflightRequested) {
     console.error(`refused: live base URL is not approved (${baseCheck.code})`);
     process.exit(2);
   }
-  const configuredModel = process.env['BASETEN_MODEL'] ?? BASETEN_DOCUMENTED_DIRECT_MODEL;
+  // No public-listing fallback: when the owner leaves BASETEN_MODEL unset the
+  // CLI defaults to the hackathon-approved D9 pin itself, and any other
+  // configured value still refuses by exact equality below.
+  const configuredModel = process.env['BASETEN_MODEL'] ?? D9_APPROVED_MODEL;
   const modelCheck = validateLiveModel(configuredModel);
   if (!modelCheck.ok) {
     // The configured value is validated separately and never translated:

@@ -23,7 +23,7 @@ import { createCompanion, type ApiMeta, type Companion } from '../../packages/li
 import { LocalSessionManager } from '../../packages/live-analysis/src/local-session.ts';
 import { OfflineMockPermitLedger } from '../../packages/live-analysis/src/mock-permits.ts';
 import {
-  BASETEN_DOCUMENTED_DIRECT_MODEL,
+  D9_APPROVED_MODEL,
   BASETEN_APPROVED_ENDPOINT,
 } from '../../packages/live-analysis/src/config.ts';
 import {
@@ -197,7 +197,7 @@ function countingDouble(calls: { count: number; bodies: unknown[] }): LiveFetch 
       status: 200,
       url,
       json: () => Promise.resolve({
-        model: BASETEN_DOCUMENTED_DIRECT_MODEL,
+        model: D9_APPROVED_MODEL,
         choices: [{ message: { content: 'live tap then count one' }, finish_reason: 'stop' }],
         usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
       }),
@@ -208,7 +208,7 @@ function countingDouble(calls: { count: number; bodies: unknown[] }): LiveFetch 
 
 function liveTransportDouble(calls: { count: number; bodies: unknown[] }): BasetenTransport {
   const created = createBasetenTransport({
-    model: BASETEN_DOCUMENTED_DIRECT_MODEL,
+    model: D9_APPROVED_MODEL,
     apiKey: 'NOT-A-REAL-KEY-0000',
     fetchImpl: countingDouble(calls),
     timeoutMs: 2000,
@@ -270,7 +270,7 @@ test('L-ATT-6: approved D9 sends one live request — pin, permit, spend, proven
     session: new LocalSessionManager(),
     permits: new OfflineMockPermitLedger(),
     liveTransport: liveTransportDouble(calls),
-    liveModel: BASETEN_DOCUMENTED_DIRECT_MODEL,
+    liveModel: D9_APPROVED_MODEL,
     liveAnalysesLeft: 2,
     liveProposalsLeft: 0,
     liveSpentRecordPath: recordPath,
@@ -298,7 +298,7 @@ test('L-ATT-6: approved D9 sends one live request — pin, permit, spend, proven
   assert.equal(out.status, 200, JSON.stringify(out.body));
   assert.deepEqual(
     { model: (out.body as { model: string }).model, provider: (out.body as { provider: string }).provider, transport: (out.body as { transport: string }).transport },
-    { model: 'meta-models/muse-spark-open', provider: 'baseten', transport: 'baseten-live' },
+    { model: 'meta-models/muse-spark-open-1026', provider: 'baseten', transport: 'baseten-live' },
     'the accept names the exact approved model and live provenance',
   );
   const record = await awaitLiveRun(app, session, (out.body as { runId: string }).runId);
@@ -306,11 +306,11 @@ test('L-ATT-6: approved D9 sends one live request — pin, permit, spend, proven
   assert.equal(result['transport'], 'baseten-live');
   assert.equal(result['liveInference'], true);
   assert.equal(result['provider'], 'baseten');
-  assert.equal(result['model'], 'meta-models/muse-spark-open');
+  assert.equal(result['model'], 'meta-models/muse-spark-open-1026');
   assert.equal(result['observations'], 'live tap then count one');
   assert.deepEqual(result['usage'], { promptTokens: 10, completionTokens: 5, totalTokens: 15 }, 'reported usage, never billing');
   assert.equal(calls.count, 1, 'exactly one outbound POST for the authorized attempt');
-  assert.equal((calls.bodies[0] as { model: string }).model, 'meta-models/muse-spark-open', 'the egress names the exact approved model');
+  assert.equal((calls.bodies[0] as { model: string }).model, 'meta-models/muse-spark-open-1026', 'the egress names the exact approved model');
   const spends = readFileSync(recordPath, 'utf8').split('\n').filter((l) => l.includes('"entry":"spend"'));
   assert.equal(spends.length, 1, 'the send-boundary spend is durably recorded while the companion holds the lock');
   const status = await app.dispatch(meta({ method: 'GET', path: '/api/status' }, session), new Uint8Array(0));

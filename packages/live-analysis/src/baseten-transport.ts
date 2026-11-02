@@ -10,9 +10,9 @@
  * Rules enforced here (behavioral + contract tests pin every one):
  * - exact provider/endpoint/model matching: the destination is always the
  *   pinned `BASETEN_APPROVED_ENDPOINT` constant; the model must be the exact
- *   documented direct-Baseten ID (aliases, OpenRouter slugs, and superseded
- *   version pins refuse); the response `model` echo must match byte for
- *   byte or the reply is refused;
+ *   hackathon-approved D9 ID (the unsuffixed public listing, OpenRouter
+ *   slugs, and checkpoint lookalikes refuse); the response `model` echo
+ *   must match byte for byte or the reply is refused;
  * - one request per approval: exactly one injected POST per `respond`
  *   call, no retries, no fallback, no redirect following (`redirect:
  *   'error'`);
@@ -36,7 +36,7 @@
  * The module never reads `process.env`, files, credentials, or the network
  * itself: network access arrives only as the injected `fetchImpl`.
  */
-import { BASETEN_APPROVED_ENDPOINT, BASETEN_DOCUMENTED_DIRECT_MODEL } from './config.ts';
+import { BASETEN_APPROVED_ENDPOINT, D9_APPROVED_MODEL } from './config.ts';
 import { maxTokensFor } from './baseten-request.ts';
 import type { VideoPart } from './baseten-request.ts';
 import type { MockPermitKind } from './mock-permits.ts';
@@ -62,13 +62,16 @@ const DIRECT_MODEL_SHAPE = /^meta-models\/[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 /** Known-bad identifiers that must never be translated or accepted. */
 const REJECTED_MODEL_ALIASES: ReadonlyArray<string> = [
   'meta/muse-spark-open', // OpenRouter alias: different provider path, never substitute.
-  'meta-models/muse-spark-open-1026', // Superseded version pin.
+  // The unsuffixed public ID was approved in error (PR #36); the
+  // hackathon-issued key authorizes only the -1026 ID, so this refuses here
+  // and is never translated into the approved pin.
+  'meta-models/muse-spark-open',
   // D9-I1 discrepancy record (Nov 2026, public docs only): another Baseten
   // library example shows 'meta/Muse-Spark-Open-816B-A42B' (OpenRouter-style
   // namespace, not a Model API ID), and Meta's deployment guide names the
   // HuggingFace checkpoint 'meta-models/Muse-Spark-Open-816B-A42B'. Only the
-  // Baseten changelog example 'meta-models/muse-spark-open' is proposed for
-  // D9; the lookalikes refuse here and can never be substituted.
+  // hackathon-issued 'meta-models/muse-spark-open-1026' is approved for D9;
+  // the lookalikes refuse here and can never be substituted.
   'meta/Muse-Spark-Open-816B-A42B',
   'meta-models/Muse-Spark-Open-816B-A42B',
 ];
@@ -287,7 +290,7 @@ function refusal<const C extends BasetenTransportRefusal>(
 }
 
 export interface BasetenTransportOptions {
-  /** Exact direct-Baseten model ID. Must equal the documented ID; the D9 gate owns approval. */
+  /** Exact hackathon-issued model ID. Must equal the D9 pin; the D9 gate owns approval. */
   readonly model: unknown;
   /** Bearer key passed explicitly by the authorized runtime. Never read here. */
   readonly apiKey: unknown;
@@ -299,18 +302,19 @@ export interface BasetenTransportOptions {
 
 /**
  * Construct the live transport. Refuses unless the model is byte-equal
- * to the documented direct-Baseten ID (aliases and superseded pins never
- * translate), the key is present, and the deadline is sane. D9 approval is
- * enforced separately at the server gate (`validateLiveModel`).
+ * to the hackathon-approved D9 ID (the public listing, aliases, and
+ * lookalikes never translate), the key is present, and the deadline is
+ * sane. D9 approval is enforced separately at the server gate
+ * (`validateLiveModel`).
  */
 export function createBasetenTransport(
   options: BasetenTransportOptions,
 ): { ok: true; transport: BasetenTransport } | { ok: false; code: 'MODEL_UNAVAILABLE_OR_UNAPPROVED' | 'NO_CREDENTIAL' | 'TRANSPORT_MISCONFIGURED' } {
   if (typeof options.model !== 'string' || !DIRECT_MODEL_SHAPE.test(options.model)) {
-    return refusal('MODEL_UNAVAILABLE_OR_UNAPPROVED', 'live model is not the documented direct-Baseten identifier');
+    return refusal('MODEL_UNAVAILABLE_OR_UNAPPROVED', 'live model is not the hackathon-approved D9 identifier');
   }
-  if (REJECTED_MODEL_ALIASES.includes(options.model) || options.model !== BASETEN_DOCUMENTED_DIRECT_MODEL) {
-    return refusal('MODEL_UNAVAILABLE_OR_UNAPPROVED', 'live model aliases and superseded pins are never accepted');
+  if (REJECTED_MODEL_ALIASES.includes(options.model) || options.model !== D9_APPROVED_MODEL) {
+    return refusal('MODEL_UNAVAILABLE_OR_UNAPPROVED', 'live model aliases and the public listing are never accepted');
   }
   if (typeof options.apiKey !== 'string' || options.apiKey.length === 0) {
     return refusal('NO_CREDENTIAL', 'live transport requires an explicitly passed key');

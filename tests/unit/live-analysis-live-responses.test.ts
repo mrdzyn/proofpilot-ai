@@ -3,14 +3,14 @@
 // audited closed-grammar parser), plus live provenance on success.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { BASETEN_DOCUMENTED_DIRECT_MODEL } from '../../packages/live-analysis/src/config.ts';
+import { D9_APPROVED_MODEL } from '../../packages/live-analysis/src/config.ts';
 import {
   MAX_OBSERVATION_CHARS,
   sanitizeLiveAnalysisResponse,
   sanitizeLiveProposalResponse,
 } from '../../packages/live-analysis/src/responses.ts';
 
-const APPROVED = BASETEN_DOCUMENTED_DIRECT_MODEL;
+const APPROVED = D9_APPROVED_MODEL;
 const USAGE = { promptTokens: 120, completionTokens: 45, totalTokens: 165 };
 const TRIPLE = JSON.stringify({ adjustments: [{ selector: '.promo-overlay', property: 'pointer-events', value: 'none' }] });
 
