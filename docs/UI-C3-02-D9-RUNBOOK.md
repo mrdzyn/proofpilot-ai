@@ -185,7 +185,11 @@ automatic startup path.
 2. Zone L result: provider `baseten`, exact model echo, run ID, quoted
    observations, reported prompt/completion/total tokens (reported, never
    billing), `LIVE VIA BASETEN — UNVERIFIED` chip; the mode banner reads
-   LIVE with attempts-left/spent counters.
+   LIVE with attempts-left/spent counters. Analyze requests carry
+   `max_tokens: 2048` (proposals 512); a `TRANSPORT_TRUNCATED` refusal
+   renders the provider-claimed usage split (diagnostic only, not billing)
+   directly under the refusal — use it to distinguish reasoning exhaustion
+   from a deployment-side cap before authorizing any further attempt.
 3. The next attempt needs a fresh permit, fresh upload, and fresh click —
    a settled run's staging and permit never carry over. On a finite ledger,
    spending the last budget refuses further sends `QUOTA_SPENT` with zero
@@ -270,3 +274,30 @@ automatic startup path.
 - Both one-shot ledgers (D9-LIVE-01, D9-LIVE-02) are frozen: no repeatable
   session may point at them (startup refuses), and their geneses carry no
   standing `d9live-v2-` identity.
+
+## 9. D9-LIVE-V2-QA-01 outcome (owner-reported; agent did not run it)
+
+- **Session:** `D9-LIVE-V2-QA-01`, allocation 3 analyses / 0 proposals,
+  F01 media, model `meta-models/muse-spark-open-1026`. Preflight PASS
+  (21 models listed). First permit expired pre-send (no spend); first
+  completed attempt: `TRANSPORT_TRUNCATED` (`live response envelope
+  malformed`) — generation hit a length limit under the 1024 analyze cap.
+- **Ledger state:** 1 genesis + 1 analysis spend, **2 remaining**,
+  **0 accepted model analyses**. The record was not modified by the
+  investigation.
+- **Remediation (implemented offline, unaudited, NOT authorization):**
+  analyze cap raised to 2048 (§5 step 2); TRUNCATED refusals now carry
+  validated numeric usage diagnostics (provider-claimed, not billing).
+  No further send is authorized by this change — the owner decides
+  explicitly per the standing policy.
+- **Deferred optimization (NOT implemented, NOT approved):**
+  `reasoning_effort: "low"`. Evidence: Baseten lists Muse Spark Open
+  reasoning as always-on with supported depths low/medium/high/xhigh
+  (default xhigh) — but its control table says "None" for the unsuffixed
+  slug and neither page names the `-1026` deployment, so `-1026`
+  compatibility is unconfirmed ([reasoning docs](https://docs.baseten.co/inference/model-apis/reasoning));
+  Meta documents `low` = strength 8 vs default `xhigh` = 512 and states
+  lower strength reduces reasoning tokens and latency (fits extraction-style
+  tasks like F01 captioning, [settings](https://dev.meta.ai/docs/muse-spark-open/settings)).
+  Adding any reasoning knob needs exact `-1026` deployment evidence plus
+  its own reviewed change — do not add it on this documentation alone.
