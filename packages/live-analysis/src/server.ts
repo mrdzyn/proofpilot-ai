@@ -37,6 +37,7 @@ import {
   LiveTransportRefused,
   type BasetenTransport,
 } from './baseten-transport.ts';
+import { createLiveAttemptLedger, createLiveSendSpender } from './live-attempts.ts';
 import { MAX_STAGED_BYTES, StagedUploads } from './uploads.ts';
 import type { ValidatedVideo } from '../../intake/src/media.ts';
 
@@ -68,6 +69,14 @@ export interface CompanionOptions {
   liveTransport?: BasetenTransport | null;
   /** Exact model ID the live transport claims; checked against the D9 approval. */
   liveModel?: string;
+  /**
+   * Live attempt budget, separate from the mock success quota. Each approval
+   * authorizes one provider attempt per action, spent at send and never
+   * restored. Defaults to zero (fail-closed); explicit owner allocation is
+   * required alongside D9.
+   */
+  liveAnalysesLeft?: number;
+  liveProposalsLeft?: number;
   analysesLeft?: number;
   proposalsLeft?: number;
   runTimeoutMs?: number;
@@ -180,6 +189,13 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
   // approval (`validateLiveModel`) is checked per attempt below.
   const liveTransport = options.liveTransport ?? null;
   const liveModel = options.liveModel;
+  // Live provider-attempt budget, separate from the mock success quota.
+  // Spent exactly once per send via the transport's onSend hook; failures
+  // after send never restore, and sanitized success never spends again.
+  const liveAttempts = createLiveAttemptLedger({
+    analyses: options.liveAnalysesLeft ?? 0,
+    proposals: options.liveProposalsLeft ?? 0,
+  });
   let analysesLeft = options.analysesLeft ?? 3;
   let proposalsLeft = options.proposalsLeft ?? 1;
   const runTimeoutMs = options.runTimeoutMs ?? 120_000;
@@ -387,28 +403,35 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
   /**
    * Transport-native reply accepted by the settler: the mock `{mockModel,
    * ...}` envelope or the normalized live `{model, ...}` reply. Both carry
-   * sanitized-later text and safe-int usage.
+   * sanitized-later text and safe-int usage; the live variant additionally
+   * carries the validated finish reason.
    */
   type SettleReply =
     | { mockModel: string; text: string; usage: SanitizedUsage }
-    | { model: string; text: string; usage: SanitizedUsage };
+    | { model: string; text: string; usage: SanitizedUsage; finishReason: string };
 
   /**
    * Settle wiring: which sanitizer validates the reply, which identity the
-   * success record carries, and which provenance a refused record carries.
-   * The mock wiring is byte-identical to the historical behavior; the live
-   * wiring is used only when D9 approves the model (dormant in this slice).
+   * success record carries, which provenance refused/unexpected records
+   * carry, and whether a sanitized success spends the mock quota. The mock
+   * wiring is byte-identical to the historical behavior; the live wiring is
+   * used only when D9 approves the model (dormant in this slice). Live
+   * attempts are spent separately at the send boundary, never here.
    */
   interface SettleWiring {
     readonly sanitize: (raw: SettleReply) => SanitizeResult | LiveSanitizeResult;
     readonly identity: Record<string, unknown>;
     readonly refusedBase: Record<string, unknown>;
+    readonly spendMockQuota: boolean;
+    readonly unexpectedRefusal: { code: string; detail: string };
   }
 
   const mockWiring = (kind: MockPermitKind): SettleWiring => ({
     sanitize: kind === 'analyze' ? sanitizeAnalysisResponse : sanitizeProposalResponse,
     identity: { mockModel: MOCK_MODEL_LABEL },
     refusedBase: { transport: 'mock-fixture', liveInference: false },
+    spendMockQuota: true,
+    unexpectedRefusal: { code: 'TRANSPORT_REFUSED', detail: 'mock transport refused the internal request' },
   });
 
   /**
@@ -448,7 +471,10 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
         };
         return;
       }
-      spendQuota(kind);
+      // The mock quota is spent only on sanitized mock success. Live
+      // attempts are spent separately at the send boundary (never restored,
+      // never double-spent here).
+      if (wiring.spendMockQuota) spendQuota(kind);
       run.state = 'done';
       run.finishedAt = now();
       run.result = { ok: true, ...sanitized.value, runId: run.runId, sha256: run.sha256, ...wiring.identity };
@@ -469,7 +495,7 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
       const cancelled = error instanceof MockCancelled || error instanceof BasetenCancelled || message.includes('cancelled');
       run.result = (cancelled || timedOut)
         ? { ok: false, code: timedOut ? 'TIMEOUT' : 'CANCELLED', detail: 'run cancelled or timed out; staged bytes already deleted' }
-        : { ok: false, code: 'TRANSPORT_REFUSED', detail: 'mock transport refused the internal request' };
+        : { ok: false, ...wiring.unexpectedRefusal };
       // Epoch-scoped: a stale run must never delete a newer epoch's staging.
       await discardStagingIfOwned(run.epoch, run.stagedUploadId ?? null);
     } finally {
@@ -522,6 +548,13 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
       return refusal('MODEL_UNAVAILABLE_OR_UNAPPROVED', 'D9 pending: live Baseten inference is not approved; no live request was made', 403);
     }
     const liveApprovedModel: string | null = liveGate !== null && liveGate.ok ? liveGate.model : null;
+    // Live attempt budget, checked before any slot, permit, or quota is
+    // touched. Reaching this line with a live transport requires D9, so this
+    // check is dormant in this slice; it is ordered here so the live attempt
+    // can never draw from the mock success quota or block a slot when empty.
+    if (liveApprovedModel !== null && liveAttempts.left(kind) <= 0) {
+      return refusal('QUOTA_SPENT', 'live attempt budget is exhausted for this action; no provider call was made', 403);
+    }
     if (quotaFor(kind) <= 0) {
       return refusal('QUOTA_SPENT', 'demo quota exhausted; mock runs stop here', 429);
     }
@@ -593,23 +626,30 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
       const approved = liveApprovedModel;
       const run = registerRun(kind, sha256, myEpoch);
       const sanitize = (
-        raw: { mockModel: string; text: string; usage: SanitizedUsage } | { model: string; text: string; usage: SanitizedUsage },
+        raw: { mockModel: string; text: string; usage: SanitizedUsage } | { model: string; text: string; usage: SanitizedUsage; finishReason: string },
       ): SanitizeResult | LiveSanitizeResult =>
         kind === 'analyze'
           ? sanitizeLiveAnalysisResponse(raw, approved)
           : sanitizeLiveProposalResponse(raw, approved);
+      // Send-boundary spend: exactly one live attempt is consumed when the
+      // transport actually sends (its onSend hook), and never restored —
+      // timeout, cancel-after-send, HTTP error, malformed reply, model
+      // mismatch, and sanitizer refusal all keep the spent attempt.
+      const spendSend = createLiveSendSpender(liveAttempts, kind);
       const settled = settleRun(run, kind,
         liveTransport.respond(
           { kind, runId: run.runId, sha256, videoBytes: bytes as number, videoPart: part.part },
-          { isCancelled: () => run.cancelled },
+          { isCancelled: () => run.cancelled, onSend: spendSend },
         ).then((reply) => {
           if (!reply.ok) throw new LiveTransportRefused(reply.code, reply.detail);
-          return { model: reply.model, text: reply.text, usage: reply.usage };
+          return { model: reply.model, text: reply.text, usage: reply.usage, finishReason: reply.finishReason };
         }),
         {
           sanitize,
           identity: { model: approved },
           refusedBase: { transport: 'baseten-live', liveInference: true, provider: 'baseten' },
+          spendMockQuota: false,
+          unexpectedRefusal: { code: 'TRANSPORT_REFUSED', detail: 'live transport refused the internal request' },
         });
       inflight.add(settled);
       void settled.finally(() => {

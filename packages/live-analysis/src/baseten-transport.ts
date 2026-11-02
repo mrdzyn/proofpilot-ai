@@ -18,6 +18,13 @@
  *   'error'`);
  * - bounded usage: `max_tokens` is fixed per action (`maxTokensFor`); the
  *   body shape is exact (no `response_format`, no extras);
+ * - completion validation: only the documented successful completion
+ *   (`'stop'`) may become a result; truncated, refused, or unexpected finish
+ *   reasons never turn partial output into a success;
+ * - send-boundary accounting: the caller's `onSend` hook fires exactly once
+ *   immediately before the single POST; the attempt is spent there and never
+ *   restored by timeout, cancel-after-send, HTTP error, malformed reply,
+ *   or model mismatch;
  * - cancellation and deadline: `isCancelled` aborts mid-flight; the
  *   request deadline aborts the socket; a cancelled-before-send never
  *   touches the double;
@@ -61,6 +68,8 @@ export type BasetenTransportRefusal =
   | 'TRANSPORT_MISCONFIGURED'
   | 'TRANSPORT_HTTP'
   | 'TRANSPORT_SHAPE'
+  | 'TRANSPORT_TRUNCATED'
+  | 'TRANSPORT_CONTENT_FILTERED'
   | 'MODEL_MISMATCH'
   | 'TRANSPORT_USAGE'
   | 'TRANSPORT_NETWORK';
@@ -88,6 +97,13 @@ export type BasetenTransportResult =
 
 export interface BasetenTransportHooks {
   readonly isCancelled: () => boolean;
+  /**
+   * Fired exactly once, synchronously immediately before the single POST is
+   * sent. The caller spends the live attempt authorization here — at the
+   * irreversible outbound-send boundary — and never restores it, whatever
+   * the outcome. Not fired when validation or pre-send cancellation refuses.
+   */
+  readonly onSend: () => void;
 }
 
 export interface BasetenTransport {
@@ -190,7 +206,7 @@ export interface ValidatedBasetenResponse {
 export function validateBasetenResponse(
   payload: unknown,
   approvedModel: string,
-): { ok: true; value: ValidatedBasetenResponse } | { ok: false; code: 'TRANSPORT_SHAPE' | 'MODEL_MISMATCH' | 'TRANSPORT_USAGE' } {
+): { ok: true; value: ValidatedBasetenResponse } | { ok: false; code: 'TRANSPORT_SHAPE' | 'TRANSPORT_TRUNCATED' | 'TRANSPORT_CONTENT_FILTERED' | 'MODEL_MISMATCH' | 'TRANSPORT_USAGE' } {
   if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
     return { ok: false, code: 'TRANSPORT_SHAPE' };
   }
@@ -221,7 +237,16 @@ export function validateBasetenResponse(
   if (!isUsageInt(prompt) || !isUsageInt(completion) || !isUsageInt(total)) {
     return { ok: false, code: 'TRANSPORT_USAGE' };
   }
-  if (typeof finishReason !== 'string' || finishReason.length === 0) {
+  // Completion validation: only an explicitly documented successful
+  // completion ('stop') may become a result. Truncated, refused, or
+  // unexpected finish reasons never turn partial output into a success.
+  if (finishReason === 'length') {
+    return { ok: false, code: 'TRANSPORT_TRUNCATED' };
+  }
+  if (finishReason === 'content_filter') {
+    return { ok: false, code: 'TRANSPORT_CONTENT_FILTERED' };
+  }
+  if (finishReason !== 'stop') {
     return { ok: false, code: 'TRANSPORT_SHAPE' };
   }
   return {
@@ -302,6 +327,11 @@ export function createBasetenTransport(
           }
         }, 25);
         const started = Date.now();
+        // Irreversible outbound-send boundary: the spend hook fires exactly
+        // once, synchronously before the single POST. Everything after this
+        // point — timeout, cancel, HTTP error, malformed reply, mismatch —
+        // keeps the spent attempt.
+        hooks.onSend();
         try {
           const response = await fetchImpl(BASETEN_APPROVED_ENDPOINT, {
             method: 'POST',

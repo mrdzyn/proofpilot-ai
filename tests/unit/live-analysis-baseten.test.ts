@@ -128,6 +128,14 @@ function makeTransport(
 
 const neverCancelled = (): boolean => false;
 
+function trackedHooks(cancelled: () => boolean = neverCancelled): {
+  hooks: { isCancelled: () => boolean; onSend: () => void };
+  sent: { count: number };
+} {
+  const sent = { count: 0 };
+  return { hooks: { isCancelled: cancelled, onSend: () => { sent.count += 1; } }, sent };
+}
+
 test('L-BT-1: construction pins the exact documented model and refuses aliases', () => {
   const { fetchImpl } = makeDouble();
   for (const bad of [
@@ -182,18 +190,20 @@ test('L-BT-3: success posts exactly one pinned request and normalizes the reply'
   const { fetchImpl, calls, aborted } = makeDouble({ jsonValue: liveBody() });
   const transport = makeTransport(fetchImpl);
   const part = realPart();
+  const { hooks, sent } = trackedHooks();
   const reply = await transport.respond(
     { kind: 'analyze', runId: 'local-2026-01-01-001', sha256: 'a'.repeat(64), videoBytes: 512, videoPart: part },
-    { isCancelled: neverCancelled },
+    hooks,
   );
+  assert.equal(sent.count, 1, 'send boundary observed exactly once');
   assert.equal(calls.length, 1, 'exactly one provider call');
   assert.equal(calls[0]?.url, BASETEN_APPROVED_ENDPOINT);
   assert.equal(calls[0]?.method, 'POST');
   assert.equal(calls[0]?.headers['Content-Type'], 'application/json');
   assert.equal(calls[0]?.headers['Authorization'], `Bearer ${FAKE_KEY}`);
   assert.equal(calls[0]?.redirect, 'error');
-  const sent = JSON.parse(calls[0]?.body ?? '{}') as Record<string, unknown>;
-  assert.equal(sent['model'], APPROVED);
+  const sentBody = JSON.parse(calls[0]?.body ?? '{}') as Record<string, unknown>;
+  assert.equal(sentBody['model'], APPROVED);
   assert.ok(!(calls[0]?.body.includes(FAKE_KEY) ?? false), 'key never appears in the body');
   assert.equal(reply.ok, true);
   if (reply.ok) {
@@ -209,43 +219,49 @@ test('L-BT-3: success posts exactly one pinned request and normalizes the reply'
 test('L-BT-4: cancelled-before-send never touches the double', async () => {
   const { fetchImpl, calls } = makeDouble({ jsonValue: liveBody() });
   const transport = makeTransport(fetchImpl);
+  const { hooks, sent } = trackedHooks(() => true);
   await assert.rejects(
     transport.respond(
       { kind: 'analyze', runId: 'r', sha256: 'a'.repeat(64), videoBytes: 512, videoPart: realPart() },
-      { isCancelled: () => true },
+      hooks,
     ),
     (error: unknown) => error instanceof BasetenCancelled,
   );
   assert.equal(calls.length, 0, 'zero provider calls when already cancelled');
+  assert.equal(sent.count, 0, 'no send-boundary spend before send');
 });
 
 test('L-BT-5: deadline aborts the socket and surfaces a typed timeout', async () => {
   const { fetchImpl, calls, aborted } = makeDouble({ hang: true });
   const transport = makeTransport(fetchImpl, { timeoutMs: 80 });
+  const { hooks, sent } = trackedHooks();
   await assert.rejects(
     transport.respond(
       { kind: 'propose', runId: 'r', sha256: 'a'.repeat(64), videoBytes: 512, videoPart: realPart() },
-      { isCancelled: neverCancelled },
+      hooks,
     ),
     (error: unknown) => error instanceof BasetenTimeout,
   );
   assert.equal(calls.length, 1, 'exactly one attempt, no retry');
   assert.equal(aborted.value, true, 'socket aborted on deadline');
+  assert.equal(sent.count, 1, 'timeout-after-send still consumed the send boundary');
 });
 
 test('L-BT-6: mid-flight cancel aborts and surfaces cancellation, not a refusal', async () => {
   const { fetchImpl, calls, aborted } = makeDouble({ hang: true });
   const transport = makeTransport(fetchImpl, { timeoutMs: 5000 });
   let cancelled = false;
+  const { hooks, sent } = trackedHooks(() => cancelled);
   const pending = transport.respond(
     { kind: 'analyze', runId: 'r', sha256: 'a'.repeat(64), videoBytes: 512, videoPart: realPart() },
-    { isCancelled: () => cancelled },
+    hooks,
   );
   await new Promise((r) => setTimeout(r, 40));
   cancelled = true;
   await assert.rejects(pending, (error: unknown) => error instanceof BasetenCancelled);
   assert.equal(calls.length, 1, 'exactly one attempt, no retry');
   assert.equal(aborted.value, true, 'socket aborted on cancel');
+  assert.equal(sent.count, 1, 'cancel-after-send still consumed the send boundary');
 });
 
 test('L-BT-7: HTTP errors, bad envelopes, and usage faults refuse with typed codes, one call each', async () => {
@@ -260,28 +276,61 @@ test('L-BT-7: HTTP errors, bad envelopes, and usage faults refuse with typed cod
     { name: 'empty-text', options: { jsonValue: liveBody({ choices: [liveChoice({ message: { content: '' } })] }) }, code: 'TRANSPORT_SHAPE' },
     { name: 'bad-usage', options: { jsonValue: liveBody({ usage: { prompt_tokens: -1, completion_tokens: 0, total_tokens: 0 } }) }, code: 'TRANSPORT_USAGE' },
     { name: 'no-finish', options: { jsonValue: liveBody({ choices: [liveChoice({ finish_reason: null })] }) }, code: 'TRANSPORT_SHAPE' },
+    // MAJOR-1 finish-reason allowlist: only 'stop' completes; partial or
+    // refused output must never become a successful reply.
+    { name: 'truncated', options: { jsonValue: liveBody({ choices: [liveChoice({ content: 'partial', finish_reason: 'length' })] }) }, code: 'TRANSPORT_TRUNCATED' },
+    { name: 'content-filter', options: { jsonValue: liveBody({ choices: [liveChoice({ content: 'partial fragment', finish_reason: 'content_filter' })] }) }, code: 'TRANSPORT_CONTENT_FILTERED' },
+    { name: 'tool-calls', options: { jsonValue: liveBody({ choices: [liveChoice({ finish_reason: 'tool_calls' })] }) }, code: 'TRANSPORT_SHAPE' },
+    { name: 'unknown-finish', options: { jsonValue: liveBody({ choices: [liveChoice({ finish_reason: 'eos' })] }) }, code: 'TRANSPORT_SHAPE' },
   ];
   for (const { name, options, code } of cases) {
     const { fetchImpl, calls } = makeDouble(options);
     const transport = makeTransport(fetchImpl);
+    const { hooks, sent } = trackedHooks();
     const reply = await transport.respond(
       { kind: 'analyze', runId: 'r', sha256: 'a'.repeat(64), videoBytes: 512, videoPart: part },
-      { isCancelled: neverCancelled },
+      hooks,
     );
     assert.equal(reply.ok, false, name);
     if (!reply.ok) assert.equal(reply.code, code, `${name}: ${reply.detail}`);
     assert.equal(calls.length, 1, `${name}: exactly one attempt, no retry`);
+    assert.equal(sent.count, 1, `${name}: failed reply still consumed the send boundary`);
   }
+});
+
+test('L-BT-7b: refused, filtered, and truncated envelopes never normalize to text', () => {
+  const truncated = validateBasetenResponse(
+    liveBody({ choices: [liveChoice({ content: 'partial output', finish_reason: 'length' })] }),
+    APPROVED,
+  );
+  assert.equal(truncated.ok, false);
+  if (!truncated.ok) assert.equal(truncated.code, 'TRANSPORT_TRUNCATED');
+
+  const filtered = validateBasetenResponse(
+    liveBody({ choices: [liveChoice({ content: 'partial fragment', finish_reason: 'content_filter' })] }),
+    APPROVED,
+  );
+  assert.equal(filtered.ok, false);
+  if (!filtered.ok) assert.equal(filtered.code, 'TRANSPORT_CONTENT_FILTERED');
+
+  const unexpected = validateBasetenResponse(
+    liveBody({ choices: [liveChoice({ finish_reason: 'tool_calls' })] }),
+    APPROVED,
+  );
+  assert.equal(unexpected.ok, false);
+  if (!unexpected.ok) assert.equal(unexpected.code, 'TRANSPORT_SHAPE');
 });
 
 test('L-BT-8: network failure refuses without leaking, and redaction holds everywhere', async () => {
   const { fetchImpl, calls } = makeDouble({ throwNetwork: true });
   const transport = makeTransport(fetchImpl);
   const part = realPart();
+  const { hooks, sent } = trackedHooks();
   const reply = await transport.respond(
     { kind: 'propose', runId: 'r', sha256: 'a'.repeat(64), videoBytes: 512, videoPart: part },
-    { isCancelled: neverCancelled },
+    hooks,
   );
+  assert.equal(sent.count, 1, 'network failure after send still consumed the send boundary');
   assert.equal(reply.ok, false);
   if (!reply.ok) {
     assert.equal(reply.code, 'TRANSPORT_NETWORK');

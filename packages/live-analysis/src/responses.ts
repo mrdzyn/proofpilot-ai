@@ -202,6 +202,13 @@ function checkLiveEnvelope(
       return { ok: false, code: 'BAD_USAGE', detail: `live usage.${key} is not a safe non-negative integer` };
     }
   }
+  // Defense in depth with the transport's finish-reason allow-list: the
+  // normalized envelope must name an explicit successful completion. Anything
+  // else — truncated, refused, malformed, or unknown — refuses here too, so a
+  // partial output can never become a sanitized result by any path.
+  if (record['finishReason'] !== 'stop') {
+    return { ok: false, code: 'BAD_SHAPE', detail: 'live reply did not complete with a stop finish reason' };
+  }
   return {
     ok: true,
     value: {

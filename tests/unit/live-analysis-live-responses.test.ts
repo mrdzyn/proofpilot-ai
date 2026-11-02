@@ -14,8 +14,8 @@ const APPROVED = BASETEN_DOCUMENTED_DIRECT_MODEL;
 const USAGE = { promptTokens: 120, completionTokens: 45, totalTokens: 165 };
 const TRIPLE = JSON.stringify({ adjustments: [{ selector: '.promo-overlay', property: 'pointer-events', value: 'none' }] });
 
-function liveReply(text: string, model: string = APPROVED): unknown {
-  return { model, text, usage: { ...USAGE } };
+function liveReply(text: string, model: string = APPROVED, finishReason: string = 'stop'): unknown {
+  return { model, text, usage: { ...USAGE }, finishReason };
 }
 
 test('L-LIVE-3: valid live replies sanitize with live provenance, never mock labels', () => {
@@ -52,6 +52,12 @@ test('L-LIVE-4: live envelope faults refuse with typed codes, never partial resu
     ['oversize', liveReply('x'.repeat(MAX_OBSERVATION_CHARS + 1)), 'TEXT_TOO_LONG'],
     ['bad-usage', { model: APPROVED, text: 'tap', usage: { promptTokens: -1, completionTokens: 0, totalTokens: 0 } }, 'BAD_USAGE'],
     ['string-usage', { model: APPROVED, text: 'tap', usage: { promptTokens: 'many', completionTokens: 0, totalTokens: 0 } }, 'BAD_USAGE'],
+    // MAJOR-1: only finishReason 'stop' completes; anything else refuses even
+    // when the text itself is well-formed.
+    ['truncated', liveReply('partial', APPROVED, 'length'), 'BAD_SHAPE'],
+    ['filtered', liveReply('partial', APPROVED, 'content_filter'), 'BAD_SHAPE'],
+    ['tool-calls', liveReply('tap', APPROVED, 'tool_calls'), 'BAD_SHAPE'],
+    ['missing-finish', { model: APPROVED, text: 'tap', usage: { ...USAGE } }, 'BAD_SHAPE'],
   ];
   for (const [name, raw, code] of analysisCases) {
     const out = sanitizeLiveAnalysisResponse(raw, APPROVED);
