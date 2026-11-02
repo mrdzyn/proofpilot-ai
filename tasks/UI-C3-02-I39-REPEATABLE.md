@@ -37,7 +37,11 @@ labeling, any provider call, any credential read, any spend-record reset.
   erase/refund on errors; no raw responses, secrets, or PII in the ledger.
 - Repeatable sessions run only under the versioned `d9live-v2-` approval
   identity on a NEW ledger; historical D9-LIVE-01/D9-LIVE-02 records and
-  geneses are frozen and can never authorize a new session.
+  geneses are frozen and can never authorize a new session. MAJOR-1
+  hardening (PR #40 audit): EVERY positive budget — finite N or unlimited —
+  requires the explicit `d9live-v2-` id in the production CLI and
+  independently in the server (matched against the record genesis on
+  reopen); omission never implicitly adopts any ledger.
 - Unique durable run IDs within the ledger (`<local-run-id>#spend-<n>`,
   ledger sequence suffix — stable across restarts).
 - Response validation decides by finish reason before content (`length` →

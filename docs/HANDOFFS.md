@@ -2094,4 +2094,33 @@ Independent exact-HEAD audit of the new Draft PR; STOP afterwards — no merge, 
 ### Next action
 Independent exact-HEAD audit of the new Draft PR; STOP afterwards — no merge, deploy, preflight, key reads, spend, retry, or live inference.
 
+## Handoff: UI-C3-02-I39-C2 — PR #40 audit remediation (MAJOR-1 + MINOR-1/2)
+
+- **Task / phase:** `tasks/UI-C3-02-I39-REPEATABLE.md` (MAJOR-1 hardening noted; base protected `main@84b03a46ca4141b42f7e733e87c0acbd31af8501`)
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** ONE independent exact-HEAD re-auditor, then project owner
+- **Branch:** `phase/ui-c3-02-i39-repeatable` (existing Draft PR #40)
+- **Implementation head:** `c1d8276cc17e067adc91636d93e59b6b3252e864` (plus a docs commit)
+- **PR:** #40 (Draft, unmerged)
+- **State:** READY FOR RE-AUDIT. No merge, deploy, provider calls, key reads, spend, or live inference. `.env.local` never listed, read, or referenced. No authenticated preflight, no test POST. Historical ledgers untouched (outside the repo; byte-identical assertions in tests).
+
+### Completed
+- **MAJOR-1:** every positive `--live-analyses` budget (finite N and `unlimited`) requires an explicit `d9live-v2-` `--live-approval-id` in the production CLI (refuses before companion start, no listener/transport/egress) and independently in `createCompanion` (pre-open check; then genesis binding on reopen). Omission never implicitly adopts any ledger; a non-versioned id never authorizes; refusals create no genesis and spend nothing. Zero-budget diagnostics unchanged (no identity required).
+- **Regression tests:** L-CLI-10/10b (historical ± spend, standing omitted/mismatched, byte-identical ledgers, no listener/leak; matching-id reopen arms) and L-ACT-8 (server-side equivalents incl. unlimited-foreign-id, plus restart-pass). Retargeted: L-CLI-4/6b/9, L-ATT-6, L-ACT-4/4b/5 (+4c id for lock isolation). All fake doubles/credentials.
+- **MINOR-1:** runbook §3 builds the dashboard and serves `$PWD/dashboard/dist` (API-only `--serve none` documented as insufficient for the Zone L flow). Live command not run.
+- **MINOR-2:** README qualifies the historical bullet (no successful Baseten result; both attempts refused/spent); STATUS `Baseten live inference` row replaces `NOT TESTED`; protected-main SHA typo fixed (`…4141…` verified against `origin/main`); D9-LIVE-01 (403/SPENT) and D9-LIVE-02 (SHAPE/SPENT) preserved. PR #38 evidence ported with attribution (unsuffixed-model cause for -01; Zone L message, one-genesis-one-spend digest check incl. runId/spentAt/paths, catalog=21 PASS, $100/~2M-tpm bounds for -02).
+- **Non-regression:** 1026 pin, F01 pin, default-off, per-attempt permit/upload/click, append-only fsync accounting, unique run ids, single-flight, no retries, zero proposals, TRUNCATED/SHAPE order, no raw/reasoning leaks, LIVE/MOCK labels — all preserved and green.
+
+### Validation
+- `pnpm lint`: 0 problems (264 files) · root `tsc`: clean · dashboard `tsc`: clean · unit 583/583 · security 141/141 · `f01:baseline`: REPRODUCED, certified exact-SHA YES · `git diff --check`: clean. Local, this worktree.
+- Required hosted CI: see PR #40 checks for the pushed head.
+- Zero provider calls, zero credential reads.
+
+### Continuation notes
+- PR #38 recommendation: supersede (close unmerged) after this remediation merges-or-lands — its §10 policy ("unlimited is proposed syntax", "no new ledger per click") is stale against the implemented issue-#39 contract, and its evidence deltas are now ported here with attribution. Do not merge PR #38; do not silently revert its evidence. See delivery report for detail.
+- Residual: the historical 403 cause and hackathon video compatibility stay unresolved operational gates; the 403-cause diagnosis is an owner decision, not a code change.
+
+### Next action
+Independent exact-HEAD re-audit of PR #40; STOP afterwards — no merge, deploy, preflight, key reads, spend, retry, or live inference.
+
 <!-- HANDOFF_ENTRIES_END -->

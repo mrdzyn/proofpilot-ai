@@ -85,18 +85,26 @@ nothing by itself.
 ## 3. Repeatable execution (owner terminal only)
 
 ```sh
-node scripts/c3-live-analysis.ts --port 5188 --serve none \
+pnpm --dir dashboard build
+node scripts/c3-live-analysis.ts \
+  --port 5188 \
+  --serve "$PWD/dashboard/dist" \
   --live --live-analyses unlimited --live-proposals 0 \
   --live-spent-record "$HOME/.proofpilot/live-standing-v2.jsonl" \
   --live-approval-id "d9live-v2-<owner-suffix>" \
   --live-media-sha256 e9df68b14c48300818f9ec9407b884413037f29305f17a5da3cc4fac05eeafdf
 ```
 
+(Build the dashboard first so the same companion serves Zone L alongside
+the API; `--serve none` runs API-only and cannot demonstrate the Zone L
+click flow. Open `http://127.0.0.1:5188` in the owner browser.)
+
 (Use a finite `--live-analyses N` for a bounded session; the rules below
-are identical.) The approval id anchors the record genesis: it must carry
-the `d9live-v2-` namespace for `unlimited`, and reopening the same ledger
-with a different id refuses (`LIVE_APPROVAL_MISMATCH`) instead of spending
-under a foreign genesis. Never reuse an approval id across paths to
+are identical.) The approval id anchors the record genesis: EVERY positive
+budget — finite or `unlimited` — requires an explicit `d9live-v2-` id, and
+reopening the same ledger without it, or with a different id, refuses
+(`LIVE_APPROVAL_MISMATCH`) instead of adopting or spending under a foreign
+genesis. Never reuse an approval id across paths to
 "restore" a deleted record — that is a new attestation, and §4b applies.
 
 Then, per attempt, in the companion terminal and Zone L: `pair` (once per
@@ -194,7 +202,8 @@ automatic startup path.
 - **Verdict: REFUSED.** The owner-operated one-shot POST against the
   hackathon-issued key returned `TRANSPORT_HTTP` **HTTP 403** — the account
   rejected the request. No model output was produced; nothing was rendered
-  from a provider.
+  from a provider. Owner-reported via PR #38: this attempt ran against the
+  incorrect unsuffixed public model (corrected by PR #37 afterward).
 - **Spend accounting:** exactly one send-boundary attempt was authorized and
   is durably recorded as **SPENT** in the owner-held spent-run record (the
   spend hook fires before the POST and is never restored, including on HTTP
@@ -222,14 +231,28 @@ automatic startup path.
 - **Verdict: REFUSED.** The second owner-operated one-shot POST returned
   HTTP 2xx JSON that failed strict response validation as
   `TRANSPORT_SHAPE` — no model output was accepted, nothing was rendered
-  from a provider. (The validator has since been corrected so a `length`
+  from a provider. Zone L reported `Refused (TRANSPORT_SHAPE): live response
+  envelope malformed` after the single Analyze click (owner-reported via
+  PR #38). (The validator has since been corrected so a `length`
   finish reports `TRANSPORT_TRUNCATED` instead of the misleading SHAPE;
   either way the run refused and nothing normalized into a result.)
 - **Spend accounting:** the send-boundary attempt was authorized and is
-  durably recorded as **SPENT** in the owner-held spent-run record. Any
+  durably recorded as **SPENT** in the owner-held record
+  (`~/.proofpilot/d9-live-02-spent.jsonl`; D9-LIVE-01 used
+  `~/.proofpilot/live-spent.jsonl`). Per the owner-supplied ledger check
+  reported via PR #38, the D9-LIVE-02 file holds exactly one genesis and one
+  `analyze` spend (`runId=local-2026-11-02-001`, certified F01 SHA-256,
+  spent at 2026-11-02T10:23:18.356Z) with both SHA-256 digests recomputed and
+  matching — internal ledger consistency only, not provider billing. Any
   further live request with the same record path refuses `QUOTA_SPENT`
   with zero provider calls. Do NOT reset, delete, recreate, or otherwise
   change the historical record to re-arm it.
+- **Prior catalog check (owner-reported via PR #38, not an inference):**
+  after PR #37, an authenticated non-inference `GET /v1/models` returned
+  `preflight: ok account-reachable model-listed catalog=21`, listing the
+  `-1026` ID. Catalog reachability proves neither inference success, video
+  compatibility, nor billing. The organizer offer cited $100 in credits (up
+  to ~2M tokens/minute); that bounds nothing about actual charges.
 - **Billing:** unverified. No figure here is a billed amount or a cap;
   token figures in §5 reconciliation are reported usage only.
 - The exact provider payload is unknown (owner-reported outcome only);
