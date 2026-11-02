@@ -4,6 +4,9 @@
 // behavior, cancellation, deadline, typed refusals, and redaction.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import {
   ANALYZE_MAX_TOKENS,
   PROPOSE_MAX_TOKENS,
@@ -32,6 +35,7 @@ import {
   createLiveSendSpender,
   type LiveSendAuthorization,
 } from '../../packages/live-analysis/src/live-attempts.ts';
+import { openSpentRecord } from '../../packages/live-analysis/src/live-spent-record.ts';
 
 const FAKE_KEY = 'NOT-A-REAL-KEY-0000';
 const APPROVED = BASETEN_DOCUMENTED_DIRECT_MODEL;
@@ -429,4 +433,39 @@ test('L-BT-12: failure after an authorized send never restores the spent attempt
   assert.equal((retry as { ok: boolean }).ok, false);
   assert.equal((retry as { code: string }).code, 'LIVE_ATTEMPT_EXHAUSTED');
   assert.equal(calls.length, 1, 'no retry outbound POST after exhaustion');
+});
+
+test('L-BT-13: one record-backed authorization permits at most one outbound POST', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'pp-bt13-'));
+  try {
+    const { fetchImpl, calls } = makeDouble({ jsonValue: liveBody() });
+    const transport = makeTransport(fetchImpl);
+    const recordPath = path.join(dir, 'spent.jsonl');
+    const ledger = createLiveAttemptLedger({ analyses: 1, proposals: 0 });
+    const authorize = (runId: string) => (): void => {
+      const handle = openSpentRecord(recordPath, { bootstrapApprovalId: 'd9i1-test-bootstrap-bt13' });
+      try {
+        handle.record({ runId, sha256: 'a'.repeat(64), kind: 'analyze', spentAt: 1 });
+      } finally {
+        handle.release();
+      }
+    };
+    const attempt = (spend: () => LiveSendAuthorization): Promise<unknown> =>
+      transport.respond(
+        { kind: 'analyze', runId: 'r', sha256: 'a'.repeat(64), videoBytes: 512, videoPart: realPart() },
+        { isCancelled: neverCancelled, onSend: spend },
+      );
+    const first = createLiveSendSpender(ledger, 'analyze', authorize('r-1'));
+    const second = createLiveSendSpender(ledger, 'analyze', authorize('r-2'));
+    const [a, b] = await Promise.all([attempt(first), attempt(second)]);
+    assert.equal([a, b].filter((r) => (r as { ok: boolean }).ok).length, 1, 'exactly one send authorized');
+    assert.equal(calls.length, 1, 'exactly one outbound POST across both competitors');
+    const reopened = openSpentRecord(recordPath);
+    assert.equal(reopened.countSpent('analyze'), 1, 'exactly one debit durably recorded');
+    reopened.release();
+    const stored = readFileSync(recordPath, 'utf8').split('\n').map((l) => l.trim()).filter((l) => l !== '');
+    assert.equal(stored.length, 2, 'genesis plus exactly one spend: approval identity intact');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

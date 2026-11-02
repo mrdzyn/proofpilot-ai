@@ -8,21 +8,27 @@
  * provider send is appended here at the send boundary, fsync'd before
  * egress; the effective live budget is always `max(0, configured - recorded)`.
  *
- * Fail-closed rules:
+ * Fail-closed protocol (two phases, no read-before-lock authorization):
  * - Only absolute paths are accepted (approved-location rule).
- * - A missing or empty record initializes ONLY with an explicit,
- *   owner-supplied bootstrap approval id (fresh attestation). Without it,
- *   startup refuses — deletion, truncation, or replacement can never
- *   silently re-arm the budget.
- * - A corrupt chain, a chain that no longer contains the lock tip
- *   (rollback), or an unsafe file (symlink, non-regular, wrong owner,
- *   group/other-accessible) always refuses, with or without an id.
- * - Exactly one live owner holds the record: acquisition is an atomic
- *   hard-link creation; contention, a live foreign holder, or an unreadable
- *   lock refuses. A stale lock (dead holder PID) is taken over only when its
- *   tip is still in the record chain; otherwise rollback is assumed.
- * - Every send re-verifies lock ownership immediately before the append; a
- *   missing or foreign lock denies the send and poisons the live path.
+ * - Phase 1 ensures the file exists (created empty only with an approval)
+ *   and is a safe regular file. Phase 2 reads a preliminary snapshot for
+ *   validity only — never authority.
+ * - Phase 3 acquires exclusive ownership via atomic hard link. Every link
+ *   success is verified by re-reading the lock, so concurrent takeovers
+ *   resolve to exactly one owner; stale locks are taken over only when
+ *   their tip is in the chain (or the chain is empty with a fresh approval).
+ * - Phase 4 re-reads the chain under the lock; the authoritative snapshot
+ *   must match the preliminary one (rollback membership included), else the
+ *   lock is released and open fails closed.
+ * - Phase 5 writes the genesis under the lock for still-empty chains and
+ *   fsyncs: the first authorized send always follows a durable genesis.
+ * - A missing or empty record initializes ONLY with an explicit owner
+ *   bootstrap approval id (fresh attestation). Without it, startup refuses
+ *   — deletion, truncation, or replacement can never silently re-arm the
+ *   budget. Corrupt, unsafe, or rolled-back state always refuses, with or
+ *   without an id; the first entry must be exactly one approval genesis.
+ * - Every send re-verifies lock ownership immediately before the append;
+ *   a missing or foreign lock denies the send and poisons the live path.
  * - Entries never name credentials, request bodies, or provider text — run
  *   id, media SHA-256, kind, and timestamp only (plus the approval id that
  *   anchored the record).
@@ -215,6 +221,77 @@ export interface LiveSpentRecord {
  *   LIVE_RECORD_LOCKED. A stale lock is taken over only when its tip is
  *   still in the chain; otherwise LIVE_SPEND_RECORD_ROLLBACK.
  */
+export interface ChainSnapshot {
+  readonly tip: string;
+  readonly analyses: number;
+  readonly proposals: number;
+}
+
+export type SnapshotContinuity =
+  | { readonly ok: true }
+  | { readonly ok: false; code: 'LIVE_SPEND_RECORD_FAILED' | 'LIVE_SPEND_RECORD_ROLLBACK' };
+
+/**
+ * Post-acquisition continuity table (unit-tested): the authoritative snapshot
+ * re-read under exclusive ownership must match the preliminary snapshot, and
+ * a stale-takeover tip must additionally still be in the chain. Any drift
+ * fails closed — authorization never starts from a moving snapshot.
+ */
+export function checkSnapshotContinuity(
+  preliminary: ChainSnapshot,
+  authoritative: ChainSnapshot,
+  stolenTip: string | null,
+  authoritativeDigests: ReadonlySet<string>,
+): SnapshotContinuity {
+  if (stolenTip !== null && !authoritativeDigests.has(stolenTip)) {
+    return { ok: false, code: 'LIVE_SPEND_RECORD_ROLLBACK' };
+  }
+  if (preliminary.tip !== authoritative.tip ||
+    preliminary.analyses !== authoritative.analyses ||
+    preliminary.proposals !== authoritative.proposals) {
+    return { ok: false, code: 'LIVE_SPEND_RECORD_FAILED' };
+  }
+  return { ok: true };
+}
+
+interface RecordSnapshot extends ChainSnapshot {
+  readonly digests: Set<string>;
+  readonly empty: boolean;
+}
+
+function readSnapshot(recordPath: string): RecordSnapshot {
+  const lines = readChain(recordPath);
+  let analyses = 0;
+  let proposals = 0;
+  for (const line of lines) {
+    if (line.entry === 'spend') {
+      if (line.kind === 'analyze') analyses += 1;
+      else proposals += 1;
+    }
+  }
+  return {
+    tip: lines.length > 0 && lines[lines.length - 1] !== undefined
+      ? (lines[lines.length - 1] as StoredLine).digest
+      : GENESIS_PREV,
+    analyses,
+    proposals,
+    digests: new Set(lines.map((line) => line.digest)),
+    empty: lines.length === 0,
+  };
+}
+
+function releaseOwnedLock(lockPath: string, nonce: string): void {
+  try {
+    const raw = readFileSync(lockPath, 'utf8');
+    const parsed: unknown = JSON.parse(raw);
+    if (isLockContent(parsed) && parsed.nonce === nonce && parsed.pid === process.pid) {
+      unlinkSync(lockPath);
+    }
+  } catch {
+    // Best-effort: a stale lock is taken over (or refused) on next open.
+  }
+}
+
 export function openSpentRecord(
   recordPath: string,
   opts: { readonly bootstrapApprovalId?: string } = {},
@@ -229,50 +306,94 @@ export function openSpentRecord(
     throw new LiveSpendRecordError('LIVE_SPEND_RECORD_MISSING', 'bootstrap approval id is malformed');
   }
 
-  // Load + verify, or bootstrap a fresh chain with the owner approval.
-  let lines: StoredLine[];
+  // Phase 1 — the file must exist (created empty only with an approval), and
+  // be a safe regular file. Existence alone authorizes nothing.
+  let existed: boolean;
   try {
     const st = lstatSync(recordPath);
     if (st.isSymbolicLink() || !st.isFile()) {
       throw new LiveSpendRecordError('LIVE_RECORD_UNSAFE', 'record path must be a regular file, not a symlink or special file');
     }
-    lines = readChain(recordPath);
+    existed = true;
   } catch (error) {
     if (error instanceof LiveSpendRecordError) throw error;
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT' || bootstrapId === undefined) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      throw new LiveSpendRecordError('LIVE_SPEND_RECORD_FAILED', 'record path is not accessible');
+    }
+    existed = false;
+  }
+  if (!existed) {
+    if (bootstrapId === undefined) {
       throw new LiveSpendRecordError(
         'LIVE_SPEND_RECORD_MISSING',
         'record is missing and no bootstrap approval was supplied; refusing to auto-create (rollback-safe: supply a fresh owner approval id to initialize)',
       );
     }
-    lines = initializeRecord(recordPath, bootstrapId);
+    try {
+      const fd = openSync(recordPath, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL, 0o600);
+      closeSync(fd);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
+        throw new LiveSpendRecordError('LIVE_SPEND_RECORD_FAILED', 'bootstrap record file cannot be created');
+      }
+      // A concurrent initializer created it; continue through the shared path.
+    }
   }
-  if (lines.length === 0) {
-    if (bootstrapId === undefined) {
+
+  // Phase 2 — preliminary snapshot: validity only, never authority. Counts
+  // and tip established here are re-verified under the lock in phase 4.
+  const preliminary = readSnapshot(recordPath);
+
+  // Phase 3 — exclusive ownership BEFORE any authoritative state is fixed.
+  const nonce = randomBytes(16).toString('hex');
+  const me = { pid: process.pid, nonce, createdAt: Date.now(), tip: preliminary.tip };
+  const stolenTip = acquireLock(lockPath, me, preliminary.digests, preliminary.empty, bootstrapId !== undefined);
+
+  // Phase 4 — authoritative snapshot under exclusive ownership. Any drift
+  // since the preliminary read (a lockless writer, a lost race) fails closed
+  // instead of authorizing from a moving snapshot.
+  let tip: string;
+  let analyses: number;
+  let proposals: number;
+  try {
+    const authoritative = readSnapshot(recordPath);
+    const continuity = checkSnapshotContinuity(
+      { tip: preliminary.tip, analyses: preliminary.analyses, proposals: preliminary.proposals },
+      { tip: authoritative.tip, analyses: authoritative.analyses, proposals: authoritative.proposals },
+      stolenTip,
+      authoritative.digests,
+    );
+    if (!continuity.ok) {
+      if (continuity.code === 'LIVE_SPEND_RECORD_ROLLBACK') {
+        throw new LiveSpendRecordError(
+          'LIVE_SPEND_RECORD_ROLLBACK',
+          'stale lock tip is absent from the re-read chain: the record was replaced or rolled back; refusing to re-arm (reconcile manually and bootstrap a fresh approval)',
+        );
+      }
       throw new LiveSpendRecordError(
-        'LIVE_SPEND_RECORD_MISSING',
-        'record is empty and no bootstrap approval was supplied; refusing to auto-initialize (empty is ambiguous with truncation)',
+        'LIVE_SPEND_RECORD_FAILED',
+        'record changed during acquisition; refusing to authorize from a moving snapshot (retry the open)',
       );
     }
-    lines = initializeRecord(recordPath, bootstrapId);
-  }
+    tip = authoritative.tip;
+    analyses = authoritative.analyses;
+    proposals = authoritative.proposals;
 
-  const digests = new Set(lines.map((line) => line.digest));
-  let analyses = 0;
-  let proposals = 0;
-  for (const line of lines) {
-    if (line.entry === 'spend') {
-      if (line.kind === 'analyze') analyses += 1;
-      else proposals += 1;
+    // Phase 5 — genesis for still-empty chains, written under the lock and
+    // fsync'd: the first authorized send always follows a durable genesis.
+    if (authoritative.empty) {
+      if (bootstrapId === undefined) {
+        throw new LiveSpendRecordError(
+          'LIVE_SPEND_RECORD_MISSING',
+          'record is empty and no bootstrap approval was supplied; refusing to auto-initialize (empty is ambiguous with truncation)',
+        );
+      }
+      tip = writeGenesis(recordPath, bootstrapId);
     }
+  } catch (error) {
+    releaseOwnedLock(lockPath, nonce);
+    throw error;
   }
-
-  // Exclusive ownership: atomic hard-link acquisition of the lock.
-  const nonce = randomBytes(16).toString('hex');
-  const me = { pid: process.pid, nonce, createdAt: Date.now(), tip: lines[lines.length - 1]?.digest ?? GENESIS_PREV };
-  acquireLock(lockPath, me, digests);
-
-  let tip = me.tip;
   const verifyLock = (): void => {
     let raw: string;
     try {
@@ -377,15 +498,26 @@ function readChain(recordPath: string): StoredLine[] {
     prev = parsed.digest;
     lines.push(parsed);
   }
+  // Exactly one approval genesis, and it must come first: spend-only chains
+  // and duplicate genesis lines can never authorize.
+  if (lines.length > 0 && lines[0]?.entry !== 'genesis') {
+    throw new LiveSpendRecordError('LIVE_SPEND_RECORD_CORRUPT', 'record must begin with exactly one approval genesis');
+  }
+  for (const line of lines.slice(1)) {
+    if (line.entry === 'genesis') {
+      throw new LiveSpendRecordError('LIVE_SPEND_RECORD_CORRUPT', 'record must contain exactly one approval genesis');
+    }
+  }
   return lines;
 }
 
 /**
- * First-run bootstrap: the owner attests a fresh approval id for this path.
- * Writes the genesis line binding that id. Never overwrites an existing file
- * (exclusive create — a racer wins, the loser retries through open).
+ * First-run bootstrap, called only while holding the exclusive lock on a
+ * verified-empty record: append the genesis line binding the owner approval
+ * id and fsync before returning. The first authorized send always follows a
+ * durable genesis.
  */
-function initializeRecord(recordPath: string, approvalId: string): StoredLine[] {
+function writeGenesis(recordPath: string, approvalId: string): string {
   const createdAt = Date.now();
   const genesis: GenesisLine = {
     v: 1,
@@ -396,21 +528,17 @@ function initializeRecord(recordPath: string, approvalId: string): StoredLine[] 
     digest: genesisDigest(approvalId, createdAt),
   };
   try {
-    const fd = openSync(recordPath, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL, 0o600);
+    appendFileSync(recordPath, `${JSON.stringify(genesis)}\n`, { encoding: 'utf8', mode: 0o600 });
+    const fd = openSync(recordPath, 'r');
     try {
-      writeFileSync(fd, `${JSON.stringify(genesis)}\n`, { encoding: 'utf8' });
       fsyncSync(fd);
     } finally {
       closeSync(fd);
     }
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
-      // A concurrent initializer won: fall back to loading their chain.
-      return readChain(recordPath);
-    }
-    throw new LiveSpendRecordError('LIVE_SPEND_RECORD_FAILED', 'bootstrap record cannot be created');
+  } catch {
+    throw new LiveSpendRecordError('LIVE_SPEND_RECORD_FAILED', 'bootstrap genesis cannot be durably written');
   }
-  return [genesis];
+  return genesis.digest;
 }
 
 /** Rewrite the lock tip atomically after each recorded spend. */
@@ -434,41 +562,79 @@ function updateLockTip(lockPath: string, nonce: string, tip: string): void {
 }
 
 /**
+ * Read the lock and confirm it names exactly this holder. Called immediately
+ * after a link success: if a concurrent takeover unlinked and replaced our
+ * just-acquired lock, we detect the loss here and fail closed instead of
+ * proceeding as a phantom second owner.
+ */
+function verifyLockIdentity(lockPath: string, pid: number, nonce: string): boolean {
+  let raw: string;
+  try {
+    raw = readFileSync(lockPath, 'utf8');
+  } catch {
+    return false;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return false;
+  }
+  return isLockContent(parsed) && parsed.pid === pid && parsed.nonce === nonce;
+}
+
+/**
  * Atomic lock acquisition via hard link (appears with complete content or
- * not at all — never torn). On contention with a live holder: refuse. On a
- * stale lock: take over only when its tip is still in the record chain
- * (rollback-safe); otherwise refuse. Bounded retries, then refuse.
+ * not at all — never torn). Returns the stolen tip when a stale takeover
+ * occurred, else null. On contention with a live holder: refuse. On a stale
+ * lock: take over only when its tip is still in the record chain
+ * (rollback-safe); otherwise refuse. Every link success is verified by
+ * re-reading the lock, so concurrent takeovers resolve to exactly one owner.
+ * Bounded retries, then refuse.
  */
 function acquireLock(
   lockPath: string,
   me: { pid: number; nonce: string; createdAt: number; tip: string },
-  chainDigests: Set<string>,
-): void {
+  chainDigests: ReadonlySet<string>,
+  chainEmpty: boolean,
+  bootstrapSupplied: boolean,
+): string | null {
   const tmp = `${lockPath}.tmp.${String(me.pid)}.${me.nonce}`;
   writeFileSync(
     tmp,
     JSON.stringify({ pid: me.pid, nonce: me.nonce, createdAt: me.createdAt, tip: me.tip }),
     { encoding: 'utf8', mode: 0o600 },
   );
+  let stolenTip: string | null = null;
   try {
     for (let attempt = 0; attempt < 4; attempt += 1) {
+      let linked = false;
       try {
         linkSync(tmp, lockPath);
-        return;
+        linked = true;
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
           throw new LiveSpendRecordError('LIVE_SPEND_RECORD_FAILED', 'lock acquisition failed');
         }
       }
-      if (tryStealStaleLock(lockPath, chainDigests)) {
+      if (linked) {
+        // Prove the link is still ours: a concurrent takeover may have
+        // unlinked and replaced it in between. Losing here fails closed.
+        if (verifyLockIdentity(lockPath, me.pid, me.nonce)) {
+          return stolenTip;
+        }
         continue;
       }
-      throw new LiveSpendRecordError(
-        'LIVE_RECORD_LOCKED',
-        'record is owned by another live companion process; refusing to share authorization (stop the other process or wait for its release)',
-      );
+      const action = inspectLockForTakeover(lockPath, chainDigests, chainEmpty, bootstrapSupplied);
+      if (action.kind === 'locked') {
+        throw new LiveSpendRecordError(
+          'LIVE_RECORD_LOCKED',
+          'record is owned by another live companion process; refusing to share authorization (stop the other process or wait for its release)',
+        );
+      }
+      stolenTip = action.tip;
     }
-    throw new LiveSpendRecordError('LIVE_RECORD_LOCKED', 'record lock contention did not settle');
+    throw new LiveSpendRecordError('LIVE_SPEND_RECORD_FAILED', 'record lock acquisition did not settle');
   } finally {
     try {
       unlinkSync(tmp);
@@ -479,17 +645,31 @@ function acquireLock(
 }
 
 /**
- * Attempt stale-lock takeover. Returns true when the caller should retry
- * acquisition, and throws when the state proves rollback or tampering.
+ * Inspect a contended lock. Returns 'locked' for a live holder, or clears a
+ * stale lock and returns 'stolen' so the caller retries acquisition.
+ * Stale-takeover rules: a tip absent from a non-empty chain proves rollback
+ * (refuse); an empty chain is ambiguous with truncation, so takeover requires
+ * the fresh owner bootstrap approval. Unlinking is conditional on the lock
+ * still naming the inspected content — post-acquisition verification makes
+ * any residual unlink race fail closed.
  */
-function tryStealStaleLock(lockPath: string, chainDigests: Set<string>): boolean {
+type LockInspection =
+  | { readonly kind: 'locked' }
+  | { readonly kind: 'stolen'; readonly tip: string | null };
+
+function inspectLockForTakeover(
+  lockPath: string,
+  chainDigests: ReadonlySet<string>,
+  chainEmpty: boolean,
+  bootstrapSupplied: boolean,
+): LockInspection {
   let raw: string;
   try {
     checkFileSafety(lockPath, 'lock');
     raw = readFileSync(lockPath, 'utf8');
   } catch (error) {
     if (error instanceof LiveSpendRecordError) throw error;
-    return true;
+    return { kind: 'stolen', tip: null };
   }
   let parsed: unknown;
   try {
@@ -503,13 +683,30 @@ function tryStealStaleLock(lockPath: string, chainDigests: Set<string>): boolean
     throw new LiveSpendRecordError('LIVE_RECORD_UNSAFE', 'lock file is not well-formed');
   }
   if (pidAlive(parsed.pid)) {
-    return false;
+    return { kind: 'locked' };
   }
-  if (!chainDigests.has(parsed.tip)) {
+  if (chainEmpty) {
+    if (!bootstrapSupplied) {
+      throw new LiveSpendRecordError(
+        'LIVE_SPEND_RECORD_MISSING',
+        'stale lock on an empty record without a bootstrap approval; refusing to re-arm (supply a fresh owner approval id to initialize)',
+      );
+    }
+    // Owner attests the ambiguous empty state; take over below.
+  } else if (!chainDigests.has(parsed.tip)) {
     throw new LiveSpendRecordError(
       'LIVE_SPEND_RECORD_ROLLBACK',
       'stale lock tip is absent from the record chain: the record was replaced or rolled back; refusing to re-arm (reconcile manually and bootstrap a fresh approval)',
     );
+  }
+  let current: string;
+  try {
+    current = readFileSync(lockPath, 'utf8');
+  } catch {
+    return { kind: 'stolen', tip: parsed.tip };
+  }
+  if (current !== raw) {
+    return { kind: 'stolen', tip: parsed.tip };
   }
   try {
     unlinkSync(lockPath);
@@ -518,7 +715,7 @@ function tryStealStaleLock(lockPath: string, chainDigests: Set<string>): boolean
       throw new LiveSpendRecordError('LIVE_RECORD_LOCKED', 'stale lock could not be cleared');
     }
   }
-  return true;
+  return { kind: 'stolen', tip: parsed.tip };
 }
 
 /**
