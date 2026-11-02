@@ -13,6 +13,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ZoneSection, EvidenceTable, Row, Note } from '../components/blocks.tsx';
 import { LoadingState, ErrorState } from '../components/states.tsx';
 import { NeutralChip, ErrorChip } from '../components/chips.tsx';
+import { describeRunProvenance } from './liveProvenance.ts';
 
 type Phase =
   | 'unavailable'
@@ -68,6 +69,7 @@ const RECOVERY: Record<string, string> = {
   CANCELLED: 'The run was cancelled. Staged bytes were deleted.',
   TIMEOUT: 'The run exceeded its ceiling. Hash again, register a fresh permit, upload again.',
   LOCAL_HASH_FAILED: 'The browser could not hash the file locally. Reload this page from the loopback companion and try again.',
+  MODEL_UNAVAILABLE_OR_UNAPPROVED: 'D9 pending: live Baseten inference is not approved. The mock path is unaffected.',
 };
 
 async function api<T>(path: string, init?: RequestInit, session?: string | null): Promise<T> {
@@ -288,6 +290,10 @@ export function LiveZone() {
 
   const result = (run?.result ?? {}) as Record<string, unknown>;
   const usage = (result['usage'] ?? {}) as { promptTokens?: number; completionTokens?: number; totalTokens?: number };
+  // Mock vs live provenance for the result table. The live branch renders
+  // only when a run record carries `transport: 'baseten-live'`, which the
+  // companion cannot produce while D9 is pending.
+  const prov = describeRunProvenance(result);
 
   return (
     <ZoneSection
@@ -431,14 +437,18 @@ export function LiveZone() {
             </div>
           )}
           {(phase === 'complete' || phase === 'proposed') && run !== null && (
-            <EvidenceTable caption={`Mock ${kind} result — quoted fixture text, run ${run.runId}`}>
+            <EvidenceTable caption={prov.isLive
+              ? `Live Baseten ${kind} result — quoted text (UNVERIFIED), run ${run.runId}`
+              : `Mock ${kind} result — quoted fixture text, run ${run.runId}`}>
               <Row head="Verdict">
-                <ErrorChip>{phase === 'complete' ? 'MOCK FIXTURE — NOT A PROVIDER RESPONSE' : 'UNTRUSTED PROPOSAL — NOT VERIFIED (MOCK)'}</ErrorChip>
+                <ErrorChip>{phase === 'complete' ? prov.verdictChip : prov.proposalChip}</ErrorChip>
               </Row>
-              <Row head="Model">{String(result['mockModel'] ?? 'mock-fixture-model (D9 pending: not a live model)')}</Row>
-              <Row head="Run">{`${run.runId} · transport: ${String(result['transport'] ?? 'mock-fixture')} · live inference: no`}</Row>
-              <Row head="Usage">{`prompt ${usage.promptTokens ?? '?'} · completion ${usage.completionTokens ?? '?'} · total ${usage.totalTokens ?? '?'} (fixture counts, not billing)`}</Row>
-              {phase === 'complete' && <Row head="Observations">{String(result['observations'] ?? '')}</Row>}
+              <Row head="Model">{prov.isLive ? prov.model : String(result['mockModel'] ?? 'mock-fixture-model (D9 pending: not a live model)')}</Row>
+              <Row head="Run">{prov.isLive
+                ? `${run.runId} · provider: baseten · model: ${prov.model} · transport: baseten-live · live inference: yes`
+                : `${run.runId} · transport: ${String(result['transport'] ?? 'mock-fixture')} · live inference: no`}</Row>
+              <Row head="Usage">{`prompt ${usage.promptTokens ?? '?'} · completion ${usage.completionTokens ?? '?'} · total ${usage.totalTokens ?? '?'} (${prov.usageNote})`}</Row>
+              {phase === 'complete' && <Row head={prov.isLive ? 'Observations (quoted, unverified)' : 'Observations'}>{String(result['observations'] ?? '')}</Row>}
               {phase === 'proposed' && (
                 <Row head="Correction triple">
                   {JSON.stringify(result['adjustments'] ?? [])} — escaped read-only text, never executed. Rendered CSS: <span className="mono">{String(result['renderedCss'] ?? '')}</span>

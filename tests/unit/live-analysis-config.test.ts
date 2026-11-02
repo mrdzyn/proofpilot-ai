@@ -5,8 +5,10 @@ import {
   BASETEN_APPROVED_BASE_URL,
   BASETEN_APPROVED_ENDPOINT,
   BASETEN_DOCUMENTED_DIRECT_MODEL,
+  D9_APPROVED_MODEL,
   evaluateOfflineLiveConfiguration,
   validateBasetenBaseUrl,
+  validateLiveModel,
 } from '../../packages/live-analysis/src/config.ts';
 
 test('L-CFG-1: exact owner base URL and one trailing slash resolve to the same pinned destination', () => {
@@ -85,10 +87,31 @@ test('L-CFG-1: this module exposes neither a transport nor a positive live autho
     'BASETEN_APPROVED_BASE_URL',
     'BASETEN_APPROVED_ENDPOINT',
     'BASETEN_DOCUMENTED_DIRECT_MODEL',
+    'D9_APPROVED_MODEL',
     'evaluateOfflineLiveConfiguration',
     'validateBasetenBaseUrl',
+    'validateLiveModel',
   ]);
   for (const model of [BASETEN_DOCUMENTED_DIRECT_MODEL, 'meta/muse-spark-open']) {
     assert.equal(module.evaluateOfflineLiveConfiguration({ baseUrl: BASETEN_APPROVED_BASE_URL, model }).ok, false);
+  }
+});
+
+test('L-CFG-2: D9 is pending, so validateLiveModel refuses everything including the documented ID', () => {
+  assert.equal(D9_APPROVED_MODEL, null);
+  for (const value of [
+    BASETEN_DOCUMENTED_DIRECT_MODEL,
+    'meta/muse-spark-open',
+    'meta-models/muse-spark-open-1026',
+    '',
+    null,
+    undefined,
+    42,
+    {},
+  ]) {
+    assert.deepEqual(validateLiveModel(value), {
+      ok: false,
+      code: 'MODEL_UNAVAILABLE_OR_UNAPPROVED',
+    }, `D9 refuses ${JSON.stringify(value)}`);
   }
 });

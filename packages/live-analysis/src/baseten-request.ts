@@ -21,10 +21,16 @@ export const PROPOSE_MAX_TOKENS = 512;
 
 export type VideoPartRefusal = 'NOT_MP4_BYTES' | 'VIDEO_TOO_LARGE' | 'BODY_TOO_LARGE';
 
+/** Typed inline `video_url` data-URL part produced by `encodeVideoPart`. */
+export type VideoPart = Readonly<{
+  type: 'video_url';
+  video_url: Readonly<{ url: string }>;
+}>;
+
 export type VideoPartResult =
   | Readonly<{
     ok: true;
-    part: Readonly<{ type: 'video_url'; video_url: Readonly<{ url: string }> }>;
+    part: VideoPart;
     base64Chars: number;
   }>
   | Readonly<{ ok: false; code: VideoPartRefusal }>;
