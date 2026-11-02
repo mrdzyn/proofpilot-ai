@@ -13,13 +13,14 @@
  * - Phase 1 ensures the file exists (created empty only with an approval)
  *   and is a safe regular file. Phase 2 reads a preliminary snapshot for
  *   validity only — never authority.
- * - Phase 3 acquires exclusive ownership via atomic hard link. Every link
- *   success is verified by re-reading the lock, so concurrent takeovers
- *   resolve to exactly one owner; stale locks are taken over only when
- *   their tip is in the chain (or the chain is empty with a fresh approval).
+ * - Phase 3 acquires exclusive ownership via atomic hard link. There is no
+ *   automatic stale-lock takeover: any existing lock, live or stale, refuses
+ *   LIVE_RECORD_LOCKED. A crashed holder's lock is cleared only through the
+ *   documented owner-supervised recovery workflow (runbook section 4c),
+ *   never by the runtime.
  * - Phase 4 re-reads the chain under the lock; the authoritative snapshot
- *   must match the preliminary one (rollback membership included), else the
- *   lock is released and open fails closed.
+ *   must match the preliminary one, else the lock is released and open
+ *   fails closed.
  * - Phase 5 writes the genesis under the lock for still-empty chains and
  *   fsyncs: the first authorized send always follows a durable genesis.
  * - A missing or empty record initializes ONLY with an explicit owner
@@ -217,9 +218,9 @@ export interface LiveSpentRecord {
  *   LIVE_SPEND_RECORD_MISSING — never auto-creates.
  * - Existing record: full chain verification; any break throws
  *   LIVE_SPEND_RECORD_CORRUPT. Unsafe files throw LIVE_RECORD_UNSAFE.
- * - Ownership: atomic hard-link acquisition; a live foreign holder throws
- *   LIVE_RECORD_LOCKED. A stale lock is taken over only when its tip is
- *   still in the chain; otherwise LIVE_SPEND_RECORD_ROLLBACK.
+ * - Ownership: atomic hard-link acquisition; any existing foreign lock —
+ *   live or stale — throws LIVE_RECORD_LOCKED. Crash recovery is an explicit
+ *   owner-supervised workflow outside the runtime, never automatic takeover.
  */
 export interface ChainSnapshot {
   readonly tip: string;
@@ -229,23 +230,18 @@ export interface ChainSnapshot {
 
 export type SnapshotContinuity =
   | { readonly ok: true }
-  | { readonly ok: false; code: 'LIVE_SPEND_RECORD_FAILED' | 'LIVE_SPEND_RECORD_ROLLBACK' };
+  | { readonly ok: false; code: 'LIVE_SPEND_RECORD_FAILED' };
 
 /**
  * Post-acquisition continuity table (unit-tested): the authoritative snapshot
- * re-read under exclusive ownership must match the preliminary snapshot, and
- * a stale-takeover tip must additionally still be in the chain. Any drift
- * fails closed — authorization never starts from a moving snapshot.
+ * re-read under exclusive ownership must match the preliminary snapshot. Any
+ * drift fails closed — authorization never starts from a moving snapshot.
+ * (There is no takeover path, so no stolen-tip membership check remains.)
  */
 export function checkSnapshotContinuity(
   preliminary: ChainSnapshot,
   authoritative: ChainSnapshot,
-  stolenTip: string | null,
-  authoritativeDigests: ReadonlySet<string>,
 ): SnapshotContinuity {
-  if (stolenTip !== null && !authoritativeDigests.has(stolenTip)) {
-    return { ok: false, code: 'LIVE_SPEND_RECORD_ROLLBACK' };
-  }
   if (preliminary.tip !== authoritative.tip ||
     preliminary.analyses !== authoritative.analyses ||
     preliminary.proposals !== authoritative.proposals) {
@@ -255,7 +251,6 @@ export function checkSnapshotContinuity(
 }
 
 interface RecordSnapshot extends ChainSnapshot {
-  readonly digests: Set<string>;
   readonly empty: boolean;
 }
 
@@ -275,7 +270,6 @@ function readSnapshot(recordPath: string): RecordSnapshot {
       : GENESIS_PREV,
     analyses,
     proposals,
-    digests: new Set(lines.map((line) => line.digest)),
     empty: lines.length === 0,
   };
 }
@@ -288,7 +282,7 @@ function releaseOwnedLock(lockPath: string, nonce: string): void {
       unlinkSync(lockPath);
     }
   } catch {
-    // Best-effort: a stale lock is taken over (or refused) on next open.
+    // Best-effort: a stale lock blocks the next open until supervised recovery.
   }
 }
 
@@ -345,9 +339,10 @@ export function openSpentRecord(
   const preliminary = readSnapshot(recordPath);
 
   // Phase 3 — exclusive ownership BEFORE any authoritative state is fixed.
+  // Any pre-existing lock refuses; there is no takeover path.
   const nonce = randomBytes(16).toString('hex');
   const me = { pid: process.pid, nonce, createdAt: Date.now(), tip: preliminary.tip };
-  const stolenTip = acquireLock(lockPath, me, preliminary.digests, preliminary.empty, bootstrapId !== undefined);
+  acquireLock(lockPath, me);
 
   // Phase 4 — authoritative snapshot under exclusive ownership. Any drift
   // since the preliminary read (a lockless writer, a lost race) fails closed
@@ -360,16 +355,8 @@ export function openSpentRecord(
     const continuity = checkSnapshotContinuity(
       { tip: preliminary.tip, analyses: preliminary.analyses, proposals: preliminary.proposals },
       { tip: authoritative.tip, analyses: authoritative.analyses, proposals: authoritative.proposals },
-      stolenTip,
-      authoritative.digests,
     );
     if (!continuity.ok) {
-      if (continuity.code === 'LIVE_SPEND_RECORD_ROLLBACK') {
-        throw new LiveSpendRecordError(
-          'LIVE_SPEND_RECORD_ROLLBACK',
-          'stale lock tip is absent from the re-read chain: the record was replaced or rolled back; refusing to re-arm (reconcile manually and bootstrap a fresh approval)',
-        );
-      }
       throw new LiveSpendRecordError(
         'LIVE_SPEND_RECORD_FAILED',
         'record changed during acquisition; refusing to authorize from a moving snapshot (retry the open)',
@@ -455,7 +442,7 @@ export function openSpentRecord(
           unlinkSync(lockPath);
         }
       } catch {
-        // Best-effort: a stale lock is taken over (or refused) on next open.
+        // Best-effort: a stale lock blocks the next open until supervised recovery.
       }
     },
   };
@@ -563,9 +550,9 @@ function updateLockTip(lockPath: string, nonce: string, tip: string): void {
 
 /**
  * Read the lock and confirm it names exactly this holder. Called immediately
- * after a link success: if a concurrent takeover unlinked and replaced our
- * just-acquired lock, we detect the loss here and fail closed instead of
- * proceeding as a phantom second owner.
+ * after a link success as defense in depth: only this holder's own release
+ * may remove the lock, so a loss here fails closed instead of authorizing
+ * as a phantom second owner.
  */
 function verifyLockIdentity(lockPath: string, pid: number, nonce: string): boolean {
   let raw: string;
@@ -585,54 +572,41 @@ function verifyLockIdentity(lockPath: string, pid: number, nonce: string): boole
 
 /**
  * Atomic lock acquisition via hard link (appears with complete content or
- * not at all — never torn). Returns the stolen tip when a stale takeover
- * occurred, else null. On contention with a live holder: refuse. On a stale
- * lock: take over only when its tip is still in the record chain
- * (rollback-safe); otherwise refuse. Every link success is verified by
- * re-reading the lock, so concurrent takeovers resolve to exactly one owner.
- * Bounded retries, then refuse.
+ * not at all — never torn). There is deliberately NO stale-lock takeover:
+ * any existing lock — live holder or dead — refuses LIVE_RECORD_LOCKED, and
+ * crash recovery is an explicit owner-supervised workflow outside the
+ * runtime (runbook section 4c). Removing the check-then-unlink path removes
+ * the race it contained: no contender can ever delete another process's
+ * lock. Every link success is still verified by re-reading the lock, so a
+ * lost link fails closed instead of authorizing as a phantom second owner.
+ * Bounded retries cover only the raced-release window (the lock vanishing
+ * between link failure and inspection), then refuse.
  */
 function acquireLock(
   lockPath: string,
   me: { pid: number; nonce: string; createdAt: number; tip: string },
-  chainDigests: ReadonlySet<string>,
-  chainEmpty: boolean,
-  bootstrapSupplied: boolean,
-): string | null {
+): void {
   const tmp = `${lockPath}.tmp.${String(me.pid)}.${me.nonce}`;
   writeFileSync(
     tmp,
     JSON.stringify({ pid: me.pid, nonce: me.nonce, createdAt: me.createdAt, tip: me.tip }),
     { encoding: 'utf8', mode: 0o600 },
   );
-  let stolenTip: string | null = null;
   try {
     for (let attempt = 0; attempt < 4; attempt += 1) {
-      let linked = false;
       try {
         linkSync(tmp, lockPath);
-        linked = true;
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
           throw new LiveSpendRecordError('LIVE_SPEND_RECORD_FAILED', 'lock acquisition failed');
         }
+        refuseContendedLock(lockPath);
       }
-      if (linked) {
-        // Prove the link is still ours: a concurrent takeover may have
-        // unlinked and replaced it in between. Losing here fails closed.
-        if (verifyLockIdentity(lockPath, me.pid, me.nonce)) {
-          return stolenTip;
-        }
-        continue;
+      // Prove the link is still ours before authorizing on it. Losing here
+      // fails closed; only this holder's own release may remove the lock.
+      if (verifyLockIdentity(lockPath, me.pid, me.nonce)) {
+        return;
       }
-      const action = inspectLockForTakeover(lockPath, chainDigests, chainEmpty, bootstrapSupplied);
-      if (action.kind === 'locked') {
-        throw new LiveSpendRecordError(
-          'LIVE_RECORD_LOCKED',
-          'record is owned by another live companion process; refusing to share authorization (stop the other process or wait for its release)',
-        );
-      }
-      stolenTip = action.tip;
     }
     throw new LiveSpendRecordError('LIVE_SPEND_RECORD_FAILED', 'record lock acquisition did not settle');
   } finally {
@@ -645,31 +619,23 @@ function acquireLock(
 }
 
 /**
- * Inspect a contended lock. Returns 'locked' for a live holder, or clears a
- * stale lock and returns 'stolen' so the caller retries acquisition.
- * Stale-takeover rules: a tip absent from a non-empty chain proves rollback
- * (refuse); an empty chain is ambiguous with truncation, so takeover requires
- * the fresh owner bootstrap approval. Unlinking is conditional on the lock
- * still naming the inspected content — post-acquisition verification makes
- * any residual unlink race fail closed.
+ * Refuse an open blocked by a pre-existing lock. A live holder means another
+ * companion is running; a dead holder means a crash left the lock behind —
+ * both refuse identically, because the runtime cannot distinguish a crash
+ * from a descheduled live holder and must never clear authorization state
+ * on its own. The refusal names the holder and its age so the owner can
+ * perform supervised recovery (runbook section 4c); the lock file itself is
+ * never modified here.
  */
-type LockInspection =
-  | { readonly kind: 'locked' }
-  | { readonly kind: 'stolen'; readonly tip: string | null };
-
-function inspectLockForTakeover(
-  lockPath: string,
-  chainDigests: ReadonlySet<string>,
-  chainEmpty: boolean,
-  bootstrapSupplied: boolean,
-): LockInspection {
+function refuseContendedLock(lockPath: string): never {
   let raw: string;
   try {
     checkFileSafety(lockPath, 'lock');
     raw = readFileSync(lockPath, 'utf8');
   } catch (error) {
     if (error instanceof LiveSpendRecordError) throw error;
-    return { kind: 'stolen', tip: null };
+    // Unreadable here races a holder release; retry acquisition.
+    throw new LiveSpendRecordError('LIVE_RECORD_LOCKED', 'record lock contention did not settle; retry the open');
   }
   let parsed: unknown;
   try {
@@ -682,40 +648,17 @@ function inspectLockForTakeover(
   if (!isLockContent(parsed)) {
     throw new LiveSpendRecordError('LIVE_RECORD_UNSAFE', 'lock file is not well-formed');
   }
+  const ageMs = Math.max(0, Date.now() - parsed.createdAt);
   if (pidAlive(parsed.pid)) {
-    return { kind: 'locked' };
-  }
-  if (chainEmpty) {
-    if (!bootstrapSupplied) {
-      throw new LiveSpendRecordError(
-        'LIVE_SPEND_RECORD_MISSING',
-        'stale lock on an empty record without a bootstrap approval; refusing to re-arm (supply a fresh owner approval id to initialize)',
-      );
-    }
-    // Owner attests the ambiguous empty state; take over below.
-  } else if (!chainDigests.has(parsed.tip)) {
     throw new LiveSpendRecordError(
-      'LIVE_SPEND_RECORD_ROLLBACK',
-      'stale lock tip is absent from the record chain: the record was replaced or rolled back; refusing to re-arm (reconcile manually and bootstrap a fresh approval)',
+      'LIVE_RECORD_LOCKED',
+      `record is owned by another live companion process (pid ${String(parsed.pid)}); refusing to share authorization (stop the other process or wait for its release)`,
     );
   }
-  let current: string;
-  try {
-    current = readFileSync(lockPath, 'utf8');
-  } catch {
-    return { kind: 'stolen', tip: parsed.tip };
-  }
-  if (current !== raw) {
-    return { kind: 'stolen', tip: parsed.tip };
-  }
-  try {
-    unlinkSync(lockPath);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-      throw new LiveSpendRecordError('LIVE_RECORD_LOCKED', 'stale lock could not be cleared');
-    }
-  }
-  return { kind: 'stolen', tip: parsed.tip };
+  throw new LiveSpendRecordError(
+    'LIVE_RECORD_LOCKED',
+    `record lock held by a dead process (pid ${String(parsed.pid)}, age ${String(ageMs)}ms); refusing automatic takeover — follow the supervised crash-recovery workflow (runbook section 4c) and never clear the lock while a companion may be running`,
+  );
 }
 
 /**
