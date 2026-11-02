@@ -30,9 +30,15 @@
 
 ---
 
+## What ProofPilot can—and cannot—do today
+
+**The live AI currently analyzes the recording; it does not automatically repair the website.** The successful Baseten response described the visible broken Add to cart interaction and its uncertainties. It returned observations, **not an executable patch or a verified fix**.
+
+ProofPilot separately demonstrates a **hand-authored** CSS control (PC-1) that the trusted Playwright oracle verified in **three browser replays**. The historical model-generated correction was accepted as an **untrusted proposal** but **has not been applied or independently verified**. An end-to-end **AI-generated fix → safe application → independent verification** workflow is **not yet demonstrated or authorized**. The demo deliberately shows these boundaries instead of claiming autonomous repair.
+
 ## Demo in 90 seconds
 
-**A synthetic mobile bug, a real AI observation, and an independent browser verdict.** The owner has already completed an authorized live Baseten F01 analysis. The walkthrough below **reuses that captured result**; recording a demonstration does not authorize another paid request.
+**A synthetic mobile bug, a real AI observation, and an independently verified hand-authored control—not an AI-fixed website.** The owner has already completed an authorized live Baseten F01 analysis. The walkthrough below **reuses that captured result**; recording a demonstration does not authorize another paid request.
 
 | Segment | Show on screen | Explain |
 | --- | --- | --- |
