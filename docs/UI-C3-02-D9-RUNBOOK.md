@@ -2,11 +2,14 @@
 
 > **Status: PROCEDURE ONLY. No live call is authorized by this document.**
 > The owner authorized exactly one supervised Baseten analysis (2026-11-02,
-> PR #34 authorization record); D9 approves `meta-models/muse-spark-open`.
-> Every live step below still requires a green independent audit of the
-> activation PR and an explicit one-shot owner go-ahead immediately before
-> the request — the standing authorization is not permission to retry, to
-> run proposals, or to skip the audit.
+> PR #34 authorization record); D9 approves the hackathon-issued
+> `meta-models/muse-spark-open-1026` (organizer's Baseten email: the
+> hackathon-issued key works ONLY with this ID). The unsuffixed public ID
+> `meta-models/muse-spark-open` was approved in error (PR #36) and is
+> refused everywhere. Every live step below still requires a green
+> independent audit of the activation PR and an explicit one-shot owner
+> go-ahead immediately before the request — the standing authorization is
+> not permission to retry, to run proposals, or to skip the audit.
 
 ## 0. Prerequisites (owner decisions; D9 approved, execution gated)
 
@@ -20,10 +23,13 @@
 - D5: synthetic-video transfer + provider retention accepted.
 - D6: permission to record/display provider, run identity, usage.
 - D7: sequencing (separate review → activation audit → merge → one-shot).
-- D9: APPROVED — exact direct-Baseten model ID
-  `meta-models/muse-spark-open` pinned in `packages/live-analysis/src/config.ts`.
-  Never an alias. Account availability is proven only by the owner-run
-  §1 preflight, never by an agent.
+- D9: APPROVED — exact hackathon-issued model ID
+  `meta-models/muse-spark-open-1026` pinned in `packages/live-analysis/src/config.ts`.
+  Never an alias, never the unsuffixed public listing. Account-specific
+  authorization (organizer email) is distinct from generic public
+  documentation; a public listing never implies key access. Account
+  availability is proven only by the owner-run §1 preflight, never by an
+  agent.
 
 ## 1. Preflight (owner Mac; steps 1–4 need no credentials)
 
@@ -31,22 +37,28 @@
    Draft PR report).
 2. `pnpm lint`, both `tsc --noEmit` configs, `pnpm test:unit`,
    `pnpm test:security` — all green (CI must also be green on the exact HEAD).
-3. Confirm `D9_APPROVED_MODEL` is the exact approved ID (one const in
-   `packages/live-analysis/src/config.ts`); anything else refuses.
+3. Confirm `D9_APPROVED_MODEL` is exactly `meta-models/muse-spark-open-1026`
+   (one const in `packages/live-analysis/src/config.ts`); anything else —
+   including the unsuffixed public `meta-models/muse-spark-open` — refuses.
 4. Confirm the spent-record path (durable, outside the repo, mode 0600) is
    empty or holds only already-spent entries you accept.
 5. `node scripts/c3-live-analysis.ts --live --port 0` with NO key set must
    exit 2 naming the missing-key gate. Then export the three variables in
    your shell (values never pasted anywhere else):
-   `BASETEN_API_KEY`, `BASETEN_API_BASE_URL`, `BASETEN_MODEL`.
+   `BASETEN_API_KEY`, `BASETEN_API_BASE_URL`, and
+   `BASETEN_MODEL=meta-models/muse-spark-open-1026` (exactly; the CLI also
+   defaults to the D9 pin when unset, and any other value refuses).
 6. Owner-run account preflight (never run by an agent; the only
    authenticated check in this runbook):
    `node scripts/c3-live-analysis.ts --preflight`
    must print `preflight: ok account-reachable model-listed catalog=<n>`
-   and exit 0. It performs exactly one non-billable `GET /v1/models` and
-   prints no key material. Any refusal (`MISCONFIGURED`, `UNAUTHORIZED`,
-   `HTTP`, `SHAPE`, or model-not-listed) is a STOP event: do not proceed
-   to §3 — reconcile the account/key/model first.
+   and exit 0, with the listed ID exactly `meta-models/muse-spark-open-1026`.
+   It performs exactly one non-billable `GET /v1/models` and prints no key
+   material. A catalog that lists only the unsuffixed public ID does NOT
+   count as listed — access is never inferred from the general model. Any
+   refusal (`MISCONFIGURED`, `UNAUTHORIZED`, `HTTP`, `SHAPE`, or
+   model-not-listed) is a STOP event: do not proceed to §3 — reconcile the
+   account/key/model first.
 
 ## 2. Approval capture
 
@@ -150,3 +162,31 @@ automatic startup path.
 3. Open a separately reviewed disable/re-lock change; do not leave live mode
    enabled for routine use. No automatic closure: the one-shot demo does not
    authorize any further attempt.
+
+## 7. D9-LIVE-01 outcome (owner-reported, recorded; agent did not run it)
+
+- **Verdict: REFUSED.** The owner-operated one-shot POST against the
+  hackathon-issued key returned `TRANSPORT_HTTP` **HTTP 403** — the account
+  rejected the request. No model output was produced; nothing was rendered
+  from a provider.
+- **Spend accounting:** exactly one send-boundary attempt was authorized and
+  is durably recorded as **SPENT** in the owner-held spent-run record (the
+  spend hook fires before the POST and is never restored, including on HTTP
+  refusal). The budget is exhausted: any further live request with the same
+  record path refuses `QUOTA_SPENT` with zero provider calls. Do NOT reset,
+  delete, recreate, or otherwise change the historical record to re-arm it.
+- **Billing:** unverified. Token counts were never reported (no 2xx usage
+  block exists); no figure here is a billed amount or a cap.
+- **Unresolved operational gates (block any further attempt):**
+  1. HTTP 403 cause — whether the hackathon-issued key/model pairing,
+     account scoping, or another account-side condition rejected the call —
+     is unknown. A retry is NOT authorized; diagnosis is an owner decision
+     with the organizer/account evidence, not a code change.
+  2. Hackathon-specific video compatibility — no authoritative documentation
+     in evidence establishes that the `meta-models/muse-spark-open-1026`
+     deployment accepts the inline `video_url` data-URL part this companion
+     sends. Until such documentation (or a separately authorized probe, which
+     is NOT approved here) exists, video acceptance for the hackathon ID is
+     an unresolved gate, independent of the 403.
+- No code, test, record, or configuration change in this slice re-arms,
+  retries, or reinterprets the spent attempt.

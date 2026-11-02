@@ -2035,4 +2035,33 @@ Independent exact-HEAD review of the activation Draft PR; STOP afterwards — no
 ### Next action
 Independent exact-HEAD recheck of PR #36; STOP afterwards — no merge, deploy, provider calls, key reads, spend, or live inference.
 
+## Handoff: UI-C3-02-A3 — D9 hackathon-model correction (new Draft PR)
+
+- **Task / phase:** `tasks/UI-C3-02-D9-I1.md` (§D9 hackathon-model correction; base `main@9f7046e`)
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** ONE independent exact-HEAD auditor, then project owner
+- **Branch:** `phase/ui-c3-02-d9-hackathon-model` (from `main@9f7046e`)
+- **Implementation head:** `bc7d6eca71e092b1395b023fd785c2f1da4869b1` (plus a docs commit)
+- **PR:** (new Draft PR number to fill on open; Draft, unmerged)
+- **State:** READY FOR AUDIT. No merge, deploy, provider calls, key reads, spend, or live inference. The repository `.env.local` was never listed, read, or referenced by value. No authenticated preflight was run; no test POST was made. The historical spend record was not reset, deleted, recreated, or changed.
+
+### Completed
+- **Pin correction:** `D9_APPROVED_MODEL` is now exactly `meta-models/muse-spark-open-1026` (organizer's Baseten email: the hackathon-issued key works ONLY with this ID). The change flows from the single literal through the D9 gate (`validateLiveModel`), the transport constructor (now compares against the D9 pin, not the public listing), the owner-only preflight, the server gate, and the CLI (default `BASETEN_MODEL` is the D9 pin; any other value refuses). `BASETEN_DOCUMENTED_DIRECT_MODEL` stays as the informational public listing only.
+- **Refusals:** the unsuffixed public ID (approved in error, PR #36) and all other aliases refuse at every enforcement point with zero egress; a catalog listing only the public ID reports model-absent so the owner CLI stops before any send (access never inferred from the general model).
+- **Tests:** reworked L-CFG-2 (1026-only pin; pin ≠ public listing; unsuffixed/cased/padded refuse), L-BT-1 (1026 constructs; public listing refused), L-CLI-4 (unsuffixed refused in `--live` and `--preflight`), L-PRE-5/6/7 (gate refusals; new public-ID-only catalog → model-absent; 1026 listed → ok); L-ATT-6 double-backed live path re-targeted to 1026 with the exact-model egress assertion intact. All fake credentials/doubles; no egress or spend during tests.
+- **Preserved:** F01 SHA pin, 1/0 CLI caps, strict numerics, ledger/lock/no-retry semantics, mock separation, zero-budget default, Zone L untouched (display layer only; no cosmetic UI changes bundled).
+- **Records:** runbook §7 records D9-LIVE-01 as REFUSED (`TRANSPORT_HTTP` 403, no model output, single send-boundary attempt SPENT, billing unverified) with the 403-cause and hackathon video-compatibility gates open; task correction section added; STATUS updated (phase, branch, task, handoff, authorization, new D9-LIVE-01 gate row).
+
+### Validation
+- Focused suites green (config, transport, preflight, CLI, attempts); full unit/security + lint + root `tsc` to be reported on the pushed head.
+- Required hosted CI: see the new Draft PR checks for the pushed head.
+- Zero provider calls, zero credential reads, D9 pin `meta-models/muse-spark-open-1026`.
+
+### Continuation notes
+- The owner-held spent-run record lives outside the repo and was not touched; any further live request on that path refuses `QUOTA_SPENT` with zero provider calls.
+- Hackathon-specific video compatibility (`video_url` inline part against the 1026 deployment) has no authoritative documentation in evidence and stays an unresolved operational gate, independent of the 403.
+
+### Next action
+Independent exact-HEAD audit of the new Draft PR; STOP afterwards — no merge, deploy, preflight, key reads, spend, retry, or live inference.
+
 <!-- HANDOFF_ENTRIES_END -->
