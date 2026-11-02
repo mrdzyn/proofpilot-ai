@@ -8,6 +8,13 @@
 //        [--live-spent-record <path>] [--live-media-sha256 <hex>]
 //        [--live-approval-id <id>]]
 //
+// Owner authorization bound (PR #34: one F01 analysis, zero proposals):
+// `--live` refuses before companion startup unless `--live-analyses` is 0
+// (zero-budget diagnostic) or 1 and `--live-proposals` is 0; a positive
+// live-analysis budget additionally requires `--live-media-sha256` to equal
+// the approved F01 SHA-256 exactly. Numeric live-budget flags must be
+// canonical non-negative integers (no junk suffixes, no negatives).
+//
 // Terminal commands (stdin): pair | permit <analyze|propose> <sha256> <bytes>
 // | revoke | status | quit. Pairing codes and permits are created ONLY here,
 // never over HTTP.
@@ -31,6 +38,7 @@ import {
   DEFAULT_PORT,
 } from '../packages/live-analysis/src/server.ts';
 import {
+  APPROVED_F01_MEDIA_SHA256,
   BASETEN_APPROVED_BASE_URL,
   BASETEN_DOCUMENTED_DIRECT_MODEL,
   D9_APPROVED_MODEL,
@@ -58,6 +66,27 @@ function flagInt(argv: string[], name: string, fallback: number): number {
   const n = Number.parseInt(raw, 10);
   if (!Number.isSafeInteger(n) || n < 0) {
     console.error(`refused: ${name} must be a non-negative integer`);
+    process.exit(2);
+  }
+  return n;
+}
+
+/**
+ * Strict canonical non-negative integer parsing for live-budget flags.
+ * `parseInt` truncation ("1junk" -> 1) must never widen an authorization
+ * bound, so only all-digit strings pass; anything else refuses before the
+ * companion starts, with zero listener and zero network.
+ */
+function flagLiveBudget(argv: string[], name: string, fallback: number): number {
+  const raw = flagValue(argv, name);
+  if (raw === null) return fallback;
+  if (!/^[0-9]+$/.test(raw)) {
+    console.error(`refused: ${name} must be a canonical non-negative integer (got ${JSON.stringify(raw)})`);
+    process.exit(2);
+  }
+  const n = Number.parseInt(raw, 10);
+  if (!Number.isSafeInteger(n)) {
+    console.error(`refused: ${name} must be a canonical non-negative integer (got ${JSON.stringify(raw)})`);
     process.exit(2);
   }
   return n;
@@ -148,11 +177,32 @@ if (liveRequested || preflightRequested) {
     console.log(`preflight: ok account-reachable model-listed catalog=${result.catalogCount} endpoint=${result.endpoint}`);
     process.exit(0);
   }
-  liveAnalysesLeft = flagInt(argv, '--live-analyses', 0);
-  liveProposalsLeft = flagInt(argv, '--live-proposals', 0);
+  liveAnalysesLeft = flagLiveBudget(argv, '--live-analyses', 0);
+  liveProposalsLeft = flagLiveBudget(argv, '--live-proposals', 0);
   liveSpentRecordPath = flagValue(argv, '--live-spent-record') ?? undefined;
   liveMediaSha256 = flagValue(argv, '--live-media-sha256') ?? undefined;
   liveBootstrapApprovalId = flagValue(argv, '--live-approval-id') ?? undefined;
+  // Owner authorization bound (PR #34: one F01 analysis, zero proposals).
+  // Enforced here in the production CLI — before the companion starts and
+  // before any transport exists — so no flag combination can arm more than
+  // one analysis or any proposal request. The shared ledger stays general
+  // for test doubles; this gate is the production policy.
+  if (liveProposalsLeft !== 0) {
+    console.error('refused: --live-proposals must be 0 (no proposal request is approved)');
+    process.exit(2);
+  }
+  if (liveAnalysesLeft > 1) {
+    console.error('refused: --live-analyses must be 0 or 1 (at most one live analysis is approved)');
+    process.exit(2);
+  }
+  // The approved analysis is bound to the certified F01 clip. A positive
+  // live-analysis budget without the exact owner-approved media pin refuses
+  // here — omission, mismatch, and malformed pins alike — so a different
+  // synthetic or private video can never be armed by accident.
+  if (liveAnalysesLeft > 0 && liveMediaSha256 !== APPROVED_F01_MEDIA_SHA256) {
+    console.error('refused: a positive live-analysis budget requires --live-media-sha256 to be exactly the approved F01 SHA-256');
+    process.exit(2);
+  }
   if (liveAnalysesLeft + liveProposalsLeft > 0 && (liveSpentRecordPath === undefined || liveSpentRecordPath === '')) {
     console.error('refused: a nonzero live budget requires --live-spent-record');
     process.exit(2);

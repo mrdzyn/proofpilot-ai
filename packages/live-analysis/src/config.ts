@@ -13,6 +13,16 @@ export const BASETEN_APPROVED_ENDPOINT = 'https://inference.baseten.co/v1/chat/c
 export const BASETEN_DOCUMENTED_DIRECT_MODEL = 'meta-models/muse-spark-open' as const;
 
 /**
+ * Owner-approved synthetic demonstration media for a positive live-analysis
+ * budget: the certified F01 mobile recording SHA-256 (owner authorization
+ * recorded on PR #34: one F01 analysis, zero proposals). The production
+ * `--live` CLI requires byte-identical equality for any positive
+ * live-analysis budget; omission, mismatch, and malformed pins refuse before
+ * the companion starts. Compared by exact string equality only.
+ */
+export const APPROVED_F01_MEDIA_SHA256 = 'e9df68b14c48300818f9ec9407b884413037f29305f17a5da3cc4fac05eeafdf' as const;
+
+/**
  * D9 live-model approval. APPROVED: exactly one direct-Baseten identifier
  * may pass the live gate — `meta-models/muse-spark-open`, byte-identical to
  * `BASETEN_DOCUMENTED_DIRECT_MODEL` (asserted in tests). Any other value —

@@ -79,6 +79,13 @@ export async function checkAccountAvailability(
       redirect: 'error',
     });
     status = response.status;
+    // Credential rejection is classified before touching the body: an
+    // unauthorized response with a non-JSON body is still UNAUTHORIZED, not
+    // a shape fault. Either way the preflight fails closed with zero
+    // inference and a key-free detail.
+    if (status === 401 || status === 403) {
+      return { ok: false, code: 'PREFLIGHT_UNAUTHORIZED', detail: 'the account rejected the key; no inference attempted' };
+    }
     try {
       payload = await response.json();
     } catch {
@@ -86,9 +93,6 @@ export async function checkAccountAvailability(
     }
   } catch {
     return { ok: false, code: 'PREFLIGHT_HTTP', detail: 'catalog request failed before a response' };
-  }
-  if (status === 401 || status === 403) {
-    return { ok: false, code: 'PREFLIGHT_UNAUTHORIZED', detail: 'the account rejected the key; no inference attempted' };
   }
   if (status < 200 || status > 299) {
     return { ok: false, code: 'PREFLIGHT_HTTP', detail: `catalog endpoint refused with HTTP ${String(status)}` };

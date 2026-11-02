@@ -86,6 +86,20 @@ test('L-PRE-3: rejected key refuses unauthorized with no inference', async () =>
   }
 });
 
+test('L-PRE-3b: unauthorized with a non-JSON body still reports unauthorized', async () => {
+  for (const status of [401, 403]) {
+    const { fetchImpl, calls } = makeDouble(status, {}, { jsonThrows: true });
+    const result = await checkAccountAvailability(fetchImpl, input());
+    assert.deepEqual(result, {
+      ok: false,
+      code: 'PREFLIGHT_UNAUTHORIZED',
+      detail: 'the account rejected the key; no inference attempted',
+    });
+    assert.equal(calls.length, 1, 'the single catalog call was the only egress');
+    assertKeyFree(`non-JSON unauthorized result (${status})`, result);
+  }
+});
+
 test('L-PRE-4: transport and shape faults refuse with status-only details', async () => {
   const http = await checkAccountAvailability(makeDouble(500, {}).fetchImpl, input());
   assert.deepEqual(http, {

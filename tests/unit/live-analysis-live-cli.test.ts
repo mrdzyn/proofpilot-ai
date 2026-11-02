@@ -6,12 +6,19 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { APPROVED_F01_MEDIA_SHA256 } from '../../packages/live-analysis/src/config.ts';
 
 const SCRIPT = path.resolve(import.meta.dirname, '../../scripts/c3-live-analysis.ts');
 const FAKE_KEY = 'NOT-A-REAL-KEY-0000-D9I1';
 const FAKE_BASE = 'https://inference.baseten.co/v1';
 const FAKE_MODEL = 'meta-models/muse-spark-open';
+// Owner-approved F01 media pin under test (byte-identical to the certified
+// F01 mobile recording; asserted in L-CFG). Never a real credential.
+const F01_PIN = APPROVED_F01_MEDIA_SHA256;
+assert.equal(F01_PIN, 'e9df68b14c48300818f9ec9407b884413037f29305f17a5da3cc4fac05eeafdf');
 
 interface RunResult {
   code: number | null;
@@ -89,7 +96,7 @@ test('L-CLI-4: --live refuses a mismatched model and a budget without a record',
   assert.equal(wrongModel.code, 2, `alias model refuses (got ${wrongModel.code})`);
   assert.match(`${wrongModel.stdout}\n${wrongModel.stderr}`, /live model is not approved/, 'no alias, no translation');
   assertNoKeyLeak('model refusal', `${wrongModel.stdout}\n${wrongModel.stderr}`);
-  const noRecord = await runCli(['--live', '--port', '0', '--live-analyses', '1'], fakeEnv());
+  const noRecord = await runCli(['--live', '--port', '0', '--live-analyses', '1', '--live-media-sha256', F01_PIN], fakeEnv());
   assert.equal(noRecord.code, 2, `nonzero budget without a record refuses (got ${noRecord.code})`);
   assert.match(`${noRecord.stdout}\n${noRecord.stderr}`, /--live-spent-record/, 'restart cannot re-arm an in-memory-only budget');
   assertNoKeyLeak('record refusal', `${noRecord.stdout}\n${noRecord.stderr}`);
@@ -111,6 +118,105 @@ test('L-CLI-5: --preflight gates before any fetch; combined flags refuse', async
   for (const out of [wrongModel, noKey, both]) {
     assertNoKeyLeak('preflight refusal', `${out.stdout}\n${out.stderr}`);
     assert.ok(!`${out.stdout}\n${out.stderr}`.includes('on http://127.0.0.1'), 'preflight never binds');
+  }
+});
+
+test('L-CLI-6: oversized live budgets refuse with no listener and no egress', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'pp-cli-record-'));
+  try {
+    const record = path.join(dir, 'spent.jsonl');
+    const cases: { args: string[]; pattern: RegExp; label: string }[] = [
+      {
+        args: ['--live', '--port', '0', '--live-analyses', '2', '--live-media-sha256', F01_PIN, '--live-spent-record', record],
+        pattern: /--live-analyses must be 0 or 1/,
+        label: '2 analyses',
+      },
+      {
+        args: ['--live', '--port', '0', '--live-analyses', '10', '--live-media-sha256', F01_PIN, '--live-spent-record', record],
+        pattern: /--live-analyses must be 0 or 1/,
+        label: '10 analyses',
+      },
+      {
+        args: ['--live', '--port', '0', '--live-analyses', '1', '--live-proposals', '1', '--live-media-sha256', F01_PIN, '--live-spent-record', record],
+        pattern: /--live-proposals must be 0/,
+        label: '1 proposal',
+      },
+      {
+        args: ['--live', '--port', '0', '--live-proposals', '1', '--live-spent-record', record],
+        pattern: /--live-proposals must be 0/,
+        label: 'proposal-only budget',
+      },
+    ];
+    for (const { args, pattern, label } of cases) {
+      const out = await runCli(args, fakeEnv());
+      const combined = `${out.stdout}\n${out.stderr}`;
+      assert.equal(out.code, 2, `${label} refuses with exit 2 (got ${out.code}): ${combined}`);
+      assert.match(combined, pattern, `${label} names the authorization bound`);
+      assert.ok(!combined.includes('on http://127.0.0.1'), `${label}: no listener starts on refusal`);
+      assertNoKeyLeak(label, combined);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('L-CLI-7: malformed live-budget numerics refuse instead of truncating', async () => {
+  for (const value of ['1junk', '1.0', '+1', ' 1', '', '00x', '-1', '-0']) {
+    const out = await runCli(['--live', '--port', '0', '--live-analyses', value], fakeEnv());
+    const combined = `${out.stdout}\n${out.stderr}`;
+    assert.equal(out.code, 2, `analyses=${JSON.stringify(value)} refuses (got ${out.code}): ${combined}`);
+    assert.match(combined, /canonical non-negative integer/, 'names the malformed numeric');
+    assert.ok(!combined.includes('on http://127.0.0.1'), 'no listener starts on refusal');
+    assertNoKeyLeak('malformed numeric', combined);
+  }
+});
+
+test('L-CLI-8: positive live-analysis budgets require the exact F01 media pin', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'pp-cli-pin-'));
+  try {
+    const record = path.join(dir, 'spent.jsonl');
+    const base = ['--live', '--port', '0', '--live-analyses', '1', '--live-spent-record', record];
+    const wrongPin = '0'.repeat(64);
+    const cases: { args: string[]; pattern: RegExp; label: string }[] = [
+      { args: base, pattern: /--live-media-sha256/, label: 'omitted pin' },
+      { args: [...base, '--live-media-sha256', wrongPin], pattern: /--live-media-sha256/, label: 'mismatched pin' },
+      { args: [...base, '--live-media-sha256', 'not-hex'], pattern: /--live-media-sha256/, label: 'malformed pin' },
+      { args: [...base, '--live-media-sha256', ''], pattern: /--live-media-sha256/, label: 'empty pin' },
+    ];
+    for (const { args, pattern, label } of cases) {
+      const out = await runCli(args, fakeEnv());
+      const combined = `${out.stdout}\n${out.stderr}`;
+      assert.equal(out.code, 2, `${label} refuses with exit 2 (got ${out.code}): ${combined}`);
+      assert.match(combined, pattern, `${label} names the pin requirement`);
+      assert.ok(!combined.includes('on http://127.0.0.1'), `${label}: no listener starts on refusal`);
+      assertNoKeyLeak(label, combined);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('L-CLI-9: the approved 1-analysis/0-proposal budget with the exact F01 pin arms cleanly', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'pp-cli-approved-'));
+  try {
+    const record = path.join(dir, 'spent.jsonl');
+    const out = await runCli(
+      ['--live', '--port', '0', '--serve', 'none',
+        '--live-analyses', '1', '--live-proposals', '0',
+        '--live-spent-record', record,
+        '--live-media-sha256', F01_PIN,
+        '--live-approval-id', 'd9i1-test-bootstrap-cli-10'],
+      fakeEnv(),
+    );
+    const combined = `${out.stdout}\n${out.stderr}`;
+    assert.equal(out.code, 0, `approved 1/0 budget with the exact pin starts (got ${out.code}): ${combined}`);
+    assert.match(combined, /LIVE Baseten path ARMED/, 'armed banner shown');
+    assert.match(combined, /budget=analyses:1 proposals:0/, 'configured budget is exactly the approved 1/0');
+    assert.match(combined, /pin=set/, 'pin is recorded as set without printing its value');
+    assert.ok(!combined.includes(F01_PIN), 'the pin value itself is never printed');
+    assertNoKeyLeak('approved budget', combined);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });
 

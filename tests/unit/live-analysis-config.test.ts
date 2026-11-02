@@ -2,6 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  APPROVED_F01_MEDIA_SHA256,
   BASETEN_APPROVED_BASE_URL,
   BASETEN_APPROVED_ENDPOINT,
   BASETEN_DOCUMENTED_DIRECT_MODEL,
@@ -84,6 +85,7 @@ test('L-CFG-1: offline evaluation never authorizes a live call, even for the doc
 test('L-CFG-1: this module exposes neither a transport nor a positive live authorization', async () => {
   const module = await import('../../packages/live-analysis/src/config.ts');
   assert.deepEqual(Object.keys(module).sort(), [
+    'APPROVED_F01_MEDIA_SHA256',
     'BASETEN_APPROVED_BASE_URL',
     'BASETEN_APPROVED_ENDPOINT',
     'BASETEN_DOCUMENTED_DIRECT_MODEL',
@@ -95,6 +97,15 @@ test('L-CFG-1: this module exposes neither a transport nor a positive live autho
   for (const model of [BASETEN_DOCUMENTED_DIRECT_MODEL, 'meta/muse-spark-open']) {
     assert.equal(module.evaluateOfflineLiveConfiguration({ baseUrl: BASETEN_APPROVED_BASE_URL, model }).ok, false);
   }
+});
+
+test('L-CFG-3: the approved F01 media pin is exactly the certified clip SHA-256', () => {
+  assert.equal(
+    APPROVED_F01_MEDIA_SHA256,
+    'e9df68b14c48300818f9ec9407b884413037f29305f17a5da3cc4fac05eeafdf',
+    'the pin is the owner-approved F01 mobile recording SHA-256',
+  );
+  assert.match(APPROVED_F01_MEDIA_SHA256, /^[0-9a-f]{64}$/, 'the pin is a well-formed 64-hex SHA-256');
 });
 
 test('L-CFG-2: D9 approves exactly one byte-identical model ID', () => {
