@@ -1836,4 +1836,28 @@ Independent GPT-6 exact-head re-audit of the Draft PR; STOP afterwards — no me
 ### Next action
 Independent GPT-6 exact-head re-audit of the Draft PR; STOP afterwards — no merge, deploy, provider calls, key reads, or D9 activation.
 
+## Handoff: UI-C3-02-D9-P1 — Baseten activation planning only
+
+- **Task:** `tasks/UI-C3-02-D9-PLAN.md` (docs-only; no code activation)
+- **From:** GPT-6, owner-requested next step after audited PR #32 squash merge
+- **To:** Independent document/security reviewer, then owner D1–D7/D9 decision
+- **Base:** protected `main@cb484711d7a4e70fd63b5300d2dde276baed8ff3` (PR #32 owner-approved squash merge)
+- **Branch:** `docs/ui-c3-02-d9-activation-plan` (new branch, not merged)
+- **State:** Draft activation change **prepared as a bounded task contract**, not as active runtime configuration. `D9_APPROVED_MODEL` remains `null`; the CLI still uses mock transport.
+
+### Decision inventory and evidence
+
+- Baseten Model APIs is D8-selected for *future* live inference. D1–D7 and D9 require explicit individual owner decisions before any provider call; no such decision was recorded by this branch.
+- Proposed documented model ID: `meta-models/muse-spark-open`; conflict with an alternate model-library example requires account-specific availability verification or authoritative reconciliation. Never silently translate to an alias.
+- First proposed live operation: one synthetic F01 video **analysis** only, with exact file SHA-256/run identity, per-action single-use permit, fixed 1024-token generation cap, no fallback/retry, and irreversible attempt debit.
+- Pre-activation findings to cover: `server.ts` checks mock `quotaFor(kind)` even for dormant live requests; unmergeable live-cost limit is *attempt* count rather than dollar cap; in-memory budget resets on process restart and must not authorize a second provider attempt. Owner key handling, privacy/retention, response provenance and model availability remain gates.
+- Required separate implementation Draft PR: default-off runtime wiring + account-specific D9 approval, tested end-to-end against injected fetch doubles; independent audit + explicit owner merge decision + separate one-shot owner approval before outbound request.
+- Historic Meta proposal `c3-live-meta-001` remains spent, inaccessible for execution and **UNTRUSTED PROPOSAL — NOT VERIFIED**.
+
+### Validation and stop rule
+
+Docs-only changes: new task contract, operational STATUS pointer and this append-only handoff. No runtime code, CI policy, verifier, model gate, quota, credentials, provider calls, deployment, or spend changed. Hosted CI is to run on the Draft PR exact HEAD; no local suites or external live checks are claimed.
+
+**STOP after Draft PR creation and independent review request.** No merge, D9 activation, or live attempt.
+
 <!-- HANDOFF_ENTRIES_END -->
