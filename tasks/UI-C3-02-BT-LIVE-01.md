@@ -90,3 +90,17 @@ shutdown + dashboard regression observed locally where the sandbox allows;
 hosted CI green on the exact PR head; Draft PR + verification report; STOP
 for independent GPT-6 audit and explicit owner authorization before any
 live request.
+
+## Audit remediation I12 (against `97abbe6`; D9 still pending)
+
+- MAJOR-1: only `finish_reason: 'stop'` completes (`length` →
+  `TRANSPORT_TRUNCATED`, `content_filter` →
+  `TRANSPORT_CONTENT_FILTERED`, else `TRANSPORT_SHAPE`); sanitizer-level
+  gate as defense in depth; negative tests L-BT-7(+4), L-BT-7b, L-LIVE-4(+4).
+- MAJOR-2: live attempts accounted separately from mock quota
+  (`live-attempts.ts` ledger, no refund API), consumed exactly once at the
+  send boundary (`onSend` + `createLiveSendSpender`), never restored;
+  server pre-checks the ledger and never spends mock quota on the live
+  path; tests L-ATT-1..6 (incl. concurrency one-attempt-only).
+- MINOR-1: provider-aware unexpected-failure wording per transport path.
+- Live-branch end-to-end spend tests stay queued behind a D9 decision.

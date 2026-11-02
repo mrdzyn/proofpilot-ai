@@ -1777,4 +1777,33 @@ Owner review of this acceptance report; post to PR #31 and STOP — no merge, de
 ### Next action
 Independent GPT-6 audit of the Draft PR at its exact head; STOP afterwards — no merge, deploy, provider calls, key reads, or D9 activation.
 
+## Handoff: UI-C3-02-I12 — BT-LIVE-01 GPT-6 audit remediation (MAJOR-1/2, MINOR-1)
+
+- **Task / phase:** `tasks/UI-C3-02-BT-LIVE-01.md` (audit remediation; D1–D7 and D9 still pending, D8 design-only)
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** ONE independent GPT-6 exact-head re-audit, then project owner
+- **Branch:** `phase/ui-c3-02-bt-live-01-readiness` (from `main@c2bff7d`)
+- **Implementation head:** `59e295651c05144bce4644f9150cc8fa7a3d0fa8` (plus a docs commit); audited-against base `97abbe6`
+- **PR:** #32 (Draft, unmerged)
+- **State:** READY FOR RE-AUDIT. No merge, deploy, provider calls, key reads, spend, or D9 activation.
+
+### Remediated (against audited HEAD `97abbe6`)
+- **MAJOR-1 — completion validation:** `baseten-transport.ts` accepts only `finish_reason: 'stop'`. `length` → `TRANSPORT_TRUNCATED`, `content_filter` → `TRANSPORT_CONTENT_FILTERED`, any other/missing value → `TRANSPORT_SHAPE`; partial output never normalizes. `checkLiveEnvelope` in `responses.ts` enforces the same gate as defense in depth. Negative tests: L-BT-7 gains truncated/filtered/tool-calls/unknown cases, new L-BT-7b validator battery, L-LIVE-4 gains truncated/filtered/tool-calls/missing-finish cases.
+- **MAJOR-2 — billable-attempt accounting:** new `live-attempts.ts` ledger (`left`/`consume`, floors hostile seeds to 0, no refund API by construction) seeded from `liveAnalysesLeft`/`liveProposalsLeft` (default 0, fail-closed); `createLiveSendSpender` consumes exactly once per run via the transport `onSend` hook fired synchronously before the single POST — timeout, cancel-after-send, HTTP error, malformed reply, model mismatch, and sanitizer refusal all keep the spent attempt. Server checks the ledger before slot/permit/quota and never spends mock quota on the live path (`spendMockQuota: false`). New `live-analysis-live-attempts.test.ts` (L-ATT-1..6): flooring, per-action independence, no-refund surface, exactly-once spender, ten-way concurrency one-attempt-only, dormant-server zero-spend proof.
+- **MINOR-1 — error provenance:** `SettleWiring.unexpectedRefusal` carries provider-aware wording per path (`live transport refused…` with `transport: baseten-live`, `provider: baseten` vs mock wording on the mock path); `LiveTransportRefused` propagates typed codes with sanitized static details only.
+- **Preserved:** single-flight, epoch scoping, per-run cancellation, permit-before-upload, uploadId binding, shutdown cleanup, mock quota/single-flight semantics, D9 `null` hard-disable, zero live egress (injected fetch doubles only).
+
+### Validation
+- Focused: L-BT (10/10), L-ATT (6/6), L-LIVE (4/4 incl. existing), L-RACE/L-CFG unchanged green.
+- Full: unit 517/517, security 140/140; `tsc` root + dashboard clean; `pnpm lint` 0 problems.
+- Integration (local Mac, exact impl HEAD): HTTP 9/9, shutdown 1/1, Zone L browser 5/5, dashboard browser pending (background run at handoff time; result posted to PR).
+- Required hosted CI: pending on Draft PR push; zero live egress proven by construction (no credentials, no fetch without injected double, D9 null).
+
+### Continuation notes
+- The live settle branch remains unreachable while D9 is `null`; end-to-end live-branch spend tests (HTTP failure / timeout / cancel-after-send against a seeded ledger) are queued behind a D9 decision and must be re-audited with it.
+- `dashboard/node_modules/` installed locally for typecheck (untracked); `dashboard/dist/` remains uncommitted.
+
+### Next action
+Independent GPT-6 exact-head re-audit of the Draft PR; STOP afterwards — no merge, deploy, provider calls, key reads, or D9 activation.
+
 <!-- HANDOFF_ENTRIES_END -->
