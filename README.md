@@ -60,7 +60,7 @@ Run eligible, hand-authored controls through the protected Playwright oracle and
 
 ## Product walkthrough
 
-The repository contains a local dashboard and localhost companion. **Mock mode is the default** and needs no provider credentials. A separately gated **owner-started Baseten live mode** exists but is not enabled during ordinary use. The first authorized Baseten attempt returned HTTP 403 and is permanently spent; **there is no successful Baseten analysis result to present yet**.
+The repository contains a local dashboard and localhost companion. **Mock mode is the default** and needs no provider credentials. A separately gated **owner-started Baseten live mode** exists but is not enabled during ordinary use. Two separately authorized Baseten attempts have been refused (first HTTP 403, second response-shape validation), and both are permanently spent; **there is no successful Baseten analysis result to present yet**.
 
 - **Synthetic defect:** F01 reproduces; the mobile cart stays at 0.
 - **Local mock flow:** Zone L can demonstrate upload, analysis and provenance with fixture output; no provider inference occurs in mock mode.
@@ -106,7 +106,7 @@ flowchart TB
 - **Recording → model:** media is validated before use; video content and model observations remain untrusted.
 - **Model → proposal:** structured output is validated and restricted to a closed CSS grammar. The historical Muse Spark proposal remains unverified.
 - **Candidate → verdict:** a separate verifier derives results from browser evidence; the hand-authored PC-1 identity is kept separate.
-- **Local companion → provider:** mock mode is always the default. Live inference requires an explicit owner-started `--live`, a private key, the exact hackathon model and certified F01 video pin, and **a fresh, separately approved attempt** tracked in a durable spend ledger. The first attempt is exhausted; there are no automatic retries.
+- **Local companion → provider:** mock mode is always the default. Live inference requires an explicit owner-started `--live`, a private key, the exact hackathon model and certified F01 video pin, and **a fresh, separately approved attempt** tracked in a durable spend ledger. Both historical attempts are exhausted; there are no automatic retries.
 
 ## Evidence and current gates
 
@@ -118,6 +118,7 @@ The state below reflects repository evidence and the current project status. It 
 - **Historical Muse Spark 1.3 video smoke — COMPLETED ONCE (operator-reported):** the second of two authorized Meta video-analysis attempts returned a schema-valid, untrusted symptom. This is neither a model-verified fix nor a current-access guarantee. **Muse Wonder smoke — NOT TESTED.** See [live smoke evidence](docs/LIVE-SMOKE.md).
 - **Baseten D9-LIVE-01 — `REFUSED / SPENT` (owner-reported, November 2, 2026):** one authorized analysis POST against the **incorrect unsuffixed public model** returned `TRANSPORT_HTTP` HTTP 403. The hash-chained ledger records one permanently spent send-boundary attempt; no model observations or token usage were returned, and billing is unverified. No retry occurred. See [D9 runbook §7](docs/UI-C3-02-D9-RUNBOOK.md#7-d9-live-01-outcome-owner-reported-recorded-agent-did-not-run-it).
 - **Baseten hackathon model correction — MERGED (PR #37):** the organizer-issued key requires exactly `meta-models/muse-spark-open-1026`, not the public `meta-models/muse-spark-open`. The corrected pin, refusal gates and fake-provider tests are merged.
+- **Baseten D9-LIVE-02 — `REFUSED / TRANSPORT_SHAPE / SPENT` (owner-reported, November 2, 2026):** the separately owner-armed demo used the correctly pinned hackathon model and certified F01 video, but Zone L reported `Refused (TRANSPORT_SHAPE): live response envelope malformed`. Based on the merged transport implementation, this code means a 2xx HTTP response was received and JSON parsing completed, but strict validation refused the response envelope. The exact structural mismatch and any model-generated content are **unknown**; no accepted Baseten analysis result is available. The second one-shot send-boundary authorization is consumed and **must not be retried or rearmed**. Billing and token usage are unverified. A 1,024-token output cap plus empty-content-before-finish-reason validation is an investigation hypothesis, not a confirmed cause. Preserve both owner-held spent ledgers.
 - **Corrected Baseten catalog preflight — PASS (owner-reported, November 2, 2026):** authenticated, non-inference `GET /v1/models` listed the approved `-1026` ID (21 models in catalog). This establishes catalog reachability, **not** successful inference, billing, or video compatibility on the hackathon deployment. A new live request is **not** authorized by this README.
 - **Public hosted sandbox / arbitrary-site auto-fix — unavailable:** outside the implemented local synthetic workflow.
 
@@ -147,7 +148,7 @@ node scripts/c3-live-analysis.ts --port 5188 --serve "$PWD/dashboard/dist"
 
 Open `http://127.0.0.1:5188`, type `pair` in the companion Terminal to obtain a single-use pairing code, and use Zone L with a synthetic F01 recording. The selected file must be explicitly permitted in the Terminal before local upload; then run the mock fixture analysis. Zone L contains static **MOCK** copy and an **Analyze with mock fixture** button even in owner-started live mode; **neither label proves provider provenance**. Check the companion banner and completed result's `baseten-live` provenance when presenting any real inference.
 
-**Real Baseten demonstration:** needs a **new**, explicit owner authorization, a distinct immutable spend record and owner-only credential handling. The original D9-LIVE-01 record is spent and must never be reset, replaced or reused to rearm. The correct `-1026` model passed a catalog preflight, but this deployment's support for the exact inline `video_url` MP4 payload is unconfirmed. Consult the [owner D9 runbook](docs/UI-C3-02-D9-RUNBOOK.md). This README does not itself authorize another provider request.
+**Real Baseten demonstration:** needs a **new**, explicit owner authorization, a distinct immutable spend record and owner-only credential handling. Both original D9-LIVE-01 and demo D9-LIVE-02 spend records are spent and must never be reset, replaced or reused to rearm. The correct `-1026` model passed a catalog preflight, but this deployment's support for the exact inline `video_url` MP4 payload is unconfirmed. Consult the [owner D9 runbook](docs/UI-C3-02-D9-RUNBOOK.md). This README does not itself authorize another provider request.
 
 ## Run the synthetic baseline
 
