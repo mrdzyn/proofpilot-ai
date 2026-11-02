@@ -1969,4 +1969,42 @@ End-to-end live-branch spend, media-pin accept refusal, and mock/live decoupling
 ### Next action
 Independent GPT-6 exact-head re-audit of Draft PR #34; STOP afterwards — no merge, deploy, provider calls, key reads, or D9 activation.
 
+## Handoff: UI-C3-02-A1 — D9 activation (for independent exact-HEAD review)
+
+- **Task / phase:** `tasks/UI-C3-02-D9-I1.md` (§Activation A1; D9 approved, owner one-shot authorization recorded 2026-11-02)
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** ONE independent exact-HEAD reviewer, then project owner
+- **Branch:** `phase/ui-c3-02-d9-activation` (from `main@834c6c2`, PR #34 squash merge)
+- **Implementation head:** `3f11a58563bbd8f4e469a3c741e72e52884a6b99` (plus a docs commit)
+- **PR:** (Draft PR number to fill on open; Draft, unmerged)
+- **State:** READY FOR REVIEW. No merge, deploy, provider calls, key reads, spend, or live inference. The repository `.env.local` was never listed, read, or referenced by value. The authenticated preflight was never run — it is owner-operated only.
+
+### Implemented (from `main@834c6c2`)
+- **D9 pin:** `D9_APPROVED_MODEL = 'meta-models/muse-spark-open'`, byte-identical to `BASETEN_DOCUMENTED_DIRECT_MODEL` (L-CFG-2 asserts both). Model/endpoint corroborated by public Baseten docs (Model APIs supported-model table; changelog example against `POST https://inference.baseten.co/v1/chat/completions`). `validateLiveModel` now passes only the exact ID; every alias/variant/empty/non-string refuses (L-CFG-2).
+- **Owner-run preflight:** `--preflight` runs the D9/key/URL/model gates, then exactly one non-billable `GET /v1/models` via the owner-process fetch wrapper, prints a key-free summary, and exits — no companion, no listener, no record, no inference, no retry. Core unit-tested with doubles (L-PRE-1..6: listed/absent, 401/403, HTTP/shape faults, misconfigured-gates-before-egress, pin enforcement); CLI refusal paths tested without network (L-CLI-5), including `--live --preflight` rejection. `preflight.ts` never touches `process.env`; only the owner-started CLI reads the three documented variables (live01b boundary intact, comment updated; no new `c3-*` script added).
+- **Live branch proven end to end with doubles (L-ATT-6):** pinned F01-shaped media → terminal permit → upload → analyze sends exactly once naming the exact model on the pinned endpoint; the send-boundary spend is durably recorded; the result carries `baseten-live` provenance, reported usage, and `UNVERIFIED`-eligible shape; mock quota untouched. Foreign bytes pin out (`MEDIA_NOT_PINNED`) with zero extra egress; a second authorized analysis sends once more; the exhausted budget refuses (`QUOTA_SPENT`) with no further POST. Permit binding, one-send-per-approval, poison/expiry paths preserved.
+- **Fail-closed preserved:** missing key (L-CLI-2), unapproved URL (L-CFG-1), alias/superseded model (L-CFG-2, L-CLI-4), zero budget (L-LIVE-1/2 → `QUOTA_SPENT`), nonzero budget without a record (L-ACT-2, L-CLI-4), offline evaluation still refuses everything (L-CFG-1, L-ONE-1), malformed pin, corrupt/missing record, lock contention. CLI default-off, live budgets zero by default (L-CLI-1 arms zero-budget live with the ARMED banner, no key leak), mock mode byte-identical (L-CLI-3).
+- **Status honesty:** `/api/status` now reports `approved`/`modelOk:true` with `owner-approved` wording on a live companion (L-ACT-5 section updated); `describeActivationState`/`checkLivePrecheck` tables unchanged (explicit-boolean pure functions, hypothetical-pending branches intact). Dashboard Zone L copy updated to D9-approved wording (mock fallback identical); browser assertion updated.
+- **Preserved:** all I12–I17 fixes (spent-record two-phase open, no-takeover locks, genesis rules, one-send boundary, cancellation, epoch/single-flight, permit binding, provenance, redaction, static boundaries), zero live egress.
+
+### Owner one-shot command (runbook §3; runs ONLY after review + merge approval + explicit go-ahead)
+```sh
+node scripts/c3-live-analysis.ts --port 5188 --serve none \
+  --live --live-analyses 1 --live-proposals 0 \
+  --live-spent-record "$HOME/.proofpilot/live-spent.jsonl" \
+  --live-approval-id "<fresh-approval-id-from-§2>" \
+  --live-media-sha256 e9df68b14c48300818f9ec9407b884413037f29305f17a5da3cc4fac05eeafdf
+```
+Then terminal `pair`, `permit analyze <sha256> <bytes>`, upload + analyze via Zone L, `quit`. Exactly one POST; no retries — any refusal ends the attempt.
+
+### Validation
+- Focused: L-CFG 7/7, L-CLI 5/5, L-PRE 6/6, L-ATT 10/10, L-ACT 8/8, L-LIVE 2/2, L-BT 15/15, L-REC 17/17.
+- Full: unit 562/562, security 141/141; `tsc` root + dashboard clean; `pnpm lint` 0 problems (260 files).
+- Integration (local Mac, exact impl HEAD): HTTP 9/9 + shutdown 1/1, Zone L browser 5/5, dashboard browser 11/11.
+- Required hosted CI: green at exact docs HEAD (run linked in PR comment).
+- Zero provider calls, zero credential reads, D9 pin byte-identical to the documented ID.
+
+### Next action
+Independent exact-HEAD review of the activation Draft PR; STOP afterwards — no merge, deploy, provider calls, key reads, spend, or live inference. The supervised one-shot runs only after review + merge approval + explicit owner go-ahead, via runbook §1–§3.
+
 <!-- HANDOFF_ENTRIES_END -->

@@ -1,26 +1,31 @@
 # UI-C3-02-D9 Runbook — Owner-Only One-Shot Live Demonstration
 
 > **Status: PROCEDURE ONLY. No live call is authorized by this document.**
-> Every live step below requires the pending owner decisions D1–D7 and D9,
-> a green independent audit of the activation PR, and an explicit one-shot
-> owner approval immediately before the request. D9 is `null` until then.
+> The owner authorized exactly one supervised Baseten analysis (2026-11-02,
+> PR #34 authorization record); D9 approves `meta-models/muse-spark-open`.
+> Every live step below still requires a green independent audit of the
+> activation PR and an explicit one-shot owner go-ahead immediately before
+> the request — the standing authorization is not permission to retry, to
+> run proposals, or to skip the audit.
 
-## 0. Prerequisites (owner decisions, all pending)
+## 0. Prerequisites (owner decisions; D9 approved, execution gated)
 
-- D1: workspace + single-use allowance — proposed **one analysis, zero
-  proposals**, no re-arm on restart.
+- D1: workspace + single-use allowance — authorized **one analysis, zero
+  proposals**, no re-arm on restart (owner authorization 2026-11-02).
 - D2: spend risk accepted (reference only: ~$1.25/M input, $4.25/M output
   per Baseten's Nov 2026 listing; video-token cost unknowable in advance).
-- D3: exact F01 media identified (proposed: certified mobile clip, SHA-256
+- D3: exact F01 media identified (certified mobile clip, SHA-256
   `e9df68b14c48300818f9ec9407b884413037f29305f17a5da3cc4fac05eeafdf`).
 - D4: key ownership/revocation understood; key stays in the owner shell.
 - D5: synthetic-video transfer + provider retention accepted.
 - D6: permission to record/display provider, run identity, usage.
 - D7: sequencing (separate review → activation audit → merge → one-shot).
-- D9: exact direct-Baseten model ID recorded and account-proven. Proposed:
-  `meta-models/muse-spark-open`. Never an alias.
+- D9: APPROVED — exact direct-Baseten model ID
+  `meta-models/muse-spark-open` pinned in `packages/live-analysis/src/config.ts`.
+  Never an alias. Account availability is proven only by the owner-run
+  §1 preflight, never by an agent.
 
-## 1. Preflight (owner Mac, no credentials needed)
+## 1. Preflight (owner Mac; steps 1–4 need no credentials)
 
 1. `git status` clean; checkout the audited activation HEAD (posted in the
    Draft PR report).
@@ -31,9 +36,17 @@
 4. Confirm the spent-record path (durable, outside the repo, mode 0600) is
    empty or holds only already-spent entries you accept.
 5. `node scripts/c3-live-analysis.ts --live --port 0` with NO key set must
-   exit 2 naming the first failing gate. Then export the three variables in
+   exit 2 naming the missing-key gate. Then export the three variables in
    your shell (values never pasted anywhere else):
    `BASETEN_API_KEY`, `BASETEN_API_BASE_URL`, `BASETEN_MODEL`.
+6. Owner-run account preflight (never run by an agent; the only
+   authenticated check in this runbook):
+   `node scripts/c3-live-analysis.ts --preflight`
+   must print `preflight: ok account-reachable model-listed catalog=<n>`
+   and exit 0. It performs exactly one non-billable `GET /v1/models` and
+   prints no key material. Any refusal (`MISCONFIGURED`, `UNAUTHORIZED`,
+   `HTTP`, `SHAPE`, or model-not-listed) is a STOP event: do not proceed
+   to §3 — reconcile the account/key/model first.
 
 ## 2. Approval capture
 
