@@ -52,7 +52,7 @@ provider-claimed usage 1631 / 1309 / 2940. Three boundaries are preserved:
 | 10 | Full E2 verify pipeline for synthetic run ids | EXISTS (E2, merged #22, audited) | `scripts/c3-b2b-verify-proposal.ts` refuses only `c3-live-meta-001` before any read |
 | 11 | Detached Ed25519 artifact authentication (synthetic) | EXISTS (SEC-P2-02, merged #24) | `packages/provenance/src/artifact-auth.ts`; runbook `docs/SEC-P2-02-ISOLATED-VERIFICATION-RUNBOOK.md` |
 | 12 | Hard-disable of the real artifact at CLI + exported verifier | EXISTS, load-bearing | `REAL_ARTIFACT_RUN_ID` refusal precedes every read in both verify commands |
-| 13 | **An accepted AI correction staged through the above** | MISSING | QA-01: 0 accepted; `c3-live-meta-001` never run |
+| 13 | **An accepted AI correction staged through the above** | MISSING | Correction axis: `c3-live-meta-001` never executed; no model-proposal scoreboard row exists. (Analysis axis is separate: QA-01 Attempt 2 is an owner-reported accepted *observation*, §0 — not a correction.) |
 | 14 | **Owner execution approval for the real run** | MISSING | Real-proposal procedure §1, precondition 1 |
 | 15 | **P2 ancestor-swap risk decision** | MISSING (open) | `docs/SEC-P2-01-FINDINGS.md` §6 |
 | 16 | **Historical-artifact enrollment (or recorded cancel)** | MISSING | Isolated-verification runbook §7/§10 |
@@ -105,50 +105,103 @@ detached-signature binding even with an enrolled key. Option A uses
 against the pinned `config/artifact-trust-roots.json` **before** source
 registration or staging.
 
+**Two separate authorities (never conflated).** The SEC-P2-02 manifest has
+exactly eight fields (`authVersion`, `keyId`, `runId`, `artifactSha256`,
+`inputSha256`, `sourceSha`, `sourceFixtureTree`, `sourceAnalysisId` —
+`packages/provenance/src/artifact-auth.ts` `MANIFEST_KEYS`). It binds
+artifact content and source labels; it carries **no `verificationSha` and no
+execution approval**, and `verifyArtifactAuthentication` never decides
+permission to execute. Owner execution authorization (D-R1/D-R5) is a
+different authority and is enforced as a **runtime-checked, exact-run
+authorization record**, not inferred from the signature and not from
+caller-controlled CLI values alone.
+
 **Exact allowed files (enabling change; separate reviewed implementation PR only):**
+- `config/c3-real-run-authorization.json` (new, reviewed, narrow): the single
+  runtime-checked authorization record. Exact fields: `runId`
+  (`c3-live-meta-001`), `artifactSha256`, `verificationSha` (exact V),
+  `sourceSha`, `sourceFixtureTree`, `sourceAnalysisId`, `keyId`,
+  `approvalId` (names the out-of-band D-R1 record). The CLI verifies it
+  read-only: run id matches, `verificationSha` equals the checked-out HEAD
+  (`V`), and the five CLI values equal the record's fields. Any absence,
+  mismatch, or V-difference refuses **before the real artifact is accessed**.
+  The record authorizes exactly one revision (V): it is inert on any other
+  checkout. Single-run enforcement is by the locked supervised owner
+  procedure (D-R5 go-order names the same V and artifact hash); the record
+  itself is never re-issued, edited, or reused for another run.
 - `scripts/c3-b2b-verify-authenticated.ts`: replace the unconditional real-id
-  refusal with an authorization-bound gate — the real id proceeds **only**
-  when (a) the detached manifest verifies against the pinned trust roots,
-  (b) the five existing CLI values (run id, source SHA, fixture tree,
-  analysis id, verification SHA) exactly match the manifest's bound fields
-  and the recorded owner approval, and (c) the checks complete before any
-  artifact read. No new flags, no approval-path flags, no mode switch, no
-  alternate artifact path: the five existing values, cross-checked against
-  the enrolled signed binding, **are** the authorization. Anything unrelated
-  refuses with a typed code before any read.
+  refusal with the ordered gate below. No new flags, no approval-path flags,
+  no mode switch, no alternate artifact path — the five existing CLI values
+  are cross-checked against the enrolled signed manifest **and** the
+  authorization record. Anything unrelated refuses with a typed code.
 - `packages/core/src/model-verification.ts`: narrowly extend the exported
   `verifyRegisteredProposal` hard-disable so the real id is admitted **only**
-  for proposals registered through the authenticated registration path
-  (module-private authorized set populated solely by the manifest-verified
-  flow). Default-deny is preserved at this boundary independently of the CLI:
-  a direct programmatic call with the real id and no authenticated
-  registration still throws `REAL_ARTIFACT_DISABLED`. No environment flag,
-  no credential, no generic bypass, no unguarded removal of the core gate.
+  for a proposal object that is a member of the module-private authorized
+  set. Minting rule (the only one): membership is minted solely by the
+  authenticated registration function after manifest verification **and**
+  authorization-record match succeed, scoped to the exact
+  (runId, artifactSha256, approvedSha=V) triple. Consumption: the first
+  verification call removes the membership (one-shot; re-entry requires the
+  full gate again). Unreachability: the set is module-private, never
+  exported, never serialized; synthetic fixtures live in a disjoint run-id
+  namespace and can never mint the real id. Default-deny is thus preserved
+  at this boundary independently of the CLI: a direct programmatic call with
+  the real id and no minted membership still throws
+  `REAL_ARTIFACT_DISABLED`. No environment flag, no credential, no generic
+  bypass, no unguarded removal of the core gate.
 - `config/artifact-trust-roots.json`: enrollment of the historical key
   **only** via the isolated-verification runbook §7 procedure (re-derived
   source evidence + explicit owner authorization naming key id and artifact
   hash). If the source cannot be re-established, no enrollment happens and
   the run is cancelled — never enroll on suspicion.
 - Precisely scoped tests (exact files, same implementation PR):
-  - `tests/unit/c3-real-authorization.test.ts` — absent/malformed approval
-    values, manifest/approval mismatch, and approval absent entirely all
-    refuse before any artifact read; no-read-before-auth proven by asserting
-    no evidence directory and no stage is created.
+  - `tests/unit/c3-real-authorization.test.ts` — absent/malformed
+    authorization record, record/CLI mismatch, and record bound to a
+    different V all refuse **before the real artifact is accessed** (proven
+    by asserting the P2 loader is never invoked: no read of the real
+    artifact path); the record's exact-V binding is asserted, not assumed.
   - `tests/unit/c3-real-authentication.test.ts` — tampered/replayed
     manifest, unknown key id, substituted trust roots, and altered bound
     fields refuse at the auth gate with named codes (extends the existing
-    SEC-P2-02 battery to the real-id path without touching synthetic suites).
+    SEC-P2-02 battery to the real-id path without touching synthetic
+    suites). Asserts the manifest's eight fields carry no V and no approval.
   - `tests/security/c3-real-bypass.test.ts` — a direct call to exported
-    `verifyRegisteredProposal` with the real id and no authenticated
-    registration throws `REAL_ARTIFACT_DISABLED`; guard-removal mutants
-    (delete the CLI auth check; delete the core authorized-set check) are
-    caught; default-deny callers and no-bypass internal routes verified.
+    `verifyRegisteredProposal` with the real id and no minted membership
+    throws `REAL_ARTIFACT_DISABLED`; membership cannot be forged, replayed
+    across V, or reached from a synthetic path; guard-removal mutants
+    (delete the CLI authorization check; delete the core membership check)
+    are caught.
   - `tests/integration/c3-real-refusal.test.ts` — end-to-end refusal drill
     on the exact-command surface: real id without complete
-    auth+approval+enrollment exits 2 with zero evidence and zero stage.
+    authorization+authentication+enrollment exits 2 with zero evidence and
+    zero stage; each missing stage input is shown to block its own stage
+    (no authorization → no artifact access; no authentication → no
+    registration; no registration → no staging).
 - Nothing else: no oracle, grammar, coordinator, scoreboard, activation,
   quota, credential or network change; existing synthetic suites stay intact
   and green. Any diff outside the files above fails review.
+
+**Exact stage sequence (the loader reads before it verifies — stated plainly).**
+`loadAndAuthenticateProposalArtifact` begins with the P2 strict read, then
+reads the sidecars and verifies (`artifact-auth.ts`). Signature bytes cannot
+be verified without reading them, so "verify before any artifact read" is
+**not** the boundary. The enforced order is:
+0. Owner authorization (external, D-R1/D-R5): the exact-run decision is
+   recorded out of band; the operator invokes the command. Software checks
+   the committed authorization record — it never treats the external
+   decision, the signature, or the CLI tuple as self-authorizing.
+1. Controlled access: the authorization record is verified read-only
+   (run id, exact V == HEAD, five CLI values match). Only then may the real
+   artifact path be touched — a read-only P2 strict load (bytes must be read
+   to be hashed; the read itself grants nothing).
+2. Artifact authentication: manifest + signature verify against pinned roots
+   and the eight bound fields, **before registration, staging, or browser
+   execution**. A signed manifest is never a substitute for D-R1/D-R5.
+3. Provenance validation: source re-derivation and Zone P checks.
+4. Registration: provenance-tagged identity plus authorized-set minting for
+   the real id only.
+5. Isolated verification: disposable staging, three replays, oracle — and
+   only then a verdict.
 
 **Acceptance tests (all offline except the single owner-run real replay):**
 - Refusal drill still passes on the unmodified build (HARD-DISABLED, exit 2,

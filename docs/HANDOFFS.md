@@ -2181,7 +2181,7 @@ Independent exact-HEAD audit of the new Draft PR; STOP afterwards — no merge, 
 - **PR:** (new Draft PR number to fill on open; Draft, unmerged)
 - **State:** READY FOR REVIEW. Specification only — no code, provider, spend, proposal access, or ledger change. `.env.local` never listed, read, or referenced. Scope deliberately excludes the stored real proposal body: this handoff and the spec cite only its run id, label, and already-published adjustment values.
 
-### Findings delivered (remediated per independent security audit of PR #43)
+### Findings delivered (remediated per both independent security audits of PR #43; second round: authN/authZ separation, exact stage order, STATUS snapshot dating, correction-vs-analysis axes)
 - **Attempt-2 reconciliation (PR #42, open/unmerged):** owner-reported accepted F01 analysis (1631/1309/2940, UNVERIFIED), ledger readback pending; accepted observation is not an AI-generated correction. Candidates remain stored `c3-live-meta-001` (Option A) or a future authorized send (Option B, deferred).
 - **MAJOR-1:** Option A now uses the authenticated command (`c3-b2b-verify-authenticated.ts`, manifest vs pinned roots before any read); legacy unauthenticated CLI explicitly excluded as the enabling vehicle.
 - **MAJOR-2:** enabling mechanism preserves default-deny at both CLI and exported `verifyRegisteredProposal` (authorized-set-gated, no flags/env/bypass); `REAL_ARTIFACT_DISABLED` accounted for.
