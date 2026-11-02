@@ -309,6 +309,21 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
     (options.liveSpentRecordPath === undefined || options.liveSpentRecordPath === '')) {
     throw Object.assign(new Error('companion refuses to start: live budget requires a spent-record path'), { code: 'LIVE_BUDGET_REQUIRES_RECORD' satisfies StartupRefusal });
   }
+  // MAJOR-1 (issue #39 audit): EVERY positive live-analysis budget — finite
+  // N or unlimited — runs only under an explicit versioned standing approval
+  // identity. The owner must supply a `d9live-v2-` bootstrap id; omission
+  // never implicitly adopts any existing ledger (historical or standing),
+  // and a non-versioned id never authorizes. This check runs before the
+  // record opens, so a refusal creates no genesis and spends nothing.
+  // Zero-budget diagnostics stay untouched: no identity is required to
+  // start unarmed.
+  const liveAnalysesRequested = typeof options.liveAnalysesLeft === 'number' ? options.liveAnalysesLeft : 0;
+  if (liveTransport !== null && liveAnalysesRequested > 0 &&
+    (options.liveBootstrapApprovalId === undefined || !STANDING_APPROVAL_ID_RE.test(options.liveBootstrapApprovalId))) {
+    throw Object.assign(new Error('companion refuses to start: a positive live-analysis budget requires the explicit versioned standing approval identity (LIVE_APPROVAL_MISMATCH)'), {
+      code: 'LIVE_APPROVAL_MISMATCH' satisfies StartupRefusal,
+    });
+  }
   // Durable spent-run record with exclusive ownership: missing or empty
   // records initialize only with an explicit bootstrap approval; corrupt,
   // unsafe, rolled-back, or contended state refuses startup (fail closed,
@@ -337,17 +352,12 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
         code: 'LIVE_APPROVAL_MISMATCH' satisfies StartupRefusal,
       });
     }
-    // Repeatable standing-policy sessions (unlimited analyses) run only
-    // under the versioned standing approval identity: a historical one-shot
-    // genesis never carries the namespace, so it can never back unlimited
-    // sends even when its spent count would otherwise allow them.
-    if (options.liveAnalysesLeft === Number.POSITIVE_INFINITY &&
-      !STANDING_APPROVAL_ID_RE.test(spentRecord.approvalId())) {
-      try { spentRecord.release(); } catch { /* best-effort lock release */ }
-      throw Object.assign(new Error('companion refuses to start: unlimited analyses require the versioned standing approval identity (LIVE_APPROVAL_MISMATCH)'), {
-        code: 'LIVE_APPROVAL_MISMATCH' satisfies StartupRefusal,
-      });
-    }
+    // The pre-open identity check guarantees the supplied id carries the
+    // versioned namespace; the binding check just above guarantees the
+    // record's genesis is exactly that identity. Together they mean a
+    // historical one-shot genesis (no namespace, foreign id) can never
+    // back a new session — finite or unlimited — even when its spent count
+    // would otherwise allow sends.
   }
   // Live provider-attempt budget, separate from the mock success quota, minus
   // durable recorded spend. Spent exactly once per send via the transport's

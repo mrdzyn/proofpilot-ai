@@ -284,7 +284,7 @@ test('L-ATT-6: approved D9 sends one live request — pin, permit, spend, proven
     liveAnalysesLeft: 2,
     liveProposalsLeft: 0,
     liveSpentRecordPath: recordPath,
-    liveBootstrapApprovalId: 'd9i1-test-bootstrap-att-6',
+    liveBootstrapApprovalId: 'd9live-v2-test-att-6',
     liveMediaSha256: sha,
   });
   closers.push(() => app.close().catch(() => undefined));

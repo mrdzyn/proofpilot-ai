@@ -14,8 +14,10 @@
 // a finite non-negative integer, or `unlimited` (explicit opt-in; the ledger
 // still spends exactly once per send and every spend is durably recorded).
 // A positive live-analysis budget additionally requires `--live-media-sha256`
-// to equal the approved F01 SHA-256 exactly, a spent-record path, and — for
-// `unlimited` — the versioned standing approval identity (`d9live-v2-…`).
+// to equal the approved F01 SHA-256 exactly, a spent-record path, and the
+// explicit versioned standing approval identity
+// (`--live-approval-id d9live-v2-…`) — for finite budgets and `unlimited`
+// alike; omission never implicitly adopts a ledger.
 // Every provider attempt additionally needs a fresh single-use terminal
 // permit plus an explicit dashboard click: the budget never sends on its own,
 // never retries, and never runs in parallel. Numeric live-budget flags must
@@ -198,11 +200,12 @@ if (liveRequested || preflightRequested) {
   // analyses, zero proposals). Enforced here in the production CLI — before
   // the companion starts and before any transport exists. `--live-analyses`
   // is 0 (diagnostic), a finite count, or `unlimited`; `--live-proposals`
-  // is always 0. The budget alone authorizes nothing: every provider attempt
-  // additionally needs a fresh single-use terminal permit plus an explicit
-  // dashboard click (no auto-send, no retry, no parallel sends). The shared
-  // ledger stays general for test doubles; this gate is the production
-  // policy.
+  // is always 0. Every positive budget additionally requires the explicit
+  // versioned standing approval identity (`--live-approval-id d9live-v2-…`).
+  // The budget alone authorizes nothing: every provider attempt additionally
+  // needs a fresh single-use terminal permit plus an explicit dashboard click
+  // (no auto-send, no retry, no parallel sends). The shared ledger stays
+  // general for test doubles; this gate is the production policy.
   if (liveProposalsLeft !== 0) {
     console.error('refused: --live-proposals must be 0 (no proposal request is approved)');
     process.exit(2);
@@ -216,14 +219,15 @@ if (liveRequested || preflightRequested) {
     console.error('refused: a positive live-analysis budget requires --live-media-sha256 to be exactly the approved F01 SHA-256');
     process.exit(2);
   }
-  // Repeatable sessions run only under the versioned standing approval
-  // identity: the bootstrap id must carry the `d9live-v2-` namespace, so a
-  // legacy or historical approval string can never open an unlimited ledger.
-  // (The server re-checks the record genesis itself at startup, so pointing
-  // an unlimited run at a historical record refuses there too.)
-  if (liveUnlimited && liveBootstrapApprovalId !== undefined &&
-    !STANDING_APPROVAL_ID_RE.test(liveBootstrapApprovalId)) {
-    console.error('refused: --live-analyses unlimited requires a versioned standing approval id (--live-approval-id d9live-v2-…)');
+  // MAJOR-1 (issue #39 audit): EVERY positive live-analysis budget —
+  // finite or unlimited — requires the explicit versioned standing approval
+  // identity. The owner must pass `--live-approval-id d9live-v2-…`; omission
+  // never implicitly adopts a ledger (historical or standing), and a
+  // non-versioned id never authorizes. (The server enforces the same rule
+  // independently against the record genesis at startup.)
+  if (liveAnalysesLeft > 0 && (liveBootstrapApprovalId === undefined ||
+    !STANDING_APPROVAL_ID_RE.test(liveBootstrapApprovalId))) {
+    console.error('refused: a positive --live-analyses budget requires an explicit versioned standing approval id (--live-approval-id d9live-v2-…)');
     process.exit(2);
   }
   if (liveAnalysesLeft + liveProposalsLeft > 0 && (liveSpentRecordPath === undefined || liveSpentRecordPath === '')) {
