@@ -104,3 +104,13 @@ live request.
   path; tests L-ATT-1..6 (incl. concurrency one-attempt-only).
 - MINOR-1: provider-aware unexpected-failure wording per transport path.
 - Live-branch end-to-end spend tests stay queued behind a D9 decision.
+
+## Audit remediation I13 (against `5f06ad0`: MAJOR-3; D9 still pending)
+
+- `createLiveSendSpender()` returns `LiveSendAuthorization`; the transport
+  enforces it synchronously before the single POST (denial →
+  `LIVE_ATTEMPT_EXHAUSTED`, zero outbound requests, no timers armed).
+  No check-then-send race (no await between check and send).
+- Tests L-BT-10/11/12 (exhaustion block, one-send race, no-restore after
+  HTTP failure), L-ATT-4/5 (authorization values), L-ATT-7 (exhausted
+  ledger spends nothing). Pre-fix red, post-fix green observed.

@@ -1806,4 +1806,34 @@ Independent GPT-6 audit of the Draft PR at its exact head; STOP afterwards — n
 ### Next action
 Independent GPT-6 exact-head re-audit of the Draft PR; STOP afterwards — no merge, deploy, provider calls, key reads, or D9 activation.
 
+## Handoff: UI-C3-02-I13 — BT-LIVE-01 MAJOR-3 final-gate remediation (for GPT-6 re-audit)
+
+- **Task / phase:** `tasks/UI-C3-02-BT-LIVE-01.md` (MAJOR-3 remediation; D1–D7 and D9 still pending, D8 design-only)
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** ONE independent GPT-6 exact-head re-audit, then project owner
+- **Branch:** `phase/ui-c3-02-bt-live-01-readiness` (from `main@c2bff7d`)
+- **Implementation head:** `b9213117c8648a9f4bf61dadf1f40b2006e02d09` (plus a docs commit); audited-against base `5f06ad0`
+- **PR:** #32 (Draft, unmerged)
+- **State:** READY FOR RE-AUDIT. No merge, deploy, provider calls, key reads, spend, or D9 activation.
+
+### Remediated (against audited HEAD `5f06ad0`: MAJOR-3)
+- **Final authorization gate:** `createLiveSendSpender()` now returns `LiveSendAuthorization` (`{ok:true}` on the single atomic consume, `{ok:false, code:'LIVE_ATTEMPT_EXHAUSTED'}` on repeats or empty ledger); `BasetenTransportHooks.onSend` requires that result and the transport checks it synchronously in the same block as the send — no await between check and `fetchImpl`, so no check-then-send race. Denial refuses `LIVE_ATTEMPT_EXHAUSTED` with zero outbound requests and without arming timers (timer/poll setup moved after the gate; the early return previously leaked the 25 ms poll interval and hung the runner — found by the new tests, fixed, covered).
+- **Preserved:** one-authorized-send semantics (repeat spender invocations denied, failed authorizations consume nothing), no-restore rule (timeout/cancel-after-send/HTTP/malformed/mismatch/sanitizer-refusal keep the spent attempt), mock path byte-identical, single-flight/epoch/permit/cancel/provenance, D9 `null`, zero live egress.
+- **Tests:** L-BT-10 (exhausted ledger blocks the send: typed refusal, redacted detail, zero fetch calls), L-BT-11 (one budget + two competing spenders → exactly one POST; winner repeat → exhausted, still one POST), L-BT-12 (HTTP-500 after authorized send keeps the attempt spent; retry → exhausted, still one POST); L-ATT-4/5 assert authorization values (exactly one `ok:true` in the ten-way race), new L-ATT-7 (exhausted ledger authorizes/spends nothing). Cancel-before-send and D9 zero-call proofs unchanged (L-BT-4, L-LIVE-1/2, L-ATT-6).
+- **Preserved I12:** MAJOR-1 finish-reason allowlist, MAJOR-2 ledger separation + send-boundary spend, MINOR-1 provenance wording.
+
+### Validation
+- Focused: L-BT (13/13), L-ATT (7/7), L-LIVE (4/4), dormancy unchanged green.
+- Full: unit 521/521, security 140/140; `tsc` root + dashboard clean; `pnpm lint` 0 problems.
+- Integration (local Mac, exact impl HEAD): HTTP 9/9 + shutdown 1/1 (10/10 combined), Zone L browser 5/5, dashboard browser 11/11 (result read from streamed log; node hangs on vite teardown pipes — known harness artifact, orphans terminated, user processes untouched).
+- Required hosted CI: pending on Draft PR push; zero live egress by construction.
+- New tests failed authentically pre-fix (L-ATT-4/5/7, L-BT-10/11/12 red against old `void` spender/absence of gate); green post-fix.
+
+### Continuation notes
+- The live settle branch remains unreachable while D9 is `null`; end-to-end live-branch spend tests stay queued behind a D9 decision and must be re-audited with it.
+- `dashboard/node_modules/` installed locally for typecheck (untracked); `dashboard/dist/` remains uncommitted.
+
+### Next action
+Independent GPT-6 exact-head re-audit of the Draft PR; STOP afterwards — no merge, deploy, provider calls, key reads, or D9 activation.
+
 <!-- HANDOFF_ENTRIES_END -->
