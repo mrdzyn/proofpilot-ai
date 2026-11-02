@@ -610,3 +610,73 @@ test('L-ATT-13: restart retains all spends; durable ids stay unique across the r
   assert.match(ids[1] as string, /#spend-2$/);
   await second.close();
 });
+
+test('L-ATT-14: truncated attempt refuses with usage diagnostics; one spend, no retry, no leak', async () => {
+  const marker = 'MARKER-QA01-ATT14';
+  const calls = { count: 0, bodies: [] as unknown[] };
+  const scripted: LiveFetch = (url, init) => {
+    calls.count += 1;
+    calls.bodies.push(JSON.parse(init.body));
+    return Promise.resolve({
+      status: 200,
+      url,
+      json: () => Promise.resolve({
+        model: D9_APPROVED_MODEL,
+        choices: [{
+          index: 0,
+          message: { role: 'assistant', content: 'partial tap then', reasoning_content: marker },
+          finish_reason: 'length',
+        }],
+        usage: { prompt_tokens: 1240, completion_tokens: 2048, total_tokens: 3288 },
+      }),
+    });
+  };
+  const created = createBasetenTransport({ model: D9_APPROVED_MODEL, apiKey: 'NOT-A-REAL-KEY-0000', fetchImpl: scripted, timeoutMs: 2000 });
+  assert.equal(created.ok, true, JSON.stringify(created));
+  const sub = mkdtempSync(path.join(root, 'app-14-'));
+  const recordPath = path.join(root, 'att-14-spent.jsonl');
+  const sha = shaOf(GOOD_BYTES);
+  const app: Companion = await createCompanion({
+    port: 5201,
+    bind: false,
+    serveRoot: null,
+    uploads: StagedUploads.openDir(sub, { mediaDeps: stubMedia }),
+    runTimeoutMs: 5000,
+    session: new LocalSessionManager(),
+    permits: new OfflineMockPermitLedger(),
+    liveTransport: (created as { ok: true; transport: BasetenTransport }).transport,
+    liveModel: D9_APPROVED_MODEL,
+    liveAnalysesLeft: 3,
+    liveProposalsLeft: 0,
+    liveSpentRecordPath: recordPath,
+    liveBootstrapApprovalId: 'd9live-v2-test-att-14',
+    liveMediaSha256: sha,
+  });
+  closers.push(() => app.close().catch(() => undefined));
+  const session = await pairSession(app, 5201);
+  assert.equal(app.terminalPermit('analyze', sha, GOOD_BYTES.length).ok, true);
+  const up = await app.dispatch(
+    meta({ method: 'POST', path: '/api/upload', origin: 'http://127.0.0.1:5201', host: '127.0.0.1:5201', contentType: 'application/octet-stream', declaredSha256: sha, declaredBytes: String(GOOD_BYTES.length), declaredKind: 'analyze' }, session),
+    GOOD_BYTES,
+  );
+  const out = await app.dispatch(
+    meta({ method: 'POST', path: '/api/analyze', origin: 'http://127.0.0.1:5201', host: '127.0.0.1:5201', contentType: 'application/json' }, session),
+    json({ uploadId: (up.body as { uploadId: string }).uploadId, sha256: sha, bytes: GOOD_BYTES.length }),
+  );
+  const settled = await awaitSettled(app, 5201, session, (out.body as { runId: string }).runId);
+  const result = settled['result'] as Record<string, unknown>;
+  assert.equal(result['code'], 'TRANSPORT_TRUNCATED', 'truncation refuses with its own code');
+  assert.deepEqual(result['usage'], { promptTokens: 1240, completionTokens: 2048, totalTokens: 3288 }, 'provider-claimed counts ride the refused record as numbers only');
+  assert.equal(JSON.stringify(settled).includes(marker), false, 'reasoning content never lands in the run record');
+  assert.equal(JSON.stringify(settled).includes('partial tap then'), false, 'partial provider text never lands in the run record');
+  assert.equal(calls.count, 1, 'the truncated attempt sent exactly once — no automatic retry');
+  const ids = spendRunIds(recordPath);
+  assert.equal(ids.length, 1, 'the refused send still recorded exactly one spend');
+  // A truncated finish is terminal for that run: polling shows refused, and
+  // the status counters reflect one spent analysis.
+  const status = await app.dispatch(meta({ method: 'GET', path: '/api/status', host: '127.0.0.1:5201' }, session), new Uint8Array(0));
+  const live = (status.body as { live: { spent: { analyze: number }; attemptsLeft: { analyze: number } } }).live;
+  assert.equal(live.spent.analyze, 1, 'spend accounted');
+  assert.equal(live.attemptsLeft.analyze, 2, 'two attempts remain');
+  await app.close();
+});

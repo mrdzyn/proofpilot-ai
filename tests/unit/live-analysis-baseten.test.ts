@@ -404,6 +404,84 @@ test('L-BT-7c: finish reason decides before content; extras ignored; nothing lea
   }
 });
 
+test('L-BT-8: analyze budget is 2048, proposals stay 512, request shape unchanged', () => {
+  assert.equal(ANALYZE_MAX_TOKENS, 2048, 'analyze cap raised exactly to 2048 (QA-01 remediation)');
+  assert.equal(PROPOSE_MAX_TOKENS, 512, 'proposal cap untouched');
+  assert.equal(maxTokensFor('analyze'), 2048);
+  assert.equal(maxTokensFor('propose'), 512);
+  const part = realPart();
+  for (const kind of ['analyze', 'propose'] as const) {
+    const body = buildBasetenChatBody({ model: APPROVED, kind, videoPart: part });
+    const raw = JSON.parse(JSON.stringify(body)) as Record<string, unknown>;
+    assert.equal(raw['max_tokens'], kind === 'analyze' ? 2048 : 512);
+    assert.deepEqual(Object.keys(raw).sort(), ['max_tokens', 'messages', 'model'], 'no new request fields');
+    assert.ok(!JSON.stringify(body).includes('reasoning'), 'no reasoning knob without deployment evidence');
+  }
+});
+
+test('L-BT-7d: TRUNCATED carries numeric-only usage diagnostics, never content', () => {
+  const valid = validateBasetenResponse(
+    liveBody({
+      choices: [liveChoice({ message: { content: '' }, finish_reason: 'length' })],
+      usage: { prompt_tokens: 1240, completion_tokens: 2048, total_tokens: 3288 },
+    }),
+    APPROVED,
+  );
+  assert.equal(valid.ok, false);
+  if (!valid.ok) {
+    assert.equal(valid.code, 'TRANSPORT_TRUNCATED', 'finish still decides');
+    assert.deepEqual(valid.usage, { promptTokens: 1240, completionTokens: 2048, totalTokens: 3288 }, 'provider-claimed counts surface as numbers only');
+  }
+  // Missing usage: still TRUNCATED, no usage field — never escalated.
+  const missing = validateBasetenResponse(
+    liveBody({ choices: [liveChoice({ message: null, finish_reason: 'length' })], usage: undefined }),
+    APPROVED,
+  );
+  assert.equal(missing.ok, false);
+  if (!missing.ok) {
+    assert.equal(missing.code, 'TRANSPORT_TRUNCATED');
+    assert.equal('usage' in missing, false, 'no usage invented when absent');
+  }
+  // Malformed usage (negative, non-integer, wrong types): omitted, code unchanged.
+  for (const usage of [
+    { prompt_tokens: -1, completion_tokens: 2048, total_tokens: 2047 },
+    { prompt_tokens: 1.5, completion_tokens: 2048, total_tokens: 2049.5 },
+    { prompt_tokens: '1240', completion_tokens: 2048, total_tokens: 3288 },
+    { prompt_tokens: 1240, completion_tokens: 2048 },
+  ]) {
+    const bad = validateBasetenResponse(
+      liveBody({ choices: [liveChoice({ finish_reason: 'length' })], usage }),
+      APPROVED,
+    );
+    assert.equal(bad.ok, false);
+    if (!bad.ok) {
+      assert.equal(bad.code, 'TRANSPORT_TRUNCATED', `malformed usage keeps the finish code: ${JSON.stringify(usage)}`);
+      assert.equal('usage' in bad, false, 'malformed counts never surface');
+    }
+  }
+  // Extra provider fields (reasoning content, raw snippets) never leak —
+  // and the generic detail stays content-free.
+  const marker = 'MARKER-QA01-LEAK-7d';
+  const enriched = validateBasetenResponse(
+    liveBody({
+      choices: [{
+        index: 0,
+        message: { role: 'assistant', content: '', reasoning_content: marker },
+        finish_reason: 'length',
+      }],
+      usage: { prompt_tokens: 1240, completion_tokens: 2048, total_tokens: 3288, cost_usd: 0.01 },
+    }),
+    APPROVED,
+  );
+  assert.equal(enriched.ok, false);
+  if (!enriched.ok) {
+    assert.equal(enriched.code, 'TRANSPORT_TRUNCATED');
+    assert.equal(JSON.stringify(enriched).includes(marker), false, 'reasoning content never leaks');
+    assert.equal(JSON.stringify(enriched).includes('cost_usd'), false, 'only the three counts surface');
+    assert.deepEqual(Object.keys(enriched).sort(), ['code', 'ok', 'usage'], 'no detail field to quote payloads');
+  }
+});
+
 test('L-BT-8: network failure refuses without leaking, and redaction holds everywhere', async () => {
   const { fetchImpl, calls } = makeDouble({ throwNetwork: true });
   const transport = makeTransport(fetchImpl);

@@ -682,10 +682,19 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
       if (error instanceof LiveTransportRefused) {
         run.state = 'refused';
         run.finishedAt = now();
-        run.result = {
-          ok: false, code: error.code, detail: error.message,
-          transport: 'baseten-live', liveInference: true, provider: 'baseten',
-        };
+        // TRUNCATED usage diagnostics ride the refused record as numbers
+        // only (provider-claimed, never billing); anything else refuses
+        // without usage.
+        run.result = error.usage === undefined
+          ? {
+            ok: false, code: error.code, detail: error.message,
+            transport: 'baseten-live', liveInference: true, provider: 'baseten',
+          }
+          : {
+            ok: false, code: error.code, detail: error.message,
+            transport: 'baseten-live', liveInference: true, provider: 'baseten',
+            usage: { ...error.usage },
+          };
         return;
       }
       run.state = 'cancelled';
@@ -889,7 +898,13 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
       const settled = settleRun(run, kind,
         rawResponse.then(
           (reply) => {
-            if (!reply.ok) throw new LiveTransportRefused(reply.code, reply.detail);
+            if (!reply.ok) {
+              throw new LiveTransportRefused(
+                reply.code,
+                reply.detail,
+                reply.code === 'TRANSPORT_TRUNCATED' ? reply.usage : undefined,
+              );
+            }
             return { model: reply.model, text: reply.text, usage: reply.usage, finishReason: reply.finishReason };
           },
           (error: unknown) => {

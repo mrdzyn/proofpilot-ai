@@ -112,7 +112,13 @@ export interface BasetenTransportReply {
 
 export type BasetenTransportResult =
   | BasetenTransportReply
-  | Readonly<{ ok: false; code: BasetenTransportRefusal; detail: string }>;
+  | Readonly<{
+    ok: false;
+    code: BasetenTransportRefusal;
+    detail: string;
+    /** Sanitized numeric usage, present only on TRANSPORT_TRUNCATED diagnostics. */
+    usage?: SanitizedUsage;
+  }>;
 
 export interface BasetenTransportHooks {
   readonly isCancelled: () => boolean;
@@ -174,10 +180,13 @@ export class BasetenTimeout extends Error {
 /** Typed transport refusal: the server settles the run `refused` with the code. */
 export class LiveTransportRefused extends Error {
   readonly code: BasetenTransportRefusal;
-  constructor(code: BasetenTransportRefusal, detail: string) {
+  /** Sanitized numeric usage, present only on TRANSPORT_TRUNCATED diagnostics. */
+  readonly usage?: SanitizedUsage;
+  constructor(code: BasetenTransportRefusal, detail: string, usage?: SanitizedUsage) {
     super(detail);
     this.name = 'LiveTransportRefused';
     this.code = code;
+    if (usage !== undefined) this.usage = usage;
   }
 }
 
@@ -225,10 +234,38 @@ export interface ValidatedBasetenResponse {
  * Strict response validation: exact model echo, non-empty text, safe-int
  * usage, string finish reason. Details never quote the payload.
  */
+/**
+ * Best-effort numeric usage for TRUNCATED diagnostics: returns the three
+ * counts only when every one is a safe non-negative integer, otherwise
+ * undefined (never throws, never escalates the refusal code, never quotes
+ * provider content). Extra provider fields are ignored by construction.
+ */
+function readDiagnosticUsage(record: Record<string, unknown>): SanitizedUsage | undefined {
+  const usage = record['usage'];
+  if (typeof usage !== 'object' || usage === null) return undefined;
+  const table = usage as Record<string, unknown>;
+  const isCount = (value: unknown): value is number =>
+    typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+  const prompt = table['prompt_tokens'];
+  const completion = table['completion_tokens'];
+  const total = table['total_tokens'];
+  if (!isCount(prompt) || !isCount(completion) || !isCount(total)) return undefined;
+  return { promptTokens: prompt, completionTokens: completion, totalTokens: total };
+}
+
 export function validateBasetenResponse(
   payload: unknown,
   approvedModel: string,
-): { ok: true; value: ValidatedBasetenResponse } | { ok: false; code: 'TRANSPORT_SHAPE' | 'TRANSPORT_TRUNCATED' | 'TRANSPORT_CONTENT_FILTERED' | 'MODEL_MISMATCH' | 'TRANSPORT_USAGE' } {
+): { ok: true; value: ValidatedBasetenResponse } | {
+  ok: false;
+  code: 'TRANSPORT_SHAPE' | 'TRANSPORT_TRUNCATED' | 'TRANSPORT_CONTENT_FILTERED' | 'MODEL_MISMATCH' | 'TRANSPORT_USAGE';
+  /**
+   * Provider-claimed token counts, present only on TRANSPORT_TRUNCATED and
+   * only when all three counts are safe non-negative integers. Diagnostic
+   * only — never billing, never content, never a reason to accept output.
+   */
+  usage?: SanitizedUsage;
+} {
   if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
     return { ok: false, code: 'TRANSPORT_SHAPE' };
   }
@@ -249,9 +286,14 @@ export function validateBasetenResponse(
   // the old order misreported as SHAPE). Only an explicitly documented
   // successful completion ('stop') may become a result; truncated, refused,
   // or unexpected finish reasons never turn partial output into a success.
+  // On truncation only, validated numeric usage rides along as a
+  // diagnostic (absent or malformed counts are dropped, never escalated).
   const finishReason = first['finish_reason'];
   if (finishReason === 'length') {
-    return { ok: false, code: 'TRANSPORT_TRUNCATED' };
+    const usage = readDiagnosticUsage(record);
+    return usage === undefined
+      ? { ok: false, code: 'TRANSPORT_TRUNCATED' }
+      : { ok: false, code: 'TRANSPORT_TRUNCATED', usage };
   }
   if (finishReason === 'content_filter') {
     return { ok: false, code: 'TRANSPORT_CONTENT_FILTERED' };
@@ -391,6 +433,11 @@ export function createBasetenTransport(
                 : checked.code === 'TRANSPORT_USAGE'
                   ? 'live response usage block malformed'
                   : 'live response envelope malformed';
+            // TRUNCATED diagnostics ride the refusal as numbers only; the
+            // detail stays generic so no provider content can leak.
+            if (checked.code === 'TRANSPORT_TRUNCATED' && checked.usage !== undefined) {
+              return { ...refusal(checked.code, detail), usage: checked.usage };
+            }
             return refusal(checked.code, detail);
           }
           if (hooks.isCancelled()) {
