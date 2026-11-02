@@ -1,18 +1,19 @@
-# UI-C3-02-D9 Runbook — Owner-Only One-Shot Live Demonstration
+# UI-C3-02-D9 Runbook — Historical One-Shot Evidence and Proposed Repeatable Mode
 
-> **Status: PROCEDURE ONLY. No live call is authorized by this document.**
-> **STOP for D9-LIVE-01: the original owner-approved attempt is SPENT (§7).**
-> The owner authorized exactly one supervised Baseten analysis (2026-11-02,
-> PR #34 authorization record); D9 approves the hackathon-issued
-> `meta-models/muse-spark-open-1026` (organizer's Baseten email: the
-> hackathon-issued key works ONLY with this ID). The unsuffixed public ID
-> `meta-models/muse-spark-open` was approved in error (PR #36) and is
-> refused everywhere. Every live step below still requires a green
-> independent audit of the activation PR and an explicit one-shot owner
-> go-ahead immediately before the request — the standing authorization is
-> not permission to retry, to run proposals, or to skip the audit.
+> **Status: HISTORICAL PROCEDURE, NOT A CURRENT LIVE AUTHORIZATION.**
+> **D9-LIVE-01 and D9-LIVE-02 are both SPENT (§7 and §9). Never reset or reuse their ledgers.**
+> Sections 0–7 document the **original, completed one-shot policy** and must not
+> be followed to start a new live companion. On November 2, 2026 the owner adopted
+> a new *product direction*: repeatable, manually triggered Baseten analyses
+> under a future standing-session authorization ([Issue #39](https://github.com/mrdzyn/proofpilot-ai/issues/39)).
+> That mode is **not implemented**: the existing CLI still enforces 0 or 1
+> live analysis and zero live proposals. No new provider call is authorized
+> by this runbook, policy decision, or PR. See §10 for the pending design.
+> The hackathon key requires exactly `meta-models/muse-spark-open-1026`.
+> The generic unsuffixed public model was approved in error in PR #36 and
+> must remain refused.
 
-## 0. Prerequisites (owner decisions; D9 approved, execution gated)
+## 0. Original D9-LIVE-01 prerequisites — historical only
 
 - D1: workspace + single-use allowance — authorized **one analysis, zero
   proposals**, no re-arm on restart (owner authorization 2026-11-02).
@@ -32,7 +33,7 @@
   availability is proven only by the owner-run §1 preflight, never by an
   agent.
 
-## 1. Preflight (owner Mac; steps 1–4 need no credentials)
+## 1. Original preflight procedure — historical reference only
 
 1. `git status` clean; checkout the audited activation HEAD (posted in the
    Draft PR report).
@@ -61,13 +62,13 @@
    model-not-listed) is a STOP event: do not proceed to §3 — reconcile the
    account/key/model first.
 
-## 2. Approval capture
+## 2. Historical one-shot approval capture
 
 Record, outside the repo: date/time, exact model ID, media SHA-256, budget
 (1 analysis / 0 proposals), record path, and the explicit one-shot go-ahead.
 One approval authorizes exactly one provider attempt.
 
-## 3. Historical one-shot execution recipe — NOT re-authorized (owner terminal only)
+## 3. Historical one-shot execution recipe — NOT re-authorized
 
 ```sh
 pnpm --dir dashboard build
@@ -91,7 +92,7 @@ for the pinned clip, upload + analyze via Zone L, observe the single result,
 `LIVE_ATTEMPT_EXHAUSTED`) ends the attempt — **do not retry**; a failed
 authorization never restores, and a sent attempt is permanently spent.
 
-## 4. Cancellation / revoke / shutdown
+## 4. Historical cancellation / revoke / shutdown
 
 - Zone L Cancel or terminal `revoke` cancels the in-flight run; staged bytes
   are deleted; the spent authorization is NOT restored (by design).
@@ -100,7 +101,7 @@ authorization never restores, and a sent attempt is permanently spent.
   startup (`sweepStaleStagingDirs`) — the spent record is unaffected (append
   happens before the send, never after).
 
-## 4b. Rollback / lock policy (read before any restart after trouble)
+## 4b. Historical rollback / lock policy
 
 - The spent-run record is exclusively owned while the companion runs (a
   `<record>.lock` sibling). A second companion on the same record path
@@ -120,7 +121,7 @@ authorization never restores, and a sent attempt is permanently spent.
   unexpected budget restoration (status shows attempts you did not expect)
   is a STOP event: do not send, reconcile under §5, re-approve explicitly.
 
-## 4c. Supervised crash recovery (owner only, after any crash/kill -9/power loss)
+## 4c. Historical supervised crash recovery
 
 Perform these steps in the owner terminal. Do NOT script them into an
 automatic startup path.
@@ -144,7 +145,7 @@ automatic startup path.
 7. Record the recovery (holder pid, what the record showed) next to the §2
    approval.
 
-## 5. Post-run reconciliation
+## 5. Historical post-run reconciliation
 
 1. `cat` the spent-record file: exactly one new chained entry
    (`runId`, media SHA-256, `analyze`).
@@ -155,7 +156,7 @@ automatic startup path.
    `QUOTA_SPENT` with zero provider calls (non-rearmable proof).
 4. Record the outcome (success/refusal code, usage) next to the §2 approval.
 
-## 6. Disable / re-lock (mandatory after the one-shot)
+## 6. Historical disable / re-lock
 
 1. Unset the three variables in the owner shell; rotate the key if it was
    ever displayed, logged, or pasted outside the owner terminal.
@@ -193,12 +194,12 @@ automatic startup path.
 - No code, test, record, or configuration change in this slice re-arms,
   retries, or reinterprets the spent attempt.
 
-## 8. Post-PR #37 demo status — no new provider authorization
+## 8. Post-PR #37 status — historical second-attempt planning
 
 - **Correct model:** PR #37 is merged as `main@84b03a46ca4141b42f7e733e87c0acbd31af8501`; the hackathon-issued model is exactly `meta-models/muse-spark-open-1026`, and the unsuffixed public model refuses.
 - **Owner-reported catalog preflight:** on November 2, 2026, one authenticated, non-inference `GET /v1/models` returned `preflight: ok account-reachable model-listed catalog=21 endpoint=https://inference.baseten.co/v1`. A catalog listing is not proof of a successful inference POST, video acceptance or billing outcome.
 - **Video compatibility risk:** Meta/Baseten general Muse Spark Open documentation describes the typed `video_url` part and video support; it does **not establish** that the account-scoped `-1026` hackathon deployment accepts the exact inline MP4 data URL currently encoded here. A new attempt could refuse after its own send-boundary spend.
-- **New owner decision required:** a subsequent demo inference must be a **separate**, explicitly authorized one-shot with exact F01 media SHA, `meta-models/muse-spark-open-1026`, one analysis, zero proposals, zero retries and possible charges. The old D9-LIVE-01 hash-chained ledger is immutable and may never be reset or replaced to restore quota. A fresh approval and distinct ledger path are appropriate only after the owner records a separate decision; the runbook, PR merge and successful preflight do **not** authorize egress.
+- **Historical D9-LIVE-02 authorization:** the second attempt was separately approved as a one-shot (one analysis, zero proposals, no retries) and consumed. This describes **past execution**, not the new policy. Both D9-LIVE-01 and D9-LIVE-02 ledgers are spent and immutable. A future standing-session authorization and *new* separate multi-attempt ledger may be created only once the proposed Issue #39 implementation has passed independent audit and its merge and live activation are explicitly approved; no new file is required for every manual click within that authorized session.
 - **Mock-label caveat:** Zone L contains static `MOCK` copy and an action button labeled `Analyze with mock fixture` even while `--live` is armed. A click in armed live mode **may send a billable POST**. Confirm the Terminal LIVE banner before clicking and rely on final `baseten-live` result provenance, not UI copy. Perform rehearsal in default mock mode.
 - **Stop after any outcome:** do not retry after HTTP refusals, network failures or timeouts; preserve both old and any newly approved spend records, shut down the companion with `quit`, and report observations as unverified rather than as a proven fix.
 
@@ -209,3 +210,11 @@ automatic startup path.
 - **Spend:** the send-boundary allowance for D9-LIVE-02 is **SPENT**, including on a shape refusal. The owner-side new ledger path is `~/.proofpilot/d9-live-02-spent.jsonl` (owner-supplied ledger independently reconciled: exactly one genesis and one `analyze` spend, SHA-256 digest chain recomputed and matched both stored digests; `runId=local-2026-11-02-001`, certified F01 SHA-256, spent at 2026-11-02T10:23:18.356Z). This verifies the supplied ledger's internal consistency, not provider billing. Preserve this and the original `~/.proofpilot/live-spent.jsonl` unchanged; do not overwrite, delete, recreate, or bootstrap a third path without a separately reviewed and explicitly authorized decision. No retry is authorized.
 - **Possible diagnostic weakness (NOT a confirmed root cause):** the current validator requires non-empty text before inspecting `finish_reason`. Muse Spark Open reasoning can exhaust output budget before final content; this request caps `max_tokens` at 1,024. A response with empty content and `finish_reason: "length"` would be labeled `TRANSPORT_SHAPE` instead of `TRANSPORT_TRUNCATED`. Other malformed response shapes remain possible. Resolve with offline, synthetic contract tests and official provider evidence; do not collect/raw-log secrets or model reasoning, and do not issue real-provider requests as part of diagnosis.
 - **Demo status:** no accepted live Baseten analysis output. The safe public demonstration remains the default mock workflow plus real Playwright baseline/oracle evidence, labeled honestly. The second attempt is not a verified fix or successful inference result.
+
+## 10. Issue #39 — pending repeatable, manually initiated Baseten analysis policy
+
+- **Decision vs implementation:** On 2026-11-02 the owner chose to remove ProofPilot's *application-level* one-analysis limit. [Issue #39](https://github.com/mrdzyn/proofpilot-ai/issues/39) is the implementation contract; it is open and **not yet implemented, merged, or activated**. The present `scripts/c3-live-analysis.ts` rejects `--live-analyses` values above 1. Do **not** use a new record path, altered budget, script patch, or ad hoc restart to circumvent the current gate. The `--live-analyses unlimited` option is **proposed syntax, not a working command**.
+- **Standing-session scope (future, if independently reviewed and owner-activated):** explicit owner-started opt-in; model pinned exactly to `meta-models/muse-spark-open-1026`, certified F01 media only, zero proposals, no auto-retries, no unattended requests. Each live inference requires a **fresh terminal-issued, file/hash/action-bound permit**, local upload and deliberate user click. One owner-approved session may include multiple distinct manually initiated analyses; it does **not** require separate high-level approval or a new ledger for each click. Preserve exclusive-lock and append-only fsync-before-POST spending per attempt, with unique run identities.
+- **Ledger continuity:** the original `~/.proofpilot/live-spent.jsonl` (D9-LIVE-01) and `~/.proofpilot/d9-live-02-spent.jsonl` (D9-LIVE-02) remain **SPENT, immutable historical evidence**. Any newly reviewed repeatable mode needs its **own explicit standing-session approval and distinct audit ledger**; do not reset, delete, migrate or reuse the old approval genesis or spent history to rearm. A network failure, shape refusal or token-limit response still counts as a spent attempt.
+- **Financial and technical bounds:** the organizer offered **$100 in credits** and **up to 2 million tokens/minute**; that is not unlimited free inference. Actual billing, rate limits and a user-visible per-request cost boundary remain provider-dependent. Before live activation, resolve the open `TRANSPORT_SHAPE` classification with *offline fake-response fixtures* and truthful live/mock UI labels. No secret access, real-model test POST, automatic retry, or code execution is authorized by this documentation change.
+- **Current operator action:** use the **default mock-only demonstration**. Await the reviewed Issue #39 implementation and a separate owner approval to activate a new standing live session; do not follow the retired §3 command to launch another one-shot.
