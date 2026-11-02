@@ -83,13 +83,39 @@ authorization never restores, and a sent attempt is permanently spent.
   recreate or "fix" the file by hand to proceed: reconcile first (compare the
   record against §5 evidence), then either restore the authoritative file or
   bootstrap a fresh path with a NEW `--live-approval-id`.
-- A stale lock after a crash is taken over automatically only when its tip
-  is still in the record chain; otherwise startup refuses with rollback and
-  requires the same manual reconciliation.
+- There is NO automatic stale-lock takeover. Any existing lock — live or
+  stale — makes a new companion refuse `LIVE_RECORD_LOCKED` and exit. The
+  runtime never clears or replaces another process's lock. After a crash,
+  follow the supervised recovery workflow in §4c; never delete the lock
+  while a companion may be running.
 - Residual risk (documented, accepted): a rollback that also removes the lock
   is locally indistinguishable from an earlier legitimate state. Any
   unexpected budget restoration (status shows attempts you did not expect)
   is a STOP event: do not send, reconcile under §5, re-approve explicitly.
+
+## 4c. Supervised crash recovery (owner only, after any crash/kill -9/power loss)
+
+Perform these steps in the owner terminal. Do NOT script them into an
+automatic startup path.
+
+1. Confirm NO companion is running on the record path (`ps` for the
+   companion; one terminal only). Never clear a lock while a companion may
+   be running — that is the double-spend you are preventing.
+2. Read the lock file (`cat <record>.lock`): note the holder pid, nonce,
+   tip, and creation time.
+3. Confirm the holder is dead: `kill -0 <pid>` must report no such process.
+   If the pid is alive, stop that process first and do NOT proceed.
+4. Read the spent-record file (`cat <record>`): confirm the entries chain
+   from the approved genesis (§5) and the spends match what you expect.
+   If the record is corrupt, missing, or shows a spend you did not
+   authorize: STOP, reconcile under §4b/§5, and bootstrap a fresh path with
+   a NEW `--live-approval-id` if a fresh approval is needed.
+5. Only now, remove the lock file by hand (`rm <record>.lock`). Never
+   hand-edit the record file to re-arm it.
+6. Restart the companion. If startup still refuses (`LOCKED`/`CORRUPT`/
+   `MISSING`), STOP and reconcile — do not retry with force.
+7. Record the recovery (holder pid, what the record showed) next to the §2
+   approval.
 
 ## 5. Post-run reconciliation
 

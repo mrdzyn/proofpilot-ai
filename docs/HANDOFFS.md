@@ -1937,4 +1937,36 @@ End-to-end live-branch spend, media-pin accept refusal, and mock/live decoupling
 ### Next action
 Independent GPT-6 exact-head re-audit of Draft PR #34; STOP afterwards — no merge, deploy, provider calls, key reads, or D9 activation.
 
+## Handoff: UI-C3-02-I17 — D9-I1 audit remediation round 4 (for GPT-6 re-audit)
+
+- **Task / phase:** `tasks/UI-C3-02-D9-I1.md` (§Audit remediation I17; D1–D7 and D9 pending, D8 design-only)
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** ONE independent GPT-6 exact-head re-audit, then project owner
+- **Branch:** `phase/ui-c3-02-d9-i1-readiness` (from `main@cb48471`)
+- **Implementation head:** `31a160f144bad8a74911695363344c5e1f7ca39e` (plus a docs commit); audited-against base `ea454a9`
+- **PR:** #34 (Draft, unmerged)
+- **State:** READY FOR RE-AUDIT. No merge, deploy, provider calls, key reads, spend, or D9 activation. The repository `.env.local` was never listed, read, or referenced by value.
+
+### Remediated (against audited HEAD `ea454a9`)
+- **MAJOR-1 — automatic stale-lock takeover removed:** `acquireLock` no longer inspects-then-unlinks; any existing lock (live holder or dead) refuses `LIVE_RECORD_LOCKED` with holder pid/age and a runbook §4c pointer, and the lock file is never modified on refusal. `inspectLockForTakeover` and the stolen-tip continuity branch are deleted — the check-then-unlink race is gone because the unlink is gone. Crash recovery is an explicit owner-supervised workflow (runbook §4b/§4c: confirm no companion, confirm holder dead, verify chain, clear lock by hand, restart), never a runtime path. `checkSnapshotContinuity` keeps only match-or-refuse (L-REC-11).
+- **Tests:** L-REC-15 rewritten — 4 processes vs one dead holder ALL refuse LOCKED, the lock is byte-identical afterwards (no replacement possible), the chain is unchanged; timing-independent since no timing window remains. L-REC-8 rewritten — an in-chain stale tip refuses LOCKED; supervised recovery resumes with spends intact; the lock-removal rollback residual is pinned as owner-reconciled (§4b STOP). L-REC-17 (new) — a stale lock refuses with and without a bootstrap approval; the owner resumes only through the documented steps (holder-dead check, hand-clear) with approval identity preserved. L-BT-14 (new) — two independent stale-locked send attempts yield zero outbound POSTs (each consumes its in-memory attempt per the MAJOR-3 no-restore rule); after supervised recovery exactly one POST goes out and exactly one debit is recorded.
+- **Preserved:** two-phase open, authoritative under-lock re-read + continuity, genesis-under-lock with fsync-or-refuse, one-send boundary, cancellation, epoch/single-flight, permit binding, provenance, redaction, static boundaries, all I12–I16 fixes, D9 `null`, live default-off, zero live egress.
+
+### Validation
+- Focused: L-REC 17/17, L-BT 15/15 (rewritten L-REC-8/11/15, new L-REC-17, new L-BT-14).
+- Full: unit 554/554, security 141/141; `tsc` root + dashboard clean; `pnpm lint` 0 problems (259 files).
+- Integration (local Mac, exact impl HEAD): HTTP 9/9 + shutdown 1/1, Zone L browser 5/5, dashboard browser 11/11.
+- Required hosted CI: green at exact docs HEAD (run linked in PR comment).
+- Fail-before observed directly: the audited-HEAD module auto-takes-over a stale lock after a spend (`OLD CODE: stale lock taken over, countSpent=1`); the fixed module refuses it `LIVE_RECORD_LOCKED` (L-REC-15/17, L-BT-14).
+
+### D9-queued (unchanged)
+End-to-end live-branch spend, media-pin accept refusal, and mock/live decoupling under an approved model remain unreachable while D9 is `null`; re-audit with a D9 decision.
+
+### Continuation notes
+- `dashboard/node_modules/` installed locally for typecheck (untracked); `dashboard/dist/` remains uncommitted.
+- The ONLY credential surface is the owner-started `--live` process memory; the ONLY live-network seam is its injected fetch wrapper.
+
+### Next action
+Independent GPT-6 exact-head re-audit of Draft PR #34; STOP afterwards — no merge, deploy, provider calls, key reads, or D9 activation.
+
 <!-- HANDOFF_ENTRIES_END -->
