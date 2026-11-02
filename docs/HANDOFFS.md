@@ -1836,4 +1836,39 @@ Independent GPT-6 exact-head re-audit of the Draft PR; STOP afterwards — no me
 ### Next action
 Independent GPT-6 exact-head re-audit of the Draft PR; STOP afterwards — no merge, deploy, provider calls, key reads, or D9 activation.
 
+## Handoff: UI-C3-02-I14 — D9-I1 live runtime activation readiness (for GPT-6 audit)
+
+- **Task / phase:** `tasks/UI-C3-02-D9-I1.md` (bounded contract; planning ref PR #33 / `tasks/UI-C3-02-D9-PLAN.md`; D1–D7 and D9 pending, D8 design-only)
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** ONE independent GPT-6 exact-head audit, then project owner
+- **Branch:** `phase/ui-c3-02-d9-i1-readiness` (from `main@cb48471`)
+- **Implementation head:** `74d3fc1af5d4542ace0cd5b129da08a24f93a623` (plus a docs commit)
+- **PR:** new Draft (to open; targets `main`)
+- **State:** READY FOR AUDIT. No merge, deploy, provider calls, key reads, spend, or D9 activation. The repository `.env.local` was never read, inspected, or referenced by value.
+
+### Implemented (default-off, D9 stays `null`, budgets default to zero)
+- **Durable spent-run record** (`live-spent-record.ts`, new): hash-chained JSONL (mode 0600), run id + media SHA-256 + kind + timestamp only — no credentials, bodies, or provider text. Missing file created empty; corrupt chain refuses. `remainingLiveBudget` floors hostile input.
+- **Server activation gate** (`server.ts`): startup refuses live budget without a record path (`LIVE_BUDGET_REQUIRES_RECORD`), malformed media pin (`LIVE_MEDIA_PIN_INVALID`), corrupt record (`LIVE_SPEND_RECORD_FAILED`); effective budget = configured − recorded; exported `checkLivePrecheck` table (D9 → record health → budget); live media pin enforced pre-slot/permit/quota (`MEDIA_NOT_PINNED`); live path bypasses mock quota (mock quota and behavior byte-identical); `/api/status` gains a labeled `live` section (attempts left, record/media-pin state, poison flag) with unchanged mock `quota`.
+- **Send-boundary recording + poison:** spender `onAuthorize` appends the record synchronously at the authorized send; append failure rejects the send promise → typed `LIVE_SPEND_RECORD_FAILED` run record with baseten provenance and poisons the live path for the process. Nothing sent in either case; never restored.
+- **Owner-started `--live` CLI** (`scripts/c3-live-analysis.ts`): explicit flag only; reads exactly `BASETEN_API_KEY`, `BASETEN_API_BASE_URL`, `BASETEN_MODEL` after the D9 gate (refuses while D9 is `null`, then key/base-url/model checks); budgets/record/pin flags; injected fetch wrapper (no literal-URL fetch, no discovery, zero I/O at construction); presence-only credential banner line, never values. Without `--live`, env is never read and live is impossible.
+- **Model reconciliation:** `meta/Muse-Spark-Open-816B-A42B` and `meta-models/Muse-Spark-Open-816B-A42B` added to rejected aliases with the public-docs discrepancy note; configured `BASETEN_MODEL` validated separately by exact equality, never translated.
+- **Runbook** (`docs/UI-C3-02-D9-RUNBOOK.md`): owner-only preflight, approval capture, one-shot command, cancel/revoke/shutdown, reconciliation, disable/re-lock. UI item 10 verified as-is (provider/model/run/usage/observations/UNVERIFIED rows already render).
+
+### Validation
+- Focused: L-REC (6/6), L-ATT (10/10 incl. new 8/9/10), L-ACT (5/5), L-CLI (3/3), D9-I1 boundary + updated prep boundary.
+- Full: unit 538/538, security 141/141; `tsc` root + dashboard clean; `pnpm lint` 0 problems.
+- Integration (local Mac, exact impl HEAD): HTTP 9/9 + shutdown 1/1, Zone L browser 5/5, dashboard browser 11/11 (11 pass lines, 0 fail lines; node hangs on vite teardown pipes — known harness artifact, orphans terminated, user processes untouched).
+- Required hosted CI: pending on Draft PR push; zero live egress by construction (injected doubles + fake keys only; `.env.local` untouched).
+- Pre-existing boundary test updated as a reviewed contract change (`live01b-prep-boundary`: CLI is now the single env/fetch exception, still no literal-URL fetch, still no other providers/runners).
+
+### D9-queued (unreachable while D9 is `null`; re-audit with a D9 decision)
+- End-to-end live-branch spend (HTTP failure/timeout/cancel-after-send against a seeded ledger + record write + poison), media-pin accept-path refusal, live-vs-mock quota decoupling under an approved model. Units + dormant proofs pin everything around them.
+
+### Continuation notes
+- `dashboard/node_modules/` installed locally for typecheck (untracked); `dashboard/dist/` remains uncommitted. The repository `.env.local`, if present, was never listed, read, or referenced by value.
+- The ONLY credential surface is the owner-started `--live` process memory; the ONLY live-network seam is its injected fetch wrapper.
+
+### Next action
+Independent GPT-6 exact-head audit of the new Draft PR; STOP afterwards — no merge, deploy, provider calls, key reads, or D9 activation.
+
 <!-- HANDOFF_ENTRIES_END -->
