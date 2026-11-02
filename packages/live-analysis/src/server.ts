@@ -50,7 +50,17 @@ import type { ValidatedVideo } from '../../intake/src/media.ts';
 export const COMPANION_VERSION = '0.1-i2i4-mock';
 export const DEFAULT_PORT = 5188;
 
-export type StartupRefusal = 'ENDPOINT_UNAPPROVED' | 'ADDRESS_IN_USE' | 'LIVE_BUDGET_REQUIRES_RECORD' | 'LIVE_MEDIA_PIN_INVALID' | 'LIVE_SPEND_RECORD_FAILED';
+export type StartupRefusal =
+  | 'ENDPOINT_UNAPPROVED'
+  | 'ADDRESS_IN_USE'
+  | 'LIVE_BUDGET_REQUIRES_RECORD'
+  | 'LIVE_MEDIA_PIN_INVALID'
+  | 'LIVE_SPEND_RECORD_FAILED'
+  | 'LIVE_SPEND_RECORD_MISSING'
+  | 'LIVE_RECORD_LOCKED'
+  | 'LIVE_SPEND_RECORD_CORRUPT'
+  | 'LIVE_RECORD_UNSAFE'
+  | 'LIVE_SPEND_RECORD_ROLLBACK';
 
 /**
  * Live-attempt precheck decision table (unit-tested): D9 approval first,
@@ -70,6 +80,47 @@ export function checkLivePrecheck(input: {
   if (input.poisoned) return { ok: false, code: 'LIVE_SPEND_RECORD_FAILED' };
   if (!(input.attemptsLeft > 0)) return { ok: false, code: 'QUOTA_SPENT' };
   return { ok: true };
+}
+
+/**
+ * Activation-state wording for `/api/status` (unit-tested): the reported
+ * D9/live state is derived from the actual validated gate, never hardcoded.
+ * While D9 is pending the strings describe the block; a future approved
+ * state would report it instead of claiming live is disabled.
+ */
+export interface ActivationStateWords {
+  readonly transport: string;
+  readonly liveTransport: string;
+  readonly d9: string;
+  readonly modelOk: boolean;
+}
+
+export function describeActivationState(input: {
+  readonly liveConfigured: boolean;
+  readonly d9Approved: boolean;
+}): ActivationStateWords {
+  if (!input.liveConfigured) {
+    return {
+      transport: 'mock-fixture (no live inference; D9 pending)',
+      liveTransport: 'none',
+      d9: 'pending (blocks any live call)',
+      modelOk: false,
+    };
+  }
+  if (!input.d9Approved) {
+    return {
+      transport: 'mock-fixture + baseten-live (D9-gated; no live call without owner approval)',
+      liveTransport: 'baseten-live (D9-gated)',
+      d9: 'pending (blocks any live call)',
+      modelOk: false,
+    };
+  }
+  return {
+    transport: 'mock-fixture + baseten-live (owner-approved)',
+    liveTransport: 'baseten-live (owner-approved)',
+    d9: 'approved',
+    modelOk: true,
+  };
 }
 
 export interface CompanionOptions {
@@ -121,6 +172,14 @@ export interface CompanionOptions {
    * touched. The mock path ignores it.
    */
   liveMediaSha256?: string;
+  /**
+   * Fresh owner bootstrap approval id for initializing a missing or empty
+   * spent-run record (format-checked). Required exactly then; a missing or
+   * empty record without one refuses startup instead of auto-creating, so
+   * deletion or truncation can never silently re-arm the budget. Ignored
+   * once the record is already initialized.
+   */
+  liveBootstrapApprovalId?: string;
   analysesLeft?: number;
   proposalsLeft?: number;
   runTimeoutMs?: number;
@@ -248,15 +307,21 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
     (options.liveSpentRecordPath === undefined || options.liveSpentRecordPath === '')) {
     throw Object.assign(new Error('companion refuses to start: live budget requires a spent-record path'), { code: 'LIVE_BUDGET_REQUIRES_RECORD' satisfies StartupRefusal });
   }
-  // Durable spent-run record: created empty when missing, verified when
-  // present. Corrupt state refuses startup (fail closed, never re-arm).
+  // Durable spent-run record with exclusive ownership: missing or empty
+  // records initialize only with an explicit bootstrap approval; corrupt,
+  // unsafe, rolled-back, or contended state refuses startup (fail closed,
+  // never re-arm, never share authorization across processes).
   let spentRecord: LiveSpentRecord | null = null;
   if (liveTransport !== null && options.liveSpentRecordPath !== undefined && options.liveSpentRecordPath !== '') {
     try {
-      spentRecord = openSpentRecord(options.liveSpentRecordPath);
+      spentRecord = openSpentRecord(options.liveSpentRecordPath, {
+        bootstrapApprovalId: options.liveBootstrapApprovalId,
+      });
     } catch (error) {
       if (error instanceof LiveSpendRecordError) {
-        throw Object.assign(new Error(`companion refuses to start: ${error.code}`), { code: 'LIVE_SPEND_RECORD_FAILED' satisfies StartupRefusal });
+        throw Object.assign(new Error(`companion refuses to start: ${error.code}`), {
+          code: error.code satisfies StartupRefusal,
+        });
       }
       throw error;
     }
@@ -366,23 +431,25 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
   }
 
   function publicStatus(authenticated: boolean): Record<string, unknown> {
-    const liveConfigured = liveTransport !== null;
+    const words = describeActivationState({
+      liveConfigured: liveTransport !== null,
+      d9Approved: liveTransport !== null && validateLiveModel(liveModel).ok,
+    });
     return {
       service: 'ui-c3-02-companion',
       version: COMPANION_VERSION,
-      transport: liveConfigured
-        ? 'mock-fixture + baseten-live (D9-gated; no live call without owner approval)'
-        : 'mock-fixture (no live inference; D9 pending)',
+      transport: words.transport,
       paired: authenticated,
-      config: { urlOk: true, modelOk: false, d9: 'pending (blocks any live call)' },
+      config: { urlOk: true, modelOk: words.modelOk, d9: words.d9 },
       // Mock success quota: spent only by sanitized mock success, never by
       // live attempts (live requests do not consult it; see handleAnalyzePropose).
       quota: { analysesLeft, proposalsLeft },
       // Live provider-attempt budget: effective allocation minus durable
       // recorded spend. Reported counts only — never a billing figure.
       live: {
-        transport: liveConfigured ? 'baseten-live (D9-gated)' : 'none',
-        d9: 'pending (blocks any live call)',
+        transport: words.liveTransport,
+        d9: words.d9,
+        modelOk: words.modelOk,
         attemptsLeft: { analyze: liveAttempts.left('analyze'), propose: liveAttempts.left('propose') },
         spentRecord: options.liveSpentRecordPath !== undefined && options.liveSpentRecordPath !== '' ? 'configured' : 'none',
         mediaPin: liveMediaSha256 !== undefined,
@@ -750,7 +817,7 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
         // requires a path), but a missing record must fail loudly — never
         // silently send unrecorded.
         if (spentRecord === null) {
-          throw new LiveSpendRecordError('live budget requires a spent-record path');
+          throw new LiveSpendRecordError('LIVE_SPEND_RECORD_FAILED', 'live budget requires a spent-record path');
         }
         spentRecord.record({ runId: run.runId, sha256, kind, spentAt: now() });
       });
@@ -1089,6 +1156,11 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
       }
       await Promise.allSettled([...inflight]);
       await uploads.destroy();
+      // Release exclusive record ownership last: no send can follow, so no
+      // other holder can interleave with this process afterwards. Best
+      // effort; a leftover stale lock is taken over (or refused) on next
+      // open, never silently shared.
+      spentRecord?.release();
     },
     terminalPermit,
     terminalRevoke,

@@ -148,7 +148,12 @@ test('L-ATT-10: the authorize callback composes with the durable record', () => 
     const recordPath = path.join(dir, 'spent.jsonl');
     const ledger = createLiveAttemptLedger({ analyses: 1, proposals: 0 });
     const spend = createLiveSendSpender(ledger, 'analyze', () => {
-      openSpentRecord(recordPath).record({ runId: 'r-1', sha256: 'a'.repeat(64), kind: 'analyze', spentAt: 1 });
+      const handle = openSpentRecord(recordPath, { bootstrapApprovalId: 'd9i1-test-bootstrap-att-10' });
+      try {
+        handle.record({ runId: 'r-1', sha256: 'a'.repeat(64), kind: 'analyze', spentAt: 1 });
+      } finally {
+        handle.release();
+      }
     });
     assert.deepEqual(spend(), { ok: true });
     const reopened = openSpentRecord(recordPath);
@@ -249,6 +254,7 @@ test('L-ATT-6: dormant server spends neither the live budget nor mock quota befo
     liveAnalysesLeft: 1,
     liveProposalsLeft: 1,
     liveSpentRecordPath: path.join(sub, 'spent.jsonl'),
+    liveBootstrapApprovalId: 'd9i1-test-bootstrap-att-6',
   });
   closers.push(() => app.close().catch(() => undefined));
   const code = app.sessions.issueTerminalCode();

@@ -5,7 +5,8 @@
 //       [--base-url https://inference.baseten.co/v1]
 //       [--mock-latency-ms 1200] [--analyses 3] [--proposals 1]
 //       [--live [--live-analyses 1] [--live-proposals 0]
-//        [--live-spent-record <path>] [--live-media-sha256 <hex>]]
+//        [--live-spent-record <path>] [--live-media-sha256 <hex>]
+//        [--live-approval-id <id>]]
 //
 // Terminal commands (stdin): pair | permit <analyze|propose> <sha256> <bytes>
 // | revoke | status | quit. Pairing codes and permits are created ONLY here,
@@ -80,6 +81,7 @@ let liveAnalysesLeft = 0;
 let liveProposalsLeft = 0;
 let liveSpentRecordPath: string | undefined;
 let liveMediaSha256: string | undefined;
+let liveBootstrapApprovalId: string | undefined;
 if (liveRequested) {
   if (D9_APPROVED_MODEL === null) {
     console.error('refused: live mode unavailable (D9 pending: no model is approved; no live request was made)');
@@ -110,6 +112,7 @@ if (liveRequested) {
   liveProposalsLeft = flagInt(argv, '--live-proposals', 0);
   liveSpentRecordPath = flagValue(argv, '--live-spent-record') ?? undefined;
   liveMediaSha256 = flagValue(argv, '--live-media-sha256') ?? undefined;
+  liveBootstrapApprovalId = flagValue(argv, '--live-approval-id') ?? undefined;
   if (liveAnalysesLeft + liveProposalsLeft > 0 && (liveSpentRecordPath === undefined || liveSpentRecordPath === '')) {
     console.error('refused: a nonzero live budget requires --live-spent-record');
     process.exit(2);
@@ -147,6 +150,7 @@ const companion = await createCompanion({
   liveProposalsLeft,
   liveSpentRecordPath,
   liveMediaSha256,
+  liveBootstrapApprovalId,
 }).catch((error: unknown) => {
   console.error(`refused: cannot start companion (${error instanceof Error ? error.message : 'unknown'})`);
   process.exit(2);
@@ -210,7 +214,9 @@ for await (const line of rl) {
       companion.terminalRevoke();
       console.log('revoked: sessions, permits, staged bytes; in-flight runs cancelled');
     } else if (command === 'status') {
-      console.log(JSON.stringify({ ok: true, service: 'ui-c3-02-companion', version: 'mock', port }));
+      // Terminal status reports the actual mode: mock-only by default, the
+      // armed live path only after --live passes every gate (D9 pending here).
+      console.log(JSON.stringify({ ok: true, service: 'ui-c3-02-companion', version: 'mock', port, mode: liveTransport !== null ? 'live-armed' : 'mock-only' }));
     } else if (command === 'help' || command === '') {
       console.log('commands: pair | permit <analyze|propose> <sha256> <bytes> | revoke | status | quit');
     } else if (command !== undefined) {
