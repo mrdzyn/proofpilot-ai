@@ -1905,4 +1905,36 @@ End-to-end live-branch spend, media-pin accept refusal, and mock/live decoupling
 ### Next action
 Independent GPT-6 exact-head re-audit of Draft PR #34; STOP afterwards — no merge, deploy, provider calls, key reads, or D9 activation.
 
+## Handoff: UI-C3-02-I16 — D9-I1 audit remediation round 3 (for GPT-6 re-audit)
+
+- **Task / phase:** `tasks/UI-C3-02-D9-I1.md` (§Audit remediation I16; D1–D7 and D9 pending, D8 design-only)
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** ONE independent GPT-6 exact-head re-audit, then project owner
+- **Branch:** `phase/ui-c3-02-d9-i1-readiness` (from `main@cb48471`)
+- **Implementation head:** `98a660d2598721a11c5f0cb81df7f39997455744` (plus a docs commit); audited-against base `11fa876`
+- **PR:** #34 (Draft, unmerged)
+- **State:** READY FOR RE-AUDIT. No merge, deploy, provider calls, key reads, spend, or D9 activation. The repository `.env.local` was never listed, read, or referenced by value.
+
+### Remediated (against audited HEAD `11fa876`)
+- **MAJOR-1 — read-before-lock + stale-takeover races:** two-phase open — the preliminary snapshot is validity-only; exclusive ownership is acquired before any authoritative state; the chain is re-read under the lock and must match (`checkSnapshotContinuity` decision table, unit-tested: match authorizes, drift fails closed, foreign stale tip proves rollback); every link success is verified by re-reading the lock (concurrent takeovers resolve to exactly one owner); stale unlink is conditional on unchanged content. Deterministic two-process racer tests via committed helper `tests/helpers/record-racer.ts`: L-REC-14 (5-process spend race → exactly one winner, one spend, valid chain, losers LOCKED), L-REC-15 (4-process stale-takeover race → exactly one owner), L-REC-16 (4-process concurrent bootstrap → exactly one genesis bound to one supplied approval). Record-backed authorization test L-BT-13 (spender + transport double + injected fetch counter): one authorized attempt permits at most one outbound POST.
+- **MAJOR-2 — empty-file bootstrap:** genesis is written under exclusive ownership with fsync (phase 5; no lockless `initializeRecord` path remains); `readChain` requires exactly one approval genesis first (spend-only, duplicate, and misplaced genesis refuse as CORRUPT — L-REC-12 with an independently reimplemented digest format); empty chains initialize only with an owner bootstrap approval; approval identity preserved across init → restart → spend (L-REC-13); L-BT-13's refusal path proves no request before a durable genesis (uninitialized record → onAuthorize throws → zero fetches).
+- **Preserved:** all I12–I15 fixes, mock workflow byte-identical, single-send boundary, cancellation, epoch/single-flight, permit binding, provenance, redaction, static boundaries, D9 `null`, live default-off, zero live egress.
+
+### Validation
+- Focused: L-REC 16/16, L-ATT 10/10, L-ACT 8/8, L-BT 14/14, L-CLI 3/3, offline boundary 4/4.
+- Full: unit 552/552, security 141/141; `tsc` root + dashboard clean; `pnpm lint` 0 problems (259 files).
+- Integration (local Mac, exact impl HEAD): HTTP 9/9 + shutdown 1/1, Zone L browser 5/5, dashboard browser 11/11 (11 pass lines, 0 fail lines; node hangs on vite teardown pipes — known harness artifact, orphans terminated, user processes untouched).
+- Required hosted CI: pending on Draft PR push; zero live egress by construction.
+- Fail-before observed directly: the audited-HEAD module accepts a hash-valid spend-only chain (`countSpent=1`, no genesis), authorizing from an uninitialized record; the fixed module refuses it as CORRUPT (L-REC-12). Racer losers fail closed with `LIVE_RECORD_LOCKED` while exactly one winner proceeds with a valid chain. All green post-fix; full suites show no regressions in prior fixes.
+
+### D9-queued (unchanged)
+End-to-end live-branch spend, media-pin accept refusal, and mock/live decoupling under an approved model remain unreachable while D9 is `null`; re-audit with a D9 decision.
+
+### Continuation notes
+- `dashboard/node_modules/` installed locally for typecheck (untracked); `dashboard/dist/` remains uncommitted.
+- The ONLY credential surface is the owner-started `--live` process memory; the ONLY live-network seam is its injected fetch wrapper.
+
+### Next action
+Independent GPT-6 exact-head re-audit of Draft PR #34; STOP afterwards — no merge, deploy, provider calls, key reads, or D9 activation.
+
 <!-- HANDOFF_ENTRIES_END -->
