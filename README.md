@@ -33,9 +33,17 @@
 
 **AI output can be plausible without being correct. ProofPilot keeps model claims separate from browser evidence.**
 
-| 01 · Observe | 02 · Propose | 03 · Verify independently |
-| :--- | :--- | :--- |
-| Reproduce a synthetic UI defect in Chromium at a known viewport and source revision. | Analyze validated media and parse any proposed CSS through a closed grammar. Treat model output as untrusted data. | Run eligible, hand-authored controls through the protected Playwright oracle and inspect attributable evidence. |
+### 01 · Observe
+
+Reproduce a synthetic UI defect in Chromium at a known viewport and source revision.
+
+### 02 · Propose
+
+Analyze validated media and parse any proposed CSS through a closed grammar. Treat model output as untrusted data.
+
+### 03 · Verify independently
+
+Run eligible, hand-authored controls through the protected Playwright oracle and inspect attributable evidence.
 
 **F01:** the mobile Add-to-cart tap is intercepted; the desktop control passes. **The historical Muse Spark proposal is accepted but unverified and has never been run through the verifier.** **PC-1:** a separate, hand-authored control passed three trusted replays. Those results are not interchangeable.
 
@@ -54,9 +62,9 @@
 
 The repository contains a local dashboard and localhost companion with a **mock-only** analysis path. That lets the offline flow be inspected without claiming that a real Baseten request occurred.
 
-| Synthetic defect | Local mock flow | Independent control |
-| :--- | :--- | :--- |
-| F01 reproduces: mobile cart stays at 0. | Zone L mock analysis is labeled as mock output. | Hand-authored PC-1 is `VERIFIED` 3/3; the Muse Spark proposal remains `UNTRUSTED PROPOSAL — NOT VERIFIED`. |
+- **Synthetic defect:** F01 reproduces; the mobile cart stays at 0.
+- **Local mock flow:** Zone L mock analysis is labeled as mock output.
+- **Independent control:** hand-authored PC-1 is `VERIFIED` 3/3; the Muse Spark proposal remains `UNTRUSTED PROPOSAL — NOT VERIFIED`.
 
 The hero above is an animated architectural illustration. It is not a browser capture, provider transcript, or demo recording. See the [visual asset plan](docs/README-VISUAL-ASSETS.md) for capture guidance.
 
@@ -95,27 +103,23 @@ flowchart TB
 
 ### Trust boundary at a glance
 
-| Boundary | What the repository enforces |
-| :--- | :--- |
-| Fixture → browser | The trusted Playwright oracle observes the tap and cart state at fixed viewports. |
-| Recording → model | Media is validated before use; video content and model observations remain untrusted. |
-| Model → proposal | Structured output is validated and restricted to a closed CSS grammar. The historical Muse Spark proposal remains unverified. |
-| Candidate → verdict | A separate verifier derives results from browser evidence; the hand-authored PC-1 identity is kept separate. |
-| Local companion → provider | The companion's runnable path is mock-only. Baseten live inference remains disabled while D9 is pending. |
+- **Fixture → browser:** the trusted Playwright oracle observes the tap and cart state at fixed viewports.
+- **Recording → model:** media is validated before use; video content and model observations remain untrusted.
+- **Model → proposal:** structured output is validated and restricted to a closed CSS grammar. The historical Muse Spark proposal remains unverified.
+- **Candidate → verdict:** a separate verifier derives results from browser evidence; the hand-authored PC-1 identity is kept separate.
+- **Local companion → provider:** the runnable path is mock-only. Baseten live inference remains disabled while D9 is pending.
 
 ## Evidence and current gates
 
 The state below reflects repository evidence and the current project status. It is not a blanket claim that every feature is production-ready.
 
-| Evidence | Status | What it means |
-| :--- | :--- | :--- |
-| F01 mobile baseline | `REPRODUCED` | The expected mobile failure is observed; desktop control passes. |
-| Hand-authored PC-1 | `VERIFIED` 3/3 | Three clean trusted replays for the hand-authored control only. |
-| Historical Muse Spark proposal | `PROPOSAL_ACCEPTED` | One proposal artifact exists; it is untrusted, unexecuted and not verified. |
-| Meta model discovery | **PASS** for the exact configured IDs | Discovery confirms availability; it does not establish inference behavior. |
-| Per-model minimal smoke tests | **NOT TESTED** | No smoke-test pass is claimed for the selected model roles here. Historical Spark runs are documented separately in [project status](docs/STATUS.md). |
-| Baseten live inference | **Disabled** | D9 is pending. No Baseten live inference has run. |
-| Public hosted sandbox / arbitrary-site auto-fix | **Not available** | These are outside the implemented local synthetic workflow. |
+- **F01 mobile baseline — `REPRODUCED`:** the expected mobile failure is observed; desktop control passes.
+- **Hand-authored PC-1 — `VERIFIED` 3/3:** three clean trusted replays for the hand-authored control only.
+- **Historical Muse Spark proposal — `PROPOSAL_ACCEPTED`:** one proposal artifact exists; it is untrusted, unexecuted and not verified.
+- **Meta model discovery — PASS:** exact configured IDs are available. Discovery does not establish inference behavior.
+- **Per-model minimal smoke tests — NOT TESTED:** no smoke-test pass is claimed for the selected model roles here. Historical Spark runs are documented separately in [project status](docs/STATUS.md).
+- **Baseten live inference — disabled:** D9 is pending. No Baseten live inference has run.
+- **Public hosted sandbox / arbitrary-site auto-fix — unavailable:** outside the implemented local synthetic workflow.
 
 `VERIFIED` applies only to the **hand-authored PC-1 control**. Its CSS happens to match the historical Muse Spark proposal; that equality does not transfer evidence or provenance to the proposal.
 
