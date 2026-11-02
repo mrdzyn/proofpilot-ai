@@ -1,6 +1,7 @@
 # UI-C3-02-D9 Runbook — Owner-Only One-Shot Live Demonstration
 
 > **Status: PROCEDURE ONLY. No live call is authorized by this document.**
+> **STOP for D9-LIVE-01: the original owner-approved attempt is SPENT (§7).**
 > The owner authorized exactly one supervised Baseten analysis (2026-11-02,
 > PR #34 authorization record); D9 approves the hackathon-issued
 > `meta-models/muse-spark-open-1026` (organizer's Baseten email: the
@@ -66,10 +67,11 @@ Record, outside the repo: date/time, exact model ID, media SHA-256, budget
 (1 analysis / 0 proposals), record path, and the explicit one-shot go-ahead.
 One approval authorizes exactly one provider attempt.
 
-## 3. One-shot execution (owner terminal only)
+## 3. Historical one-shot execution recipe — NOT re-authorized (owner terminal only)
 
 ```sh
-node scripts/c3-live-analysis.ts --port 5188 --serve none \
+pnpm --dir dashboard build
+node scripts/c3-live-analysis.ts --port 5188 --serve "$PWD/dashboard/dist" \
   --live --live-analyses 1 --live-proposals 0 \
   --live-spent-record "$HOME/.proofpilot/live-spent.jsonl" \
   --live-approval-id "<fresh-approval-id-from-§2>" \
@@ -190,3 +192,12 @@ automatic startup path.
      an unresolved gate, independent of the 403.
 - No code, test, record, or configuration change in this slice re-arms,
   retries, or reinterprets the spent attempt.
+
+## 8. Post-PR #37 demo status — no new provider authorization
+
+- **Correct model:** PR #37 is merged as `main@84b03a46ca4141b42f7e733e87c0acbd31af8501`; the hackathon-issued model is exactly `meta-models/muse-spark-open-1026`, and the unsuffixed public model refuses.
+- **Owner-reported catalog preflight:** on November 2, 2026, one authenticated, non-inference `GET /v1/models` returned `preflight: ok account-reachable model-listed catalog=21 endpoint=https://inference.baseten.co/v1`. A catalog listing is not proof of a successful inference POST, video acceptance or billing outcome.
+- **Video compatibility risk:** Meta/Baseten general Muse Spark Open documentation describes the typed `video_url` part and video support; it does **not establish** that the account-scoped `-1026` hackathon deployment accepts the exact inline MP4 data URL currently encoded here. A new attempt could refuse after its own send-boundary spend.
+- **New owner decision required:** a subsequent demo inference must be a **separate**, explicitly authorized one-shot with exact F01 media SHA, `meta-models/muse-spark-open-1026`, one analysis, zero proposals, zero retries and possible charges. The old D9-LIVE-01 hash-chained ledger is immutable and may never be reset or replaced to restore quota. A fresh approval and distinct ledger path are appropriate only after the owner records a separate decision; the runbook, PR merge and successful preflight do **not** authorize egress.
+- **Mock-label caveat:** Zone L contains static `MOCK` copy and an action button labeled `Analyze with mock fixture` even while `--live` is armed. A click in armed live mode **may send a billable POST**. Confirm the Terminal LIVE banner before clicking and rely on final `baseten-live` result provenance, not UI copy. Perform rehearsal in default mock mode.
+- **Stop after any outcome:** do not retry after HTTP refusals, network failures or timeouts; preserve both old and any newly approved spend records, shut down the companion with `quit`, and report observations as unverified rather than as a proven fix.
