@@ -47,8 +47,14 @@ One approval authorizes exactly one provider attempt.
 node scripts/c3-live-analysis.ts --port 5188 --serve none \
   --live --live-analyses 1 --live-proposals 0 \
   --live-spent-record "$HOME/.proofpilot/live-spent.jsonl" \
+  --live-approval-id "<fresh-approval-id-from-§2>" \
   --live-media-sha256 e9df68b14c48300818f9ec9407b884413037f29305f17a5da3cc4fac05eeafdf
 ```
+
+The approval id must be fresh for a first-time path (it anchors the record
+genesis); on restart against the initialized record it is not needed. Never
+reuse an approval id across paths to "restore" a deleted record — that is a
+new attestation, and §4b applies.
 
 Then, in the companion terminal: `pair`, `permit analyze <sha256> <bytes>`
 for the pinned clip, upload + analyze via Zone L, observe the single result,
@@ -66,6 +72,24 @@ authorization never restores, and a sent attempt is permanently spent.
 - `kill -9` / power loss can strand staging roots; they are swept on next
   startup (`sweepStaleStagingDirs`) — the spent record is unaffected (append
   happens before the send, never after).
+
+## 4b. Rollback / lock policy (read before any restart after trouble)
+
+- The spent-run record is exclusively owned while the companion runs (a
+  `<record>.lock` sibling). A second companion on the same record path
+  refuses `LIVE_RECORD_LOCKED` — never run two live companions on one path.
+- If the record is deleted, truncated, or replaced, the companion refuses to
+  start (`LIVE_SPEND_RECORD_MISSING` / `CORRUPT` / `ROLLBACK`). Do NOT
+  recreate or "fix" the file by hand to proceed: reconcile first (compare the
+  record against §5 evidence), then either restore the authoritative file or
+  bootstrap a fresh path with a NEW `--live-approval-id`.
+- A stale lock after a crash is taken over automatically only when its tip
+  is still in the record chain; otherwise startup refuses with rollback and
+  requires the same manual reconciliation.
+- Residual risk (documented, accepted): a rollback that also removes the lock
+  is locally indistinguishable from an earlier legitimate state. Any
+  unexpected budget restoration (status shows attempts you did not expect)
+  is a STOP event: do not send, reconcile under §5, re-approve explicitly.
 
 ## 5. Post-run reconciliation
 

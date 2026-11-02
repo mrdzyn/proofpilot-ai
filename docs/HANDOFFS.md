@@ -1871,4 +1871,38 @@ Independent GPT-6 exact-head re-audit of the Draft PR; STOP afterwards — no me
 ### Next action
 Independent GPT-6 exact-head audit of the new Draft PR; STOP afterwards — no merge, deploy, provider calls, key reads, or D9 activation.
 
+## Handoff: UI-C3-02-I15 — D9-I1 audit remediation MAJOR-1/2 + MINOR-1/2 (for GPT-6 re-audit)
+
+- **Task / phase:** `tasks/UI-C3-02-D9-I1.md` (§Audit remediation I15; D1–D7 and D9 pending, D8 design-only)
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** ONE independent GPT-6 exact-head re-audit, then project owner
+- **Branch:** `phase/ui-c3-02-d9-i1-readiness` (from `main@cb48471`)
+- **Implementation head:** `02c922f4f5398c4f2f3fb5208b512b35f5328dd8` (plus a docs commit); audited-against base `423b9f9`
+- **PR:** #34 (Draft, unmerged)
+- **State:** READY FOR RE-AUDIT. No merge, deploy, provider calls, key reads, spend, or D9 activation. The repository `.env.local` was never listed, read, or referenced by value.
+
+### Remediated (against audited HEAD `423b9f9`)
+- **MAJOR-1 — exclusive ownership:** atomic hard-link lock acquisition; contention or a live foreign holder refuses `LIVE_RECORD_LOCKED`; stale locks taken over only when the tip is in the chain; every send re-verifies ownership (denial poisons the live path, nothing sent). Proven by L-REC-7 (second handle refused, release hands over), L-REC-8 (in-chain stale takeover proceeds, pre-crash holder denied, foreign tip → `LIVE_SPEND_RECORD_ROLLBACK`), L-ACT-4c (second companion same record refused, 0 fetch calls).
+- **MAJOR-2 — no auto-rearm:** missing/empty records initialize only with an explicit owner bootstrap approval id (`--live-approval-id`); corrupt chains always refuse even with an id; rollback behind a surviving lock tip refuses and requires manual reconciliation + fresh approval; fsync after every append (debit durable before egress). Documented residual: rollback that also removes the lock is locally indistinguishable (runbook §4b STOP rule). Tests: L-REC-1/4/10, L-ACT-4b.
+- **MINOR-1 — dynamic status:** new `describeActivationState` (L-ACT-0 pins disabled + hypothetical approved wordings); `/api/status` derives `modelOk`/`d9`/transport wording from `validateLiveModel` (L-ACT-5 pins pending strings); CLI `status` reports `mock-only`/`live-armed`.
+- **MINOR-2 — file hardening:** absolute/canonical regular files only; symlinks, non-regular files, group/other-accessible modes, and foreign owners refuse `LIVE_RECORD_UNSAFE` (records and locks). Tests: L-REC-9 (symlink, dir, 0644, wrong-uid via in-process getuid stub, relative, non-canonical).
+- **Preserved:** mock workflow byte-identical, MAJOR-1/2/3 + MINOR-1(I12) machinery, single-send boundary, cancellation, epoch/single-flight, permit binding, provenance, D9 `null`, zero live egress (injected doubles + fake keys only).
+
+### Validation
+- Focused: L-REC 10/10, L-ATT 10/10, L-ACT 8/8, L-CLI 3/3, offline boundary 4/4.
+- Full: unit 545/545, security 141/141; `tsc` root + dashboard clean; `pnpm lint` 0 problems.
+- Integration (local Mac, exact impl HEAD): HTTP 9/9 + shutdown 1/1, Zone L browser 5/5, dashboard browser 11/11 (11 pass lines, 0 fail lines; node hangs on vite teardown pipes — known harness artifact, orphans terminated, user processes untouched).
+- Required hosted CI: pending on Draft PR push; zero live egress by construction.
+- New tests failed authentically pre-fix (L-REC/L-ACT red against auto-create/no-lock semantics); green post-fix.
+
+### D9-queued (unchanged)
+End-to-end live-branch spend, media-pin accept refusal, and mock/live decoupling under an approved model remain unreachable while D9 is `null`; re-audit with a D9 decision.
+
+### Continuation notes
+- `dashboard/node_modules/` installed locally for typecheck (untracked); `dashboard/dist/` remains uncommitted.
+- The ONLY credential surface is the owner-started `--live` process memory; the ONLY live-network seam is its injected fetch wrapper.
+
+### Next action
+Independent GPT-6 exact-head re-audit of Draft PR #34; STOP afterwards — no merge, deploy, provider calls, key reads, or D9 activation.
+
 <!-- HANDOFF_ENTRIES_END -->
