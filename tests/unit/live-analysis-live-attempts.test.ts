@@ -60,6 +60,16 @@ test('L-ATT-2: hostile seeds floor to zero, never to credit', () => {
   }
 });
 
+test('L-ATT-2b: unlimited analyses never exhaust; proposals stay numeric', () => {
+  const ledger = createLiveAttemptLedger({ analyses: Number.POSITIVE_INFINITY, proposals: 0 });
+  assert.equal(ledger.left('analyze'), Number.POSITIVE_INFINITY, 'unlimited stays unlimited');
+  for (let i = 0; i < 3; i++) {
+    assert.equal(ledger.consume('analyze'), true, `unlimited consume ${i + 1} authorizes`);
+    assert.equal(ledger.left('analyze'), Number.POSITIVE_INFINITY, 'unlimited never depletes');
+  }
+  assert.equal(ledger.consume('propose'), false, 'zero proposals still refuse under unlimited analyses');
+});
+
 test('L-ATT-3: no refund path exists on the ledger surface', () => {
   const ledger = createLiveAttemptLedger({ analyses: 1, proposals: 0 });
   assert.deepEqual(Object.keys(ledger).sort(), ['consume', 'left'], 'consume is the only mutation entry');
@@ -274,7 +284,7 @@ test('L-ATT-6: approved D9 sends one live request — pin, permit, spend, proven
     liveAnalysesLeft: 2,
     liveProposalsLeft: 0,
     liveSpentRecordPath: recordPath,
-    liveBootstrapApprovalId: 'd9i1-test-bootstrap-att-6',
+    liveBootstrapApprovalId: 'd9live-v2-test-att-6',
     liveMediaSha256: sha,
   });
   closers.push(() => app.close().catch(() => undefined));
@@ -372,4 +382,231 @@ test('L-ATT-6: approved D9 sends one live request — pin, permit, spend, proven
   const stored = openSpentRecord(recordPath);
   assert.equal(stored.countSpent('analyze'), 2, 'both authorized sends are durably recorded');
   stored.release();
+});
+
+// Repeatable-session helpers: every provider attempt is a manual
+// permit → upload → click cycle; nothing sends on its own.
+async function pairSession(app: Companion, port: number): Promise<string> {
+  const host = `127.0.0.1:${port}`;
+  const code = app.sessions.issueTerminalCode();
+  const pairOut = await app.dispatch(
+    meta({ method: 'POST', path: '/api/pair', origin: `http://${host}`, host, contentType: 'application/json' }),
+    json({ code }),
+  );
+  assert.equal(pairOut.status, 200, JSON.stringify(pairOut.body));
+  return (pairOut.body as { sessionToken: string }).sessionToken;
+}
+
+async function manualLiveAttempt(app: Companion, port: number, session: string, sha: string, bytes: Uint8Array): Promise<{ runId: string; uploadId: string }> {
+  const host = `127.0.0.1:${port}`;
+  const origin = `http://${host}`;
+  assert.equal(app.terminalPermit('analyze', sha, bytes.length).ok, true, 'each attempt needs a fresh terminal permit');
+  const up = await app.dispatch(
+    meta({ method: 'POST', path: '/api/upload', origin, host, contentType: 'application/octet-stream', declaredSha256: sha, declaredBytes: String(bytes.length), declaredKind: 'analyze' }, session),
+    bytes,
+  );
+  assert.equal(up.status, 200, JSON.stringify(up.body));
+  const uploadId = (up.body as { uploadId: string }).uploadId;
+  const out = await app.dispatch(
+    meta({ method: 'POST', path: '/api/analyze', origin, host, contentType: 'application/json' }, session),
+    json({ uploadId, sha256: sha, bytes: bytes.length }),
+  );
+  assert.equal(out.status, 200, JSON.stringify(out.body));
+  const runId = (out.body as { runId: string }).runId;
+  await awaitLiveRunHost(app, port, session, runId);
+  return { runId, uploadId };
+}
+
+async function awaitLiveRunHost(app: Companion, port: number, session: string, runId: string): Promise<Record<string, unknown>> {
+  const host = `127.0.0.1:${port}`;
+  const start = Date.now();
+  for (;;) {
+    const events = await app.dispatch(meta({ method: 'GET', path: '/api/events', host }, session), new Uint8Array(0));
+    const record = ((events.body as { runs: Array<{ runId: string; state: string }> }).runs).find((r) => r.runId === runId);
+    if (record !== undefined && record.state === 'done') return record as unknown as Record<string, unknown>;
+    if (record !== undefined && record.state !== 'analyzing') {
+      throw new Error(`live run ${runId} settled as ${record.state}, wanted done`);
+    }
+    if (Date.now() - start > 10_000) throw new Error(`timed out waiting for live run ${runId}`);
+    await new Promise((r) => setTimeout(r, 25));
+  }
+}
+
+async function awaitSettled(app: Companion, port: number, session: string, runId: string): Promise<Record<string, unknown>> {
+  const host = `127.0.0.1:${port}`;
+  const start = Date.now();
+  for (;;) {
+    const events = await app.dispatch(meta({ method: 'GET', path: '/api/events', host }, session), new Uint8Array(0));
+    const record = ((events.body as { runs: Array<{ runId: string; state: string }> }).runs).find((r) => r.runId === runId);
+    if (record !== undefined && record.state !== 'analyzing') return record as unknown as Record<string, unknown>;
+    if (Date.now() - start > 10_000) throw new Error(`timed out waiting for run ${runId} to settle`);
+    await new Promise((r) => setTimeout(r, 25));
+  }
+}
+
+function spendRunIds(recordPath: string): string[] {
+  return readFileSync(recordPath, 'utf8')
+    .split('\n')
+    .filter((l) => l.includes('"entry":"spend"'))
+    .map((l) => (JSON.parse(l) as { runId: string }).runId);
+}
+
+test('L-ATT-11: unlimited session sends repeatedly, each manual; no auto re-send', async () => {
+  const calls = { count: 0, bodies: [] as unknown[] };
+  const sub = mkdtempSync(path.join(root, 'app-11-'));
+  const recordPath = path.join(root, 'att-11-spent.jsonl');
+  const sha = shaOf(GOOD_BYTES);
+  const app: Companion = await createCompanion({
+    port: 5191,
+    bind: false,
+    serveRoot: null,
+    uploads: StagedUploads.openDir(sub, { mediaDeps: stubMedia }),
+    runTimeoutMs: 5000,
+    session: new LocalSessionManager(),
+    permits: new OfflineMockPermitLedger(),
+    liveTransport: liveTransportDouble(calls),
+    liveModel: D9_APPROVED_MODEL,
+    liveAnalysesLeft: Number.POSITIVE_INFINITY,
+    liveProposalsLeft: 0,
+    liveSpentRecordPath: recordPath,
+    liveBootstrapApprovalId: 'd9live-v2-test-att-11',
+    liveMediaSha256: sha,
+  });
+  closers.push(() => app.close().catch(() => undefined));
+  const session = await pairSession(app, 5191);
+  for (let i = 1; i <= 3; i++) {
+    await manualLiveAttempt(app, 5191, session, sha, GOOD_BYTES);
+    assert.equal(calls.count, i, `manual attempt ${i} sends exactly once`);
+  }
+  // The settled run consumed its staging and its permit: re-analyzing the
+  // same upload without a fresh permit/upload/click refuses with no egress.
+  const stale = await app.dispatch(
+    meta({ method: 'POST', path: '/api/analyze', origin: 'http://127.0.0.1:5191', host: '127.0.0.1:5191', contentType: 'application/json' }, session),
+    json({ uploadId: 'stale-upload-id', sha256: sha, bytes: GOOD_BYTES.length }),
+  );
+  assert.equal(stale.status, 403, JSON.stringify(stale.body));
+  assert.equal((stale.body as { code: string }).code, 'NO_PERMIT');
+  assert.equal(calls.count, 3, 'no auto-run follows a settled attempt');
+  // A fresh manual cycle sends again: repeatable, never automatic.
+  await manualLiveAttempt(app, 5191, session, sha, GOOD_BYTES);
+  assert.equal(calls.count, 4, 'the fourth manual attempt sends once');
+  const ids = spendRunIds(recordPath);
+  assert.equal(ids.length, 4, 'every send appended exactly one durable spend');
+  assert.equal(new Set(ids).size, 4, 'durable run ids are unique within the ledger');
+  for (const [index, id] of ids.entries()) {
+    assert.match(id, new RegExp(`^local-.*#spend-${index + 1}$`), `spend ${index + 1} carries the ledger sequence`);
+  }
+  const status = await app.dispatch(meta({ method: 'GET', path: '/api/status', host: '127.0.0.1:5191' }, session), new Uint8Array(0));
+  const live = (status.body as { live: { unlimited: boolean; attemptsLeft: { analyze: unknown }; spent: { analyze: number } } }).live;
+  assert.equal(live.unlimited, true, 'status marks the unlimited opt-in');
+  assert.equal(live.attemptsLeft.analyze, Number.POSITIVE_INFINITY, 'attempts never deplete');
+  assert.equal(live.spent.analyze, 4, 'status exposes the durable spend count');
+  await app.close();
+});
+
+test('L-ATT-12: HTTP failure keeps the spend; the next manual attempt sends again, never retries', async () => {
+  const calls = { count: 0, bodies: [] as unknown[] };
+  const scripted: LiveFetch = (url, init) => {
+    calls.count += 1;
+    calls.bodies.push(JSON.parse(init.body));
+    const status = calls.count === 1 ? 500 : 200;
+    return Promise.resolve({
+      status,
+      url,
+      json: () => Promise.resolve({
+        model: D9_APPROVED_MODEL,
+        choices: [{ message: { content: 'live tap then count one' }, finish_reason: 'stop' }],
+        usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+      }),
+    });
+  };
+  const created = createBasetenTransport({ model: D9_APPROVED_MODEL, apiKey: 'NOT-A-REAL-KEY-0000', fetchImpl: scripted, timeoutMs: 2000 });
+  assert.equal(created.ok, true, JSON.stringify(created));
+  const sub = mkdtempSync(path.join(root, 'app-12-'));
+  const recordPath = path.join(root, 'att-12-spent.jsonl');
+  const sha = shaOf(GOOD_BYTES);
+  const app: Companion = await createCompanion({
+    port: 5192,
+    bind: false,
+    serveRoot: null,
+    uploads: StagedUploads.openDir(sub, { mediaDeps: stubMedia }),
+    runTimeoutMs: 5000,
+    session: new LocalSessionManager(),
+    permits: new OfflineMockPermitLedger(),
+    liveTransport: (created as { ok: true; transport: BasetenTransport }).transport,
+    liveModel: D9_APPROVED_MODEL,
+    liveAnalysesLeft: 2,
+    liveProposalsLeft: 0,
+    liveSpentRecordPath: recordPath,
+    liveBootstrapApprovalId: 'd9live-v2-test-att-12',
+    liveMediaSha256: sha,
+  });
+  closers.push(() => app.close().catch(() => undefined));
+  const session = await pairSession(app, 5192);
+  // First manual attempt: the provider answers 500 — settled refused, spend kept.
+  assert.equal(app.terminalPermit('analyze', sha, GOOD_BYTES.length).ok, true);
+  const up = await app.dispatch(
+    meta({ method: 'POST', path: '/api/upload', origin: 'http://127.0.0.1:5192', host: '127.0.0.1:5192', contentType: 'application/octet-stream', declaredSha256: sha, declaredBytes: String(GOOD_BYTES.length), declaredKind: 'analyze' }, session),
+    GOOD_BYTES,
+  );
+  const out = await app.dispatch(
+    meta({ method: 'POST', path: '/api/analyze', origin: 'http://127.0.0.1:5192', host: '127.0.0.1:5192', contentType: 'application/json' }, session),
+    json({ uploadId: (up.body as { uploadId: string }).uploadId, sha256: sha, bytes: GOOD_BYTES.length }),
+  );
+  const failed = await awaitSettled(app, 5192, session, (out.body as { runId: string }).runId);
+  assert.equal((failed['result'] as { code: string }).code, 'TRANSPORT_HTTP');
+  assert.equal(calls.count, 1, 'the failed attempt sent exactly once — no automatic retry');
+  // A separately user-initiated attempt afterwards sends exactly once more.
+  await manualLiveAttempt(app, 5192, session, sha, GOOD_BYTES);
+  assert.equal(calls.count, 2, 'the next manual attempt sends once; still no retry');
+  const ids = spendRunIds(recordPath);
+  assert.equal(ids.length, 2, 'failed and successful sends each recorded one spend — none refunded');
+  assert.equal(new Set(ids).size, 2, 'durable run ids stay unique across failure and success');
+  await app.close();
+});
+
+test('L-ATT-13: restart retains all spends; durable ids stay unique across the reset', async () => {
+  const recordPath = path.join(root, 'att-13-spent.jsonl');
+  const sha = shaOf(GOOD_BYTES);
+  const openApp = async (port: number, sub: string, approvalId?: string): Promise<Companion> => {
+    const calls = { count: 0, bodies: [] as unknown[] };
+    return createCompanion({
+      port,
+      bind: false,
+      serveRoot: null,
+      uploads: StagedUploads.openDir(sub, { mediaDeps: stubMedia }),
+      runTimeoutMs: 5000,
+      session: new LocalSessionManager(),
+      permits: new OfflineMockPermitLedger(),
+      liveTransport: liveTransportDouble(calls),
+      liveModel: D9_APPROVED_MODEL,
+      liveAnalysesLeft: Number.POSITIVE_INFINITY,
+      liveProposalsLeft: 0,
+      liveSpentRecordPath: recordPath,
+      liveBootstrapApprovalId: approvalId,
+      liveMediaSha256: sha,
+    });
+  };
+  const subA = mkdtempSync(path.join(root, 'app-13a-'));
+  const first = await openApp(5193, subA, 'd9live-v2-test-att-13');
+  const sessionA = await pairSession(first, 5193);
+  await manualLiveAttempt(first, 5193, sessionA, sha, GOOD_BYTES);
+  await first.close();
+  // Reopen the same ledger with the same standing approval identity:
+  // spends retained, no re-arm, no repurposing refusal.
+  const subB = mkdtempSync(path.join(root, 'app-13b-'));
+  const second = await openApp(5194, subB, 'd9live-v2-test-att-13');
+  closers.push(() => second.close().catch(() => undefined));
+  const sessionB = await pairSession(second, 5194);
+  const status = await second.dispatch(meta({ method: 'GET', path: '/api/status', host: '127.0.0.1:5194' }, sessionB), new Uint8Array(0));
+  const live = (status.body as { live: { spent: { analyze: number }; unlimited: boolean } }).live;
+  assert.equal(live.spent.analyze, 1, 'the restart sees the pre-restart spend');
+  assert.equal(live.unlimited, true, 'the unlimited opt-in survives the restart');
+  await manualLiveAttempt(second, 5194, sessionB, sha, GOOD_BYTES);
+  const ids = spendRunIds(recordPath);
+  assert.equal(ids.length, 2, 'both generations recorded');
+  assert.equal(new Set(ids).size, 2, 'durable ids unique despite the per-process run counter reset');
+  assert.match(ids[0] as string, /#spend-1$/);
+  assert.match(ids[1] as string, /#spend-2$/);
+  await second.close();
 });

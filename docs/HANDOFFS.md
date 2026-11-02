@@ -2064,4 +2064,86 @@ Independent exact-HEAD recheck of PR #36; STOP afterwards — no merge, deploy, 
 ### Next action
 Independent exact-HEAD audit of the new Draft PR; STOP afterwards — no merge, deploy, preflight, key reads, spend, retry, or live inference.
 
+## Handoff: UI-C3-02-I39-C1 — Repeatable owner-supervised inference (issue #39, new Draft PR)
+
+- **Task / phase:** `tasks/UI-C3-02-I39-REPEATABLE.md` (bounded contract; base protected `main@84b03a4` incorporating merged PR #37)
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** ONE independent exact-HEAD auditor, then project owner
+- **Branch:** `phase/ui-c3-02-i39-repeatable` (from `main@84b03a4`)
+- **Implementation head:** `304a72a3434526bb56460ae6345d35da115092c3` (plus a docs commit)
+- **PR:** (new Draft PR number to fill on open; Draft, unmerged)
+- **State:** READY FOR AUDIT. No merge, deploy, provider calls, key reads, spend, or live inference. The repository `.env.local` was never listed, read, or referenced by value. No authenticated preflight was run; no test POST was made. Both historical spent records were not reset, deleted, recreated, or changed (they live outside the repo and were never touched).
+
+### Completed
+- **Repeatable mode:** `--live-analyses` accepts a finite count or `unlimited` (explicit opt-in; ledger `Infinity` never depletes); zero-proposal policy kept (`--live-proposals` nonzero refuses, including `unlimited`). The budget alone never sends: every attempt still needs a fresh single-use terminal permit + explicit Zone L click + pinned F01 media, with single flight, no retries, no parallel sends.
+- **Durable multi-attempt ledger:** each send appends exactly one fsync'd spend before the POST (no erase/refund on any failure); ledger run ids are unique within the ledger (`<local-run-id>#spend-<n>`, stable across restarts); new sessions run only under the versioned `d9live-v2-` identity on a NEW ledger; the server binds any supplied bootstrap id against the record genesis (`LIVE_APPROVAL_MISMATCH` refuses foreign geneses) and refuses `unlimited` on non-namespaced geneses — historical D9-LIVE-01/02 ledgers can never authorize a new session.
+- **Response-contract diagnostics:** the validator decides by finish reason before content (`length` → `TRANSPORT_TRUNCATED` even with empty content, never a misleading SHAPE); `stop` + empty/null content, missing choices/message, wrong model, and bad usage stay refused; extra optional fields ignored; reasoning content and raw provider bodies never surface in results or refusal details. Token caps unchanged (1024/512; no silent increase).
+- **UI labels:** Zone L resolves the armed path from `/api/status` after pairing and refreshes counters after every settle; live mode shows a LIVE banner, a billable-labeled action button, LIVE attempts-left/spent counters, disables proposals with a zero-proposal note, and uses ledger-exhaustion recovery text (never "restart to re-arm"). Mock strings are byte-identical (integration browser tests target mock mode only).
+- **Tests (fake doubles/credentials, zero egress):** L-ATT-2b (unlimited ledger), L-ATT-11 (4 manual sends, no auto re-send, unique ids, status counters), L-ATT-12 (HTTP failure keeps the spend; next manual attempt sends, no retry), L-ATT-13 (restart retains spends, unique ids across reset), L-ACT-6 (genesis binding), L-ACT-7 (unlimited namespace), L-REC-18/19/20 (identity/binding/namespace/budgets), L-BT-7c (finish-first battery + no-leak), L-CLI-6/6b (proposals refuse; finite + unlimited arming; v2-identity gating), L-CFG/L-PRE batteries updated for the standing policy. Full gates green locally (below).
+- **Records:** README standing policy + honest cost, STATUS (phase/branch/task/handoff/authorization/D9-LIVE-02 + standing-policy rows), runbook rewrite (§0–§6 repeatable session, §8 D9-LIVE-02 REFUSED/SPENT, unresolved 403-cause + video-compat gates), new task file, this handoff.
+
+### Validation
+- `pnpm lint`: 0 problems (263 files) · root `tsc`: clean · dashboard `tsc`: clean · unit 580/580 · security 141/141 · `pnpm f01:baseline`: REPRODUCED, certified exact-SHA YES. Local, this worktree.
+- Required hosted CI: see the new Draft PR checks for the pushed head.
+- Zero provider calls, zero credential reads, D9 pin `meta-models/muse-spark-open-1026`.
+
+### Continuation notes
+- The historical one-shot ledgers live outside the repo; nothing in this slice reads, writes, or reinterprets them. D9-LIVE-02 facts are owner-reported via issue #39 (exact provider payload unknown).
+- Hackathon-specific video compatibility (`video_url` inline part against the 1026 deployment) has no authoritative documentation in evidence and stays an unresolved operational gate, independent of the historical 403.
+
+### Next action
+Independent exact-HEAD audit of the new Draft PR; STOP afterwards — no merge, deploy, preflight, key reads, spend, retry, or live inference.
+
+## Handoff: UI-C3-02-I39-C2 — PR #40 audit remediation (MAJOR-1 + MINOR-1/2)
+
+- **Task / phase:** `tasks/UI-C3-02-I39-REPEATABLE.md` (MAJOR-1 hardening noted; base protected `main@84b03a46ca4141b42f7e733e87c0acbd31af8501`)
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** ONE independent exact-HEAD re-auditor, then project owner
+- **Branch:** `phase/ui-c3-02-i39-repeatable` (existing Draft PR #40)
+- **Implementation head:** `c1d8276cc17e067adc91636d93e59b6b3252e864` (plus a docs commit)
+- **PR:** #40 (Draft, unmerged)
+- **State:** READY FOR RE-AUDIT. No merge, deploy, provider calls, key reads, spend, or live inference. `.env.local` never listed, read, or referenced. No authenticated preflight, no test POST. Historical ledgers untouched (outside the repo; byte-identical assertions in tests).
+
+### Completed
+- **MAJOR-1:** every positive `--live-analyses` budget (finite N and `unlimited`) requires an explicit `d9live-v2-` `--live-approval-id` in the production CLI (refuses before companion start, no listener/transport/egress) and independently in `createCompanion` (pre-open check; then genesis binding on reopen). Omission never implicitly adopts any ledger; a non-versioned id never authorizes; refusals create no genesis and spend nothing. Zero-budget diagnostics unchanged (no identity required).
+- **Regression tests:** L-CLI-10/10b (historical ± spend, standing omitted/mismatched, byte-identical ledgers, no listener/leak; matching-id reopen arms) and L-ACT-8 (server-side equivalents incl. unlimited-foreign-id, plus restart-pass). Retargeted: L-CLI-4/6b/9, L-ATT-6, L-ACT-4/4b/5 (+4c id for lock isolation). All fake doubles/credentials.
+- **MINOR-1:** runbook §3 builds the dashboard and serves `$PWD/dashboard/dist` (API-only `--serve none` documented as insufficient for the Zone L flow). Live command not run.
+- **MINOR-2:** README qualifies the historical bullet (no successful Baseten result; both attempts refused/spent); STATUS `Baseten live inference` row replaces `NOT TESTED`; protected-main SHA typo fixed (`…4141…` verified against `origin/main`); D9-LIVE-01 (403/SPENT) and D9-LIVE-02 (SHAPE/SPENT) preserved. PR #38 evidence ported with attribution (unsuffixed-model cause for -01; Zone L message, one-genesis-one-spend digest check incl. runId/spentAt/paths, catalog=21 PASS, $100/~2M-tpm bounds for -02).
+- **Non-regression:** 1026 pin, F01 pin, default-off, per-attempt permit/upload/click, append-only fsync accounting, unique run ids, single-flight, no retries, zero proposals, TRUNCATED/SHAPE order, no raw/reasoning leaks, LIVE/MOCK labels — all preserved and green.
+
+### Validation
+- `pnpm lint`: 0 problems (264 files) · root `tsc`: clean · dashboard `tsc`: clean · unit 583/583 · security 141/141 · `f01:baseline`: REPRODUCED, certified exact-SHA YES · `git diff --check`: clean. Local, this worktree.
+- Required hosted CI: see PR #40 checks for the pushed head.
+- Zero provider calls, zero credential reads.
+
+### Continuation notes
+- PR #38 recommendation: supersede (close unmerged) after this remediation merges-or-lands — its §10 policy ("unlimited is proposed syntax", "no new ledger per click") is stale against the implemented issue-#39 contract, and its evidence deltas are now ported here with attribution. Do not merge PR #38; do not silently revert its evidence. See delivery report for detail.
+- Residual: the historical 403 cause and hackathon video compatibility stay unresolved operational gates; the 403-cause diagnosis is an owner decision, not a code change.
+
+### Next action
+Independent exact-HEAD re-audit of PR #40; STOP afterwards — no merge, deploy, preflight, key reads, spend, retry, or live inference.
+
+## Handoff: UI-C3-02-I39-C3 — PR #40 MINOR-D1/D2/D3 remediation (docs/metadata only)
+
+- **Task / phase:** `tasks/UI-C3-02-I39-REPEATABLE.md` (unchanged contract; base protected `main@84b03a46ca4141b42f7e733e87c0acbd31af8501`)
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** ONE focused independent rechecker, then project owner
+- **Branch:** `phase/ui-c3-02-i39-repeatable` (existing Draft PR #40)
+- **Implementation head:** same as C2 (`c1d8276`; no code changes in this slice)
+- **PR:** #40 (Draft, unmerged)
+- **State:** READY FOR FOCUSED RECHECK. Docs/metadata only: README diagram, runbook finite-budget wording, PR description. No merge, deploy, provider calls, key reads, spend, or live inference. Historical ledgers untouched.
+
+### Completed
+- **MINOR-D2:** README Mermaid graph now reads `Baseten live · owner-only, default off (explicit permit + click per attempt)` with a `gated manual opt-in` edge (existing `gated` class + dashed-path legend cover it); `mock by default` node/edge. Refusal text and model provenance untouched.
+- **MINOR-D3:** runbook §0/D1, §2, §5.3 now state spends persist across restarts (same-N restart never restores), N is an owner-chosen configured budget (`remaining = N − recordedSpent`), and any increase is a new explicit owner allocation recorded next to the §2 approval. No claim that N is genesis-bound; no automatic reset anywhere.
+- **MINOR-D1:** PR #40 description updated (this turn, after CI) to the final exact HEAD with current hosted evidence (583 unit / 141 security).
+- **Non-regression:** implementation untouched since C2; all C2 gates and evidence stand.
+
+### Validation
+- `pnpm lint`: 0 problems · `git diff --check`: clean · unit 583/583 · security 141/141 (re-run this turn) · required hosted CI on the final exact HEAD (see PR #40 checks).
+- Zero provider calls, zero credential reads.
+
+### Next action
+Focused independent recheck of PR #40 at the final exact HEAD; STOP afterwards — no merge, deploy, preflight, key reads, spend, retry, or live inference.
+
 <!-- HANDOFF_ENTRIES_END -->

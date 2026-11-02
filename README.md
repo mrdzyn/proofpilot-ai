@@ -17,7 +17,7 @@
   <a href="https://github.com/mrdzyn/proofpilot-ai/actions/workflows/ci.yml"><img alt="Project Baseline CI" src="https://github.com/mrdzyn/proofpilot-ai/actions/workflows/ci.yml/badge.svg" /></a>
   <img alt="Node.js 24 or later" src="https://img.shields.io/badge/runtime-Node.js_24%2B-111827?style=flat-square" />
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-strict-22C6F0?style=flat-square" />
-  <img alt="Baseten live inference disabled; D9 pending" src="https://img.shields.io/badge/Baseten_live-D9_disabled-FF4757?style=flat-square" />
+  <img alt="Baseten live inference owner-supervised only" src="https://img.shields.io/badge/Baseten_live-owner_supervised_only-FF8C42?style=flat-square" />
   <img alt="MIT license" src="https://img.shields.io/badge/license-MIT-1F2937?style=flat-square" />
 </p>
 
@@ -60,7 +60,7 @@ Run eligible, hand-authored controls through the protected Playwright oracle and
 
 ## Product walkthrough
 
-The repository contains a local dashboard and localhost companion with a **mock-only** analysis path. That lets the offline flow be inspected without claiming that a real Baseten request occurred.
+The repository contains a local dashboard and localhost companion with a **mock-by-default** analysis path. That lets the offline flow be inspected without claiming that a real Baseten request occurred. A repeatable owner-supervised live path exists for the hackathon model, armed only explicitly per attempt (fresh terminal permit plus manual click, every send durably recorded); see the runbook.
 
 - **Synthetic defect:** F01 reproduces; the mobile cart stays at 0.
 - **Local mock flow:** Zone L mock analysis is labeled as mock output.
@@ -81,14 +81,14 @@ flowchart TB
     C["Hand-authored PC-1 control"]
     R["Protected browser verifier"]
     E["Deterministic verdict + hashed evidence"]
-    L["Local companion · mock mode"]
-    B["Baseten live path · D9 disabled"]
+    L["Local companion · mock by default"]
+    B["Baseten live · owner-only, default off (explicit permit + click per attempt)"]
 
     F --> O --> E
     V --> S --> H
     C --> R --> E
-    L -->|"mock only"| V
-    L -. "not active" .-> B
+    L -->|"mock default"| V
+    L -. "gated manual opt-in" .-> B
 
     classDef trusted fill:#10283a,color:#e8f7ff,stroke:#22c6f0,stroke-width:2px
     classDef untrusted fill:#311821,color:#ffe8e8,stroke:#ff4757,stroke-width:2px
@@ -106,7 +106,7 @@ flowchart TB
 - **Recording → model:** media is validated before use; video content and model observations remain untrusted.
 - **Model → proposal:** structured output is validated and restricted to a closed CSS grammar. The historical Muse Spark proposal remains unverified.
 - **Candidate → verdict:** a separate verifier derives results from browser evidence; the hand-authored PC-1 identity is kept separate.
-- **Local companion → provider:** the runnable path is mock-only. Baseten live inference remains disabled while D9 is pending.
+- **Local companion → provider:** the default path is mock-only. Owner-supervised live inference against the hackathon model is available only with an explicit per-attempt opt-in (durable spend ledger, zero proposals, no retries); historical one-shot attempts are spent and the ledgers are frozen.
 
 ## Evidence and current gates
 
@@ -115,8 +115,8 @@ The state below reflects repository evidence and the current project status. It 
 - **F01 mobile baseline — `REPRODUCED`:** the expected mobile failure is observed; desktop control passes.
 - **Hand-authored PC-1 — `VERIFIED` 3/3:** three clean trusted replays for the hand-authored control only.
 - **Historical Muse Spark proposal — `PROPOSAL_ACCEPTED`:** one proposal artifact exists; it is untrusted, unexecuted and not verified.
-- **Historical Muse Spark 1.3 video smoke — COMPLETED ONCE (operator-reported):** the second of two authorized Meta video-analysis attempts returned a schema-valid, untrusted symptom. This is neither a model-verified fix nor a current-access guarantee. **Muse Wonder smoke — NOT TESTED; Baseten live smoke — NOT TESTED.** See [live smoke evidence](docs/LIVE-SMOKE.md).
-- **Baseten live inference — disabled:** D9 is pending. No Baseten live inference has run.
+- **Historical Muse Spark 1.3 video smoke — COMPLETED ONCE (operator-reported):** the second of two authorized Meta video-analysis attempts returned a schema-valid, untrusted symptom. This is neither a model-verified fix nor a current-access guarantee. **Muse Wonder smoke — NOT TESTED.** No successful Baseten analysis result; both owner-supervised attempts refused and spent (see below). See [live smoke evidence](docs/LIVE-SMOKE.md).
+- **Baseten live inference — owner-supervised only:** D9 approves the hackathon-issued `meta-models/muse-spark-open-1026` (zero proposals, no retries). Two owner-operated one-shot attempts are durably recorded as SPENT with no accepted model output (D9-LIVE-01: HTTP 403; D9-LIVE-02: HTTP 2xx `TRANSPORT_SHAPE`); billing unverified. Repeatable attempts run only under the versioned `d9live-v2-` approval identity with a fresh per-attempt permit and explicit click; see the D9 runbook.
 - **Public hosted sandbox / arbitrary-site auto-fix — unavailable:** outside the implemented local synthetic workflow.
 
 `VERIFIED` applies only to the **hand-authored PC-1 control**. Its CSS happens to match the historical Muse Spark proposal; that equality does not transfer evidence or provenance to the proposal.
@@ -163,7 +163,7 @@ verifier/                    Protected Playwright oracle
 packages/core/               Deterministic classification, policy and evidence logic
 packages/inference/          Meta and Baseten adapters; video and proposal paths
 packages/intake/             Recording validation, conversion and consent
-packages/live-analysis/      Local companion and mock-only analysis flow
+packages/live-analysis/      Local companion and mock-by-default analysis flow (owner-supervised live path for the hackathon model)
 dashboard/                   Local React dashboard, including Zone L
 packages/provenance/         Proposal artifact and source provenance checks
 scripts/                     Baseline, recording and operator commands
@@ -175,7 +175,7 @@ docs/                        Architecture, status, security and evidence
 
 ProofPilot AI was built for the **Meta Global AI Developer Hackathon — Push the Frontier (2026)**. The repository distinguishes pre-existing delivery scaffolding from hackathon work in [Hackathon Contributions & Provenance](HACKATHON_CONTRIBUTIONS.md).
 
-**Stack:** TypeScript · Node.js · React + Vite · Playwright / Chromium · FFmpeg · GitHub Actions · Meta Model API · Baseten transport (disabled).
+**Stack:** TypeScript · Node.js · React + Vite · Playwright / Chromium · FFmpeg · GitHub Actions · Meta Model API · Baseten transport (owner-supervised only).
 
 ## Contributing and provenance
 

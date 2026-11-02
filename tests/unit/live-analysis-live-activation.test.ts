@@ -6,7 +6,7 @@
 // precheck decision table, and approved status provenance.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import {
@@ -198,6 +198,7 @@ test('L-ACT-4: corrupt spent record refuses startup', async () => {
       liveModel: D9_APPROVED_MODEL,
       liveAnalysesLeft: 1,
       liveSpentRecordPath: corrupt,
+      liveBootstrapApprovalId: 'd9live-v2-test-act-4',
     }),
     (error: unknown) => (error as { code?: string }).code === 'LIVE_SPEND_RECORD_CORRUPT',
     'tampered state fails closed',
@@ -217,7 +218,7 @@ test('L-ACT-4b: missing record without a bootstrap approval refuses startup', as
       permits: new OfflineMockPermitLedger(),
       liveTransport: liveTransportDouble(calls),
       liveModel: D9_APPROVED_MODEL,
-      liveAnalysesLeft: 1,
+      liveAnalysesLeft: 0,
       liveSpentRecordPath: path.join(root, 'never-created.jsonl'),
     }),
     (error: unknown) => (error as { code?: string }).code === 'LIVE_SPEND_RECORD_MISSING',
@@ -242,6 +243,7 @@ test('L-ACT-4c: two companions cannot share one record; the second is refused', 
     liveModel: D9_APPROVED_MODEL,
     liveAnalysesLeft: 1,
     liveSpentRecordPath: recordPath,
+    liveBootstrapApprovalId: 'd9live-v2-test-act-4c',
   }).then(
     () => null,
     (error: unknown) => {
@@ -256,7 +258,7 @@ test('L-ACT-4c: two companions cannot share one record; the second is refused', 
 test('L-ACT-5: effective budget subtracts durable spend; restart cannot re-arm', async () => {
   const calls = { count: 0 };
   const recordPath = path.join(root, 'shared-spent.jsonl');
-  const seed = openSpentRecord(recordPath, { bootstrapApprovalId: 'd9i1-test-bootstrap-act-5' });
+  const seed = openSpentRecord(recordPath, { bootstrapApprovalId: 'd9live-v2-test-act-5' });
   seed.record({ runId: 'local-prior-001', sha256: SHA_A, kind: 'analyze', spentAt: 1 });
   seed.release();
   const first: Companion = await createCompanion({
@@ -271,6 +273,7 @@ test('L-ACT-5: effective budget subtracts durable spend; restart cannot re-arm',
     liveAnalysesLeft: 1,
     liveProposalsLeft: 2,
     liveSpentRecordPath: recordPath,
+    liveBootstrapApprovalId: 'd9live-v2-test-act-5',
   });
   closers.push(() => first.close().catch(() => undefined));
   const code = first.sessions.issueTerminalCode();
@@ -315,6 +318,7 @@ test('L-ACT-5: effective budget subtracts durable spend; restart cannot re-arm',
     liveModel: D9_APPROVED_MODEL,
     liveAnalysesLeft: 1,
     liveSpentRecordPath: recordPath,
+    liveBootstrapApprovalId: 'd9live-v2-test-act-5',
   });
   closers.push(() => second.close().catch(() => undefined));
   const code2 = second.sessions.issueTerminalCode();
@@ -332,4 +336,176 @@ test('L-ACT-5: effective budget subtracts durable spend; restart cannot re-arm',
     'restart-equivalent instance cannot re-arm the spent attempt',
   );
   assert.equal(calls.count, 0, 'zero provider calls across both instances');
+});
+
+test('L-ACT-6: a supplied approval id binds the record genesis — foreign geneses refuse startup', async () => {
+  const calls = { count: 0 };
+  const recordPath = path.join(root, 'binding-spent.jsonl');
+  const seed = openSpentRecord(recordPath, { bootstrapApprovalId: 'd9live-v2-test-act-6' });
+  seed.release();
+  // Reopening with the same standing identity proceeds (restart path).
+  const same: Companion = await createCompanion({
+    port: 5195,
+    bind: false,
+    serveRoot: null,
+    uploads: await freshUploads('binding-same'),
+    session: new LocalSessionManager(),
+    permits: new OfflineMockPermitLedger(),
+    liveTransport: liveTransportDouble(calls),
+    liveModel: D9_APPROVED_MODEL,
+    liveAnalysesLeft: Number.POSITIVE_INFINITY,
+    liveProposalsLeft: 0,
+    liveSpentRecordPath: recordPath,
+    liveBootstrapApprovalId: 'd9live-v2-test-act-6',
+    liveMediaSha256: SHA_A,
+  });
+  await same.close();
+  // A different approval id on the same record refuses — the foreign
+  // genesis (here standing, but not this session's) never authorizes.
+  await assert.rejects(
+    createCompanion({
+      port: 5196,
+      bind: false,
+      serveRoot: null,
+      uploads: await freshUploads('binding-foreign'),
+      session: new LocalSessionManager(),
+      permits: new OfflineMockPermitLedger(),
+      liveTransport: liveTransportDouble(calls),
+      liveModel: D9_APPROVED_MODEL,
+      liveAnalysesLeft: 1,
+      liveProposalsLeft: 0,
+      liveSpentRecordPath: recordPath,
+      liveBootstrapApprovalId: 'd9live-v2-test-act-6-other',
+      liveMediaSha256: SHA_A,
+    }),
+    (error: unknown) => error instanceof Error && error.message.includes('LIVE_APPROVAL_MISMATCH'),
+    'pointing a new session at an existing ledger refuses instead of repurposing it',
+  );
+  assert.equal(calls.count, 0, 'zero provider calls on refused startup');
+});
+
+test('L-ACT-7: unlimited analyses require the versioned standing identity', async () => {
+  const calls = { count: 0 };
+  const legacyPath = path.join(root, 'legacy-spent.jsonl');
+  const legacy = openSpentRecord(legacyPath, { bootstrapApprovalId: 'd9i1-test-bootstrap-act-7' });
+  legacy.release();
+  // A historical (non-namespaced) genesis can never back unlimited sends.
+  await assert.rejects(
+    createCompanion({
+      port: 5197,
+      bind: false,
+      serveRoot: null,
+      uploads: await freshUploads('unlimited-legacy'),
+      session: new LocalSessionManager(),
+      permits: new OfflineMockPermitLedger(),
+      liveTransport: liveTransportDouble(calls),
+      liveModel: D9_APPROVED_MODEL,
+      liveAnalysesLeft: Number.POSITIVE_INFINITY,
+      liveProposalsLeft: 0,
+      liveSpentRecordPath: legacyPath,
+      liveBootstrapApprovalId: 'd9i1-test-bootstrap-act-7',
+      liveMediaSha256: SHA_A,
+    }),
+    (error: unknown) => error instanceof Error && error.message.includes('LIVE_APPROVAL_MISMATCH'),
+    'unlimited on a historical record refuses instead of repurposing it',
+  );
+  // The versioned standing identity opens unlimited cleanly, zero budget
+  // still arms for diagnostics, and status reports the unlimited marker.
+  const standingPath = path.join(root, 'standing-spent.jsonl');
+  const standing: Companion = await createCompanion({
+    port: 5198,
+    bind: false,
+    serveRoot: null,
+    uploads: await freshUploads('unlimited-standing'),
+    session: new LocalSessionManager(),
+    permits: new OfflineMockPermitLedger(),
+    liveTransport: liveTransportDouble(calls),
+    liveModel: D9_APPROVED_MODEL,
+    liveAnalysesLeft: Number.POSITIVE_INFINITY,
+    liveProposalsLeft: 0,
+    liveSpentRecordPath: standingPath,
+    liveBootstrapApprovalId: 'd9live-v2-test-act-7',
+    liveMediaSha256: SHA_A,
+  });
+  closers.push(() => standing.close().catch(() => undefined));
+  await standing.close();
+  assert.equal(calls.count, 0, 'zero provider calls on refused and clean startups');
+});
+
+test('L-ACT-8: MAJOR-1 — finite budgets cannot reuse a historical ledger (server gate)', async () => {
+  const calls = { count: 0 };
+  // Seeded historical one-shot ledger: legacy genesis plus one spend.
+  const historicalPath = path.join(root, 'major1-historical.jsonl');
+  const seed = openSpentRecord(historicalPath, { bootstrapApprovalId: 'd9i1-legacy-major1' });
+  seed.record({ runId: 'local-2026-11-02-001', sha256: SHA_A, kind: 'analyze', spentAt: 1 });
+  seed.release();
+  const beforeHistorical = readFileSync(historicalPath, 'utf8');
+  // Seeded standing ledger: versioned genesis plus one spend.
+  const standingPath = path.join(root, 'major1-standing.jsonl');
+  const seedStanding = openSpentRecord(standingPath, { bootstrapApprovalId: 'd9live-v2-test-act-8' });
+  seedStanding.record({ runId: 'local-2026-11-02-001', sha256: SHA_A, kind: 'analyze', spentAt: 1 });
+  seedStanding.release();
+  const beforeStanding = readFileSync(standingPath, 'utf8');
+
+  async function expectRefusal(options: {
+    liveAnalysesLeft: number;
+    liveSpentRecordPath: string;
+    liveBootstrapApprovalId?: string;
+  }, label: string): Promise<void> {
+    await assert.rejects(
+      createCompanion({
+        port: 5199,
+        bind: false,
+        serveRoot: null,
+        uploads: await freshUploads(`major1-${label}`),
+        session: new LocalSessionManager(),
+        permits: new OfflineMockPermitLedger(),
+        liveTransport: liveTransportDouble(calls),
+        liveModel: D9_APPROVED_MODEL,
+        liveProposalsLeft: 0,
+        liveMediaSha256: SHA_A,
+        ...options,
+      }),
+      (error: unknown) => error instanceof Error && error.message.includes('LIVE_APPROVAL_MISMATCH'),
+      `${label} refuses before any egress`,
+    );
+  }
+
+  await expectRefusal({ liveAnalysesLeft: 2, liveSpentRecordPath: historicalPath }, 'historical-no-id');
+  await expectRefusal({ liveAnalysesLeft: 10, liveSpentRecordPath: historicalPath, liveBootstrapApprovalId: 'd9i1-legacy-major1' }, 'historical-legacy-id');
+  await expectRefusal({ liveAnalysesLeft: 2, liveSpentRecordPath: historicalPath, liveBootstrapApprovalId: 'd9live-v2-test-act-8-other' }, 'historical-foreign-id');
+  await expectRefusal({ liveAnalysesLeft: 2, liveSpentRecordPath: standingPath }, 'standing-omitted-id');
+  await expectRefusal({ liveAnalysesLeft: 2, liveSpentRecordPath: standingPath, liveBootstrapApprovalId: 'd9live-v2-test-act-8-other' }, 'standing-mismatched-id');
+  await expectRefusal({ liveAnalysesLeft: Number.POSITIVE_INFINITY, liveSpentRecordPath: historicalPath, liveBootstrapApprovalId: 'd9live-v2-test-act-8-other' }, 'historical-unlimited-foreign-id');
+  assert.equal(calls.count, 0, 'zero provider calls across all refused startups');
+  assert.equal(readFileSync(historicalPath, 'utf8'), beforeHistorical, 'historical ledger bytes unchanged');
+  assert.equal(readFileSync(standingPath, 'utf8'), beforeStanding, 'standing ledger bytes unchanged');
+
+  // The zero-spend historical genesis is equally foreign: it can never seed
+  // a finite budget.
+  const emptyHistorical = path.join(root, 'major1-historical-empty.jsonl');
+  openSpentRecord(emptyHistorical, { bootstrapApprovalId: 'd9i1-legacy-empty' }).release();
+  const beforeEmpty = readFileSync(emptyHistorical, 'utf8');
+  await expectRefusal({ liveAnalysesLeft: 2, liveSpentRecordPath: emptyHistorical, liveBootstrapApprovalId: 'd9live-v2-test-act-8' }, 'historical-empty-genesis');
+  assert.equal(readFileSync(emptyHistorical, 'utf8'), beforeEmpty, 'empty historical ledger bytes unchanged');
+
+  // Restart with the matching standing identity proceeds (same ledger, same id).
+  const reopened: Companion = await createCompanion({
+    port: 5200,
+    bind: false,
+    serveRoot: null,
+    uploads: await freshUploads('major1-restart'),
+    session: new LocalSessionManager(),
+    permits: new OfflineMockPermitLedger(),
+    liveTransport: liveTransportDouble(calls),
+    liveModel: D9_APPROVED_MODEL,
+    liveAnalysesLeft: 2,
+    liveProposalsLeft: 0,
+    liveSpentRecordPath: standingPath,
+    liveBootstrapApprovalId: 'd9live-v2-test-act-8',
+    liveMediaSha256: SHA_A,
+  });
+  closers.push(() => reopened.close().catch(() => undefined));
+  await reopened.close();
+  assert.equal(calls.count, 0, 'zero provider calls on refused and clean startups');
 });

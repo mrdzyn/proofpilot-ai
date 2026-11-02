@@ -344,6 +344,66 @@ test('L-BT-7b: refused, filtered, and truncated envelopes never normalize to tex
   if (!unexpected.ok) assert.equal(unexpected.code, 'TRANSPORT_SHAPE');
 });
 
+test('L-BT-7c: finish reason decides before content; extras ignored; nothing leaks', () => {
+  // `length` is TRUNCATED even with empty content — never a misleading SHAPE.
+  for (const content of ['', null]) {
+    const truncated = validateBasetenResponse(
+      liveBody({ choices: [liveChoice({ message: { content }, finish_reason: 'length' })] }),
+      APPROVED,
+    );
+    assert.equal(truncated.ok, false, `length+${String(content)} refuses`);
+    if (!truncated.ok) assert.equal(truncated.code, 'TRANSPORT_TRUNCATED');
+  }
+  // `stop` with empty or null content is still malformed, not a completion.
+  for (const content of ['', null]) {
+    const empty = validateBasetenResponse(
+      liveBody({ choices: [liveChoice({ message: { content }, finish_reason: 'stop' })] }),
+      APPROVED,
+    );
+    assert.equal(empty.ok, false, `stop+${String(content)} refuses`);
+    if (!empty.ok) assert.equal(empty.code, 'TRANSPORT_SHAPE');
+  }
+  // Missing choices and missing message are malformed envelopes.
+  for (const body of [
+    liveBody({ choices: undefined }),
+    liveBody({ choices: [{}] }),
+    liveBody({ choices: [{ message: null, finish_reason: 'stop' }] }),
+  ]) {
+    const malformed = validateBasetenResponse(body, APPROVED);
+    assert.equal(malformed.ok, false, JSON.stringify(body).slice(0, 80));
+    if (!malformed.ok) assert.equal(malformed.code, 'TRANSPORT_SHAPE');
+  }
+  // Alternative valid optional fields ride along ignored; reasoning content
+  // and raw payload shapes never surface in results or refusal details.
+  const marker = 'MARKER-REASONING-CONTENT-9f2';
+  const enriched = validateBasetenResponse(
+    liveBody({
+      id: 'chatcmpl-123',
+      created: 1730000000,
+      system_fingerprint: 'fp-1',
+      choices: [{
+        index: 0,
+        message: { role: 'assistant', content: 'visible tap, then cart count one', reasoning_content: marker },
+        finish_reason: 'stop',
+      }],
+    }),
+    APPROVED,
+  );
+  assert.equal(enriched.ok, true, 'valid envelope with optional fields normalizes');
+  if (enriched.ok) {
+    assert.equal(JSON.stringify(enriched.value).includes(marker), false, 'reasoning content never normalizes into the result');
+  }
+  const refused = validateBasetenResponse(
+    liveBody({ model: 'meta-models/other', choices: [liveChoice({ message: { content: marker } })] }),
+    APPROVED,
+  );
+  assert.equal(refused.ok, false);
+  if (!refused.ok) {
+    assert.equal(refused.code, 'MODEL_MISMATCH');
+    assert.equal(JSON.stringify(refused).includes(marker), false, 'refusals never quote payload text');
+  }
+});
+
 test('L-BT-8: network failure refuses without leaking, and redaction holds everywhere', async () => {
   const { fetchImpl, calls } = makeDouble({ throwNetwork: true });
   const transport = makeTransport(fetchImpl);
