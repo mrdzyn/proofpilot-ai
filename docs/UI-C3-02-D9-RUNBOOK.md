@@ -16,9 +16,14 @@
 
 - D1: workspace + repeatable standing allowance — analyses run only with
   **explicit per-attempt opt-in** (`--live-analyses N` or `unlimited`), zero
-  proposals always, no auto-send, no retry, no parallel sends, no re-arm on
-  restart (owner standing policy 2026-11-02, issue #39; supersedes the
-  single one-shot allowance of PR #34).
+  proposals always, no auto-send, no retry, no parallel sends. Recorded
+  spends persist across restarts: restarting the same ledger with the same N
+  never restores budget (no re-arm on restart). Raising N on an existing
+  ledger is a new explicit owner allocation — it increases remaining
+  capacity (`remaining = N − recordedSpent`) and must be recorded next to the
+  §2 approval like any other authorization; never raise N silently or to
+  bypass a spent budget (owner standing policy 2026-11-02, issue #39;
+  supersedes the single one-shot allowance of PR #34).
 - D2: spend risk accepted (reference only: ~$1.25/M input, $4.25/M output
   per Baseten's Nov 2026 listing; video-token cost unknowable in advance).
 - D3: exact F01 media identified (certified mobile clip, SHA-256
@@ -76,9 +81,10 @@
 ## 2. Approval capture
 
 Record, outside the repo: date/time, exact model ID, media SHA-256, budget
-(`N` analyses or `unlimited` / 0 proposals), the NEW record path, and the
-versioned standing approval identity `d9live-v2-<owner-suffix>` with its
-session scope. Each provider attempt additionally needs its own fresh
+(exact `N` analyses or `unlimited` / 0 proposals), the NEW record path, and
+the versioned standing approval identity `d9live-v2-<owner-suffix>` with its
+session scope. A later increase of N on the same ledger is a new allocation:
+record the new N and its authorization alongside the original approval. Each provider attempt additionally needs its own fresh
 terminal permit plus an explicit owner click — the budget pre-authorizes
 nothing by itself.
 
@@ -183,8 +189,11 @@ automatic startup path.
 3. The next attempt needs a fresh permit, fresh upload, and fresh click —
    a settled run's staging and permit never carry over. On a finite ledger,
    spending the last budget refuses further sends `QUOTA_SPENT` with zero
-   provider calls (non-rearmable proof); on `unlimited`, sends continue only
-   through the same manual cycle.
+   provider calls (restarting with the same N does not restore it); on
+   `unlimited`, sends continue only through the same manual cycle.
+   N is the owner-chosen configured budget, not a genesis-bound lifetime
+   cap: raising N on the same ledger adds capacity and requires its own
+   explicit owner allocation recorded next to the §2 approval.
 4. Record the outcome (success/refusal code, usage) next to the §2 approval.
 
 ## 6. Disable / re-lock (mandatory when the session ends)

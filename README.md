@@ -81,14 +81,14 @@ flowchart TB
     C["Hand-authored PC-1 control"]
     R["Protected browser verifier"]
     E["Deterministic verdict + hashed evidence"]
-    L["Local companion · mock mode"]
-    B["Baseten live path · D9 disabled"]
+    L["Local companion · mock by default"]
+    B["Baseten live · owner-only, default off (explicit permit + click per attempt)"]
 
     F --> O --> E
     V --> S --> H
     C --> R --> E
-    L -->|"mock only"| V
-    L -. "not active" .-> B
+    L -->|"mock default"| V
+    L -. "gated manual opt-in" .-> B
 
     classDef trusted fill:#10283a,color:#e8f7ff,stroke:#22c6f0,stroke-width:2px
     classDef untrusted fill:#311821,color:#ffe8e8,stroke:#ff4757,stroke-width:2px

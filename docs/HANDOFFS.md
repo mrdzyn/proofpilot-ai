@@ -2123,4 +2123,27 @@ Independent exact-HEAD audit of the new Draft PR; STOP afterwards — no merge, 
 ### Next action
 Independent exact-HEAD re-audit of PR #40; STOP afterwards — no merge, deploy, preflight, key reads, spend, retry, or live inference.
 
+## Handoff: UI-C3-02-I39-C3 — PR #40 MINOR-D1/D2/D3 remediation (docs/metadata only)
+
+- **Task / phase:** `tasks/UI-C3-02-I39-REPEATABLE.md` (unchanged contract; base protected `main@84b03a46ca4141b42f7e733e87c0acbd31af8501`)
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** ONE focused independent rechecker, then project owner
+- **Branch:** `phase/ui-c3-02-i39-repeatable` (existing Draft PR #40)
+- **Implementation head:** same as C2 (`c1d8276`; no code changes in this slice)
+- **PR:** #40 (Draft, unmerged)
+- **State:** READY FOR FOCUSED RECHECK. Docs/metadata only: README diagram, runbook finite-budget wording, PR description. No merge, deploy, provider calls, key reads, spend, or live inference. Historical ledgers untouched.
+
+### Completed
+- **MINOR-D2:** README Mermaid graph now reads `Baseten live · owner-only, default off (explicit permit + click per attempt)` with a `gated manual opt-in` edge (existing `gated` class + dashed-path legend cover it); `mock by default` node/edge. Refusal text and model provenance untouched.
+- **MINOR-D3:** runbook §0/D1, §2, §5.3 now state spends persist across restarts (same-N restart never restores), N is an owner-chosen configured budget (`remaining = N − recordedSpent`), and any increase is a new explicit owner allocation recorded next to the §2 approval. No claim that N is genesis-bound; no automatic reset anywhere.
+- **MINOR-D1:** PR #40 description updated (this turn, after CI) to the final exact HEAD with current hosted evidence (583 unit / 141 security).
+- **Non-regression:** implementation untouched since C2; all C2 gates and evidence stand.
+
+### Validation
+- `pnpm lint`: 0 problems · `git diff --check`: clean · unit 583/583 · security 141/141 (re-run this turn) · required hosted CI on the final exact HEAD (see PR #40 checks).
+- Zero provider calls, zero credential reads.
+
+### Next action
+Focused independent recheck of PR #40 at the final exact HEAD; STOP afterwards — no merge, deploy, preflight, key reads, spend, retry, or live inference.
+
 <!-- HANDOFF_ENTRIES_END -->
