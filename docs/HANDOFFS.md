@@ -2162,11 +2162,11 @@ Focused independent recheck of PR #40 at the final exact HEAD; STOP afterwards �
 - **Diagnostics:** TRUNCATED refusals carry validated numeric-only usage (all three counts safe non-negative integers or omitted; code unchanged); generic detail preserved; no content/reasoning/raw-body leakage at validator → transport → run-record → Zone L layers. Server plumbs usage into refused live run records; Zone L renders it only for TRUNCATED with complete numeric usage, labeled provider-claimed / diagnostic-only / not billing.
 - **Reasoning `low`:** documented as conditional, separately approved optimization only (runbook §9: Baseten depth table vs control-table ambiguity, Meta strength mapping low=8 vs default xhigh=512), with exact `-1026` evidence required before any implementation.
 - **Records:** new task file, runbook §5 + §9, STATUS (phase/branch/task/handoff/QA rows), this handoff.
-- **Tests:** L-BT-8 (2048/512 shape, no extras, no reasoning flag), L-BT-7d (diagnostics battery incl. no-leak + no-detail-shape), L-ATT-14 (truncated attempt → refused record with usage, exactly one spend, no retry, counters 1/2). Existing authorization suites untouched and green.
+- **Tests:** L-BT-7e (2048/512 shape, no extras, no reasoning flag), L-BT-7d (diagnostics battery incl. no-leak + no-detail-shape), L-ATT-14 (truncated attempt → refused record with usage, exactly one spend, no retry, counters 1/2). Pre-existing L-BT-8 (network-failure redaction) untouched; existing authorization suites untouched and green.
 
 ### Validation
 - Local on pushed head: `pnpm lint` 0 problems · root `tsc` clean · dashboard `tsc` clean · unit 586/586 · security 141/141 · `f01:baseline` certified exact-SHA · `git diff --check` clean.
-- Hosted CI on `ce9f922`: Project baseline / Common validation PASS (7s); Stack validation PASS (1m26s) — run 41459930857, conclusion success.
+- Hosted CI is tracked per pushed head on PR #41 (exact HEAD + run links in the PR body, not repeated here so this record never rots); baseline + stack workflows were green on the docs commit (`ce9f922`, run 41459930857).
 - Zero provider calls, zero credential reads, D9 pin `meta-models/muse-spark-open-1026`, F01 pin unchanged.
 
 ### Next action

@@ -404,7 +404,7 @@ test('L-BT-7c: finish reason decides before content; extras ignored; nothing lea
   }
 });
 
-test('L-BT-8: analyze budget is 2048, proposals stay 512, request shape unchanged', () => {
+test('L-BT-7e: analyze budget is 2048, proposals stay 512, request shape unchanged', () => {
   assert.equal(ANALYZE_MAX_TOKENS, 2048, 'analyze cap raised exactly to 2048 (QA-01 remediation)');
   assert.equal(PROPOSE_MAX_TOKENS, 512, 'proposal cap untouched');
   assert.equal(maxTokensFor('analyze'), 2048);

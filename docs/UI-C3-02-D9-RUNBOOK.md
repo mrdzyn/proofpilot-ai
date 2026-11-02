@@ -188,8 +188,10 @@ automatic startup path.
    LIVE with attempts-left/spent counters. Analyze requests carry
    `max_tokens: 2048` (proposals 512); a `TRANSPORT_TRUNCATED` refusal
    renders the provider-claimed usage split (diagnostic only, not billing)
-   directly under the refusal — use it to distinguish reasoning exhaustion
-   from a deployment-side cap before authorizing any further attempt.
+   directly under the refusal — consult it before authorizing any further
+   attempt. Aggregate usage alone cannot conclusively distinguish
+   reasoning-token exhaustion from a deployment-side cap; treat the split
+   as supporting evidence only, not a definitive diagnosis.
 3. The next attempt needs a fresh permit, fresh upload, and fresh click —
    a settled run's staging and permit never carry over. On a finite ledger,
    spending the last budget refuses further sends `QUOTA_SPENT` with zero
