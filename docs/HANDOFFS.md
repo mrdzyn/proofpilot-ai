@@ -2152,8 +2152,8 @@ Focused independent recheck of PR #40 at the final exact HEAD; STOP afterwards �
 - **From:** Implementation agent (Muse Code, powered by Muse Spark)
 - **To:** ONE independent exact-HEAD auditor, then project owner
 - **Branch:** `phase/ui-c3-02-qa01-truncation` (from `main@08fdfea`)
-- **Implementation head:** `[IMPL-SHA]` (plus a docs commit)
-- **PR:** (new Draft PR number to fill on open; Draft, unmerged)
+- **Implementation head:** `8e9fd93` (impl+tests) + `ce9f922` (docs)
+- **PR:** Draft PR #41 (unmerged; body carries final-HEAD + CI evidence)
 - **State:** READY FOR AUDIT. Offline implementation only — NOT authorization for another Baseten send. No merge, deploy, provider calls, key reads, spend, retries, or ledger changes. `.env.local` never listed, read, or referenced. Historical ledgers untouched (outside the repo; never opened here).
 - **Owner QA state (reported, recorded in runbook §9 / STATUS):** D9-LIVE-V2-QA-01 — preflight PASS (21 models), first permit expired pre-send (no spend), first completed attempt `TRANSPORT_TRUNCATED`; **1 spend, 2 remaining, 0 accepted**.
 
@@ -2165,8 +2165,8 @@ Focused independent recheck of PR #40 at the final exact HEAD; STOP afterwards �
 - **Tests:** L-BT-8 (2048/512 shape, no extras, no reasoning flag), L-BT-7d (diagnostics battery incl. no-leak + no-detail-shape), L-ATT-14 (truncated attempt → refused record with usage, exactly one spend, no retry, counters 1/2). Existing authorization suites untouched and green.
 
 ### Validation
-- `pnpm lint`: 0 problems · root `tsc`: clean · dashboard `tsc`: clean · unit / security / `f01:baseline` to be reported on the pushed head.
-- Required hosted CI: see the new Draft PR checks for the pushed head.
+- Local on pushed head: `pnpm lint` 0 problems · root `tsc` clean · dashboard `tsc` clean · unit 586/586 · security 141/141 · `f01:baseline` certified exact-SHA · `git diff --check` clean.
+- Hosted CI on `ce9f922`: Project baseline / Common validation PASS (7s); Stack validation PASS (1m26s) — run 41459930857, conclusion success.
 - Zero provider calls, zero credential reads, D9 pin `meta-models/muse-spark-open-1026`, F01 pin unchanged.
 
 ### Next action
