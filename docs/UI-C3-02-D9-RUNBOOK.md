@@ -1,20 +1,24 @@
-# UI-C3-02-D9 Runbook — Owner-Only One-Shot Live Demonstration
+# UI-C3-02-D9 Runbook — Owner-Only Repeatable Live Analysis
 
 > **Status: PROCEDURE ONLY. No live call is authorized by this document.**
-> The owner authorized exactly one supervised Baseten analysis (2026-11-02,
-> PR #34 authorization record); D9 approves the hackathon-issued
-> `meta-models/muse-spark-open-1026` (organizer's Baseten email: the
-> hackathon-issued key works ONLY with this ID). The unsuffixed public ID
-> `meta-models/muse-spark-open` was approved in error (PR #36) and is
-> refused everywhere. Every live step below still requires a green
-> independent audit of the activation PR and an explicit one-shot owner
-> go-ahead immediately before the request — the standing authorization is
-> not permission to retry, to run proposals, or to skip the audit.
+> D9 approves the hackathon-issued `meta-models/muse-spark-open-1026`
+> (organizer's Baseten email: the hackathon-issued key works ONLY with this
+> ID). The unsuffixed public ID `meta-models/muse-spark-open` was approved
+> in error (PR #36) and is refused everywhere. Repeatable owner-supervised
+> analysis runs under the standing policy in this runbook (issue #39): the
+> budget alone never sends — every provider attempt additionally needs a
+> fresh single-use terminal permit plus an explicit owner click in Zone L,
+> and every send is durably recorded (never refunded, never retried, never
+> parallel). The two historical one-shot ledgers (D9-LIVE-01, D9-LIVE-02)
+> are frozen and can never authorize a new session (§7).
 
 ## 0. Prerequisites (owner decisions; D9 approved, execution gated)
 
-- D1: workspace + single-use allowance — authorized **one analysis, zero
-  proposals**, no re-arm on restart (owner authorization 2026-11-02).
+- D1: workspace + repeatable standing allowance — analyses run only with
+  **explicit per-attempt opt-in** (`--live-analyses N` or `unlimited`), zero
+  proposals always, no auto-send, no retry, no parallel sends, no re-arm on
+  restart (owner standing policy 2026-11-02, issue #39; supersedes the
+  single one-shot allowance of PR #34).
 - D2: spend risk accepted (reference only: ~$1.25/M input, $4.25/M output
   per Baseten's Nov 2026 listing; video-token cost unknowable in advance).
 - D3: exact F01 media identified (certified mobile clip, SHA-256
@@ -30,6 +34,12 @@
   documentation; a public listing never implies key access. Account
   availability is proven only by the owner-run §1 preflight, never by an
   agent.
+- D10: standing approval identity — repeatable sessions bootstrap (and
+  re-open) only under a versioned `d9live-v2-<owner-suffix>` identity on a
+  NEW ledger file (durable, outside the repo, mode 0600). Historical
+  geneses carry no such prefix, so historical ledgers can never authorize
+  a repeatable session; pointing one at them refuses instead of repurposing
+  them. One approval identity anchors exactly one ledger genesis.
 
 ## 1. Preflight (owner Mac; steps 1–4 need no credentials)
 
@@ -40,8 +50,11 @@
 3. Confirm `D9_APPROVED_MODEL` is exactly `meta-models/muse-spark-open-1026`
    (one const in `packages/live-analysis/src/config.ts`); anything else —
    including the unsuffixed public `meta-models/muse-spark-open` — refuses.
-4. Confirm the spent-record path (durable, outside the repo, mode 0600) is
-   empty or holds only already-spent entries you accept.
+4. Confirm the spent-record path (durable, outside the repo, mode 0600).
+   For a repeatable session this MUST be a new path you have never used
+   before — never a D9-LIVE-01/D9-LIVE-02 file (those ledgers are frozen;
+   startup refuses them for new sessions). An existing standing ledger
+   re-opens only with its own genesis approval id; a foreign id refuses.
 5. `node scripts/c3-live-analysis.ts --live --port 0` with NO key set must
    exit 2 naming the missing-key gate. Then export the three variables in
    your shell (values never pasted anywhere else):
@@ -63,28 +76,36 @@
 ## 2. Approval capture
 
 Record, outside the repo: date/time, exact model ID, media SHA-256, budget
-(1 analysis / 0 proposals), record path, and the explicit one-shot go-ahead.
-One approval authorizes exactly one provider attempt.
+(`N` analyses or `unlimited` / 0 proposals), the NEW record path, and the
+versioned standing approval identity `d9live-v2-<owner-suffix>` with its
+session scope. Each provider attempt additionally needs its own fresh
+terminal permit plus an explicit owner click — the budget pre-authorizes
+nothing by itself.
 
-## 3. One-shot execution (owner terminal only)
+## 3. Repeatable execution (owner terminal only)
 
 ```sh
 node scripts/c3-live-analysis.ts --port 5188 --serve none \
-  --live --live-analyses 1 --live-proposals 0 \
-  --live-spent-record "$HOME/.proofpilot/live-spent.jsonl" \
-  --live-approval-id "<fresh-approval-id-from-§2>" \
+  --live --live-analyses unlimited --live-proposals 0 \
+  --live-spent-record "$HOME/.proofpilot/live-standing-v2.jsonl" \
+  --live-approval-id "d9live-v2-<owner-suffix>" \
   --live-media-sha256 e9df68b14c48300818f9ec9407b884413037f29305f17a5da3cc4fac05eeafdf
 ```
 
-The approval id must be fresh for a first-time path (it anchors the record
-genesis); on restart against the initialized record it is not needed. Never
-reuse an approval id across paths to "restore" a deleted record — that is a
-new attestation, and §4b applies.
+(Use a finite `--live-analyses N` for a bounded session; the rules below
+are identical.) The approval id anchors the record genesis: it must carry
+the `d9live-v2-` namespace for `unlimited`, and reopening the same ledger
+with a different id refuses (`LIVE_APPROVAL_MISMATCH`) instead of spending
+under a foreign genesis. Never reuse an approval id across paths to
+"restore" a deleted record — that is a new attestation, and §4b applies.
 
-Then, in the companion terminal: `pair`, `permit analyze <sha256> <bytes>`
-for the pinned clip, upload + analyze via Zone L, observe the single result,
-`quit`. Expected: exactly one POST; run shows `baseten-live` provenance,
-`UNVERIFIED` status, reported usage. Any refusal (`MODEL_UNAVAILABLE…`,
+Then, per attempt, in the companion terminal and Zone L: `pair` (once per
+companion), then `permit analyze <sha256> <bytes>` for the pinned clip,
+upload + click Analyze, observe the result, and repeat for the next attempt
+with a FRESH permit, FRESH upload, and FRESH click — never auto-run.
+Expected per attempt: exactly one POST; run shows `baseten-live`
+provenance, `UNVERIFIED` status, reported usage; the durable ledger gains
+exactly one chained spend with a unique run id. Any refusal (`MODEL_UNAVAILABLE…`,
 `MEDIA_NOT_PINNED`, `QUOTA_SPENT`, `LIVE_SPEND_RECORD_FAILED`,
 `LIVE_ATTEMPT_EXHAUSTED`) ends the attempt — **do not retry**; a failed
 authorization never restores, and a sent attempt is permanently spent.
@@ -142,26 +163,31 @@ automatic startup path.
 7. Record the recovery (holder pid, what the record showed) next to the §2
    approval.
 
-## 5. Post-run reconciliation
+## 5. Post-run reconciliation (per attempt)
 
-1. `cat` the spent-record file: exactly one new chained entry
-   (`runId`, media SHA-256, `analyze`).
+1. `cat` the spent-record file: exactly one new chained entry per send
+   (unique `runId` with the ledger sequence suffix, media SHA-256,
+   `analyze`); `/api/status` shows the matching spent count.
 2. Zone L result: provider `baseten`, exact model echo, run ID, quoted
    observations, reported prompt/completion/total tokens (reported, never
-   billing), `LIVE VIA BASETEN — UNVERIFIED` chip.
-3. Re-running any live request with the same record path refuses
-   `QUOTA_SPENT` with zero provider calls (non-rearmable proof).
+   billing), `LIVE VIA BASETEN — UNVERIFIED` chip; the mode banner reads
+   LIVE with attempts-left/spent counters.
+3. The next attempt needs a fresh permit, fresh upload, and fresh click —
+   a settled run's staging and permit never carry over. On a finite ledger,
+   spending the last budget refuses further sends `QUOTA_SPENT` with zero
+   provider calls (non-rearmable proof); on `unlimited`, sends continue only
+   through the same manual cycle.
 4. Record the outcome (success/refusal code, usage) next to the §2 approval.
 
-## 6. Disable / re-lock (mandatory after the one-shot)
+## 6. Disable / re-lock (mandatory when the session ends)
 
 1. Unset the three variables in the owner shell; rotate the key if it was
    ever displayed, logged, or pasted outside the owner terminal.
 2. Restart the companion WITHOUT `--live` (mock fallback) and confirm the
-   mock banner and mock quota in `/api/status`.
+   mock banner in `/api/status`.
 3. Open a separately reviewed disable/re-lock change; do not leave live mode
-   enabled for routine use. No automatic closure: the one-shot demo does not
-   authorize any further attempt.
+   enabled for routine use. No automatic closure: ending one repeatable
+   session does not authorize spends on any other record path.
 
 ## 7. D9-LIVE-01 outcome (owner-reported, recorded; agent did not run it)
 
@@ -190,3 +216,25 @@ automatic startup path.
      an unresolved gate, independent of the 403.
 - No code, test, record, or configuration change in this slice re-arms,
   retries, or reinterprets the spent attempt.
+
+## 8. D9-LIVE-02 outcome (owner-reported via issue #39, recorded; agent did not run it)
+
+- **Verdict: REFUSED.** The second owner-operated one-shot POST returned
+  HTTP 2xx JSON that failed strict response validation as
+  `TRANSPORT_SHAPE` — no model output was accepted, nothing was rendered
+  from a provider. (The validator has since been corrected so a `length`
+  finish reports `TRANSPORT_TRUNCATED` instead of the misleading SHAPE;
+  either way the run refused and nothing normalized into a result.)
+- **Spend accounting:** the send-boundary attempt was authorized and is
+  durably recorded as **SPENT** in the owner-held spent-run record. Any
+  further live request with the same record path refuses `QUOTA_SPENT`
+  with zero provider calls. Do NOT reset, delete, recreate, or otherwise
+  change the historical record to re-arm it.
+- **Billing:** unverified. No figure here is a billed amount or a cap;
+  token figures in §5 reconciliation are reported usage only.
+- The exact provider payload is unknown (owner-reported outcome only);
+  `TRANSPORT_SHAPE` details never quote raw provider bodies, and refusal
+  records contain no response text, credentials, or PII.
+- Both one-shot ledgers (D9-LIVE-01, D9-LIVE-02) are frozen: no repeatable
+  session may point at them (startup refuses), and their geneses carry no
+  standing `d9live-v2-` identity.

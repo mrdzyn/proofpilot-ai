@@ -2064,4 +2064,34 @@ Independent exact-HEAD recheck of PR #36; STOP afterwards — no merge, deploy, 
 ### Next action
 Independent exact-HEAD audit of the new Draft PR; STOP afterwards — no merge, deploy, preflight, key reads, spend, retry, or live inference.
 
+## Handoff: UI-C3-02-I39-C1 — Repeatable owner-supervised inference (issue #39, new Draft PR)
+
+- **Task / phase:** `tasks/UI-C3-02-I39-REPEATABLE.md` (bounded contract; base protected `main@84b03a4` incorporating merged PR #37)
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** ONE independent exact-HEAD auditor, then project owner
+- **Branch:** `phase/ui-c3-02-i39-repeatable` (from `main@84b03a4`)
+- **Implementation head:** `304a72a3434526bb56460ae6345d35da115092c3` (plus a docs commit)
+- **PR:** (new Draft PR number to fill on open; Draft, unmerged)
+- **State:** READY FOR AUDIT. No merge, deploy, provider calls, key reads, spend, or live inference. The repository `.env.local` was never listed, read, or referenced by value. No authenticated preflight was run; no test POST was made. Both historical spent records were not reset, deleted, recreated, or changed (they live outside the repo and were never touched).
+
+### Completed
+- **Repeatable mode:** `--live-analyses` accepts a finite count or `unlimited` (explicit opt-in; ledger `Infinity` never depletes); zero-proposal policy kept (`--live-proposals` nonzero refuses, including `unlimited`). The budget alone never sends: every attempt still needs a fresh single-use terminal permit + explicit Zone L click + pinned F01 media, with single flight, no retries, no parallel sends.
+- **Durable multi-attempt ledger:** each send appends exactly one fsync'd spend before the POST (no erase/refund on any failure); ledger run ids are unique within the ledger (`<local-run-id>#spend-<n>`, stable across restarts); new sessions run only under the versioned `d9live-v2-` identity on a NEW ledger; the server binds any supplied bootstrap id against the record genesis (`LIVE_APPROVAL_MISMATCH` refuses foreign geneses) and refuses `unlimited` on non-namespaced geneses — historical D9-LIVE-01/02 ledgers can never authorize a new session.
+- **Response-contract diagnostics:** the validator decides by finish reason before content (`length` → `TRANSPORT_TRUNCATED` even with empty content, never a misleading SHAPE); `stop` + empty/null content, missing choices/message, wrong model, and bad usage stay refused; extra optional fields ignored; reasoning content and raw provider bodies never surface in results or refusal details. Token caps unchanged (1024/512; no silent increase).
+- **UI labels:** Zone L resolves the armed path from `/api/status` after pairing and refreshes counters after every settle; live mode shows a LIVE banner, a billable-labeled action button, LIVE attempts-left/spent counters, disables proposals with a zero-proposal note, and uses ledger-exhaustion recovery text (never "restart to re-arm"). Mock strings are byte-identical (integration browser tests target mock mode only).
+- **Tests (fake doubles/credentials, zero egress):** L-ATT-2b (unlimited ledger), L-ATT-11 (4 manual sends, no auto re-send, unique ids, status counters), L-ATT-12 (HTTP failure keeps the spend; next manual attempt sends, no retry), L-ATT-13 (restart retains spends, unique ids across reset), L-ACT-6 (genesis binding), L-ACT-7 (unlimited namespace), L-REC-18/19/20 (identity/binding/namespace/budgets), L-BT-7c (finish-first battery + no-leak), L-CLI-6/6b (proposals refuse; finite + unlimited arming; v2-identity gating), L-CFG/L-PRE batteries updated for the standing policy. Full gates green locally (below).
+- **Records:** README standing policy + honest cost, STATUS (phase/branch/task/handoff/authorization/D9-LIVE-02 + standing-policy rows), runbook rewrite (§0–§6 repeatable session, §8 D9-LIVE-02 REFUSED/SPENT, unresolved 403-cause + video-compat gates), new task file, this handoff.
+
+### Validation
+- `pnpm lint`: 0 problems (263 files) · root `tsc`: clean · dashboard `tsc`: clean · unit 580/580 · security 141/141 · `pnpm f01:baseline`: REPRODUCED, certified exact-SHA YES. Local, this worktree.
+- Required hosted CI: see the new Draft PR checks for the pushed head.
+- Zero provider calls, zero credential reads, D9 pin `meta-models/muse-spark-open-1026`.
+
+### Continuation notes
+- The historical one-shot ledgers live outside the repo; nothing in this slice reads, writes, or reinterprets them. D9-LIVE-02 facts are owner-reported via issue #39 (exact provider payload unknown).
+- Hackathon-specific video compatibility (`video_url` inline part against the 1026 deployment) has no authoritative documentation in evidence and stays an unresolved operational gate, independent of the historical 403.
+
+### Next action
+Independent exact-HEAD audit of the new Draft PR; STOP afterwards — no merge, deploy, preflight, key reads, spend, retry, or live inference.
+
 <!-- HANDOFF_ENTRIES_END -->
