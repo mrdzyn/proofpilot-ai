@@ -540,7 +540,12 @@ export function LiveZone() {
             </EvidenceTable>
           )}
           {phase === 'refused' && refusal !== null && (
-            <div className="mt-2"><ErrorState message={`Refused (${refusal.code}): ${refusal.detail}`} recovery={refusal.recovery} /></div>
+            <div className="mt-2"><ErrorState message={`Refused (${refusal.code}): ${refusal.detail}`} recovery={refusal.recovery} />
+              {refusal.code === 'TRANSPORT_TRUNCATED' &&
+                typeof usage.promptTokens === 'number' && typeof usage.completionTokens === 'number' && typeof usage.totalTokens === 'number' && (
+                <p className="text-sm text-[#3d4148] mt-1">Provider-claimed usage (diagnostic only, not billing): prompt {usage.promptTokens} · completion {usage.completionTokens} · total {usage.totalTokens}.</p>
+              )}
+            </div>
           )}
           {phase === 'cancelled' && (
             <Note>The run was cancelled. Staged bytes were deleted; hash the file again for the next attempt.</Note>

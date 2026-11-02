@@ -2146,4 +2146,30 @@ Independent exact-HEAD re-audit of PR #40; STOP afterwards — no merge, deploy,
 ### Next action
 Focused independent recheck of PR #40 at the final exact HEAD; STOP afterwards — no merge, deploy, preflight, key reads, spend, retry, or live inference.
 
+## Handoff: UI-C3-02-QA01-T1 — QA-01 truncation remediation (offline, new Draft PR)
+
+- **Task / phase:** `tasks/UI-C3-02-QA01-TRUNCATION.md` (bounded contract; base protected `main@08fdfea`)
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** ONE independent exact-HEAD auditor, then project owner
+- **Branch:** `phase/ui-c3-02-qa01-truncation` (from `main@08fdfea`)
+- **Implementation head:** `8e9fd93` (impl+tests) + `ce9f922` (docs)
+- **PR:** Draft PR #41 (unmerged; body carries final-HEAD + CI evidence)
+- **State:** READY FOR AUDIT. Offline implementation only — NOT authorization for another Baseten send. No merge, deploy, provider calls, key reads, spend, retries, or ledger changes. `.env.local` never listed, read, or referenced. Historical ledgers untouched (outside the repo; never opened here).
+- **Owner QA state (reported, recorded in runbook §9 / STATUS):** D9-LIVE-V2-QA-01 — preflight PASS (21 models), first permit expired pre-send (no spend), first completed attempt `TRANSPORT_TRUNCATED`; **1 spend, 2 remaining, 0 accepted**.
+
+### Completed
+- **Cap:** `ANALYZE_MAX_TOKENS` 1024 → 2048 (proposals stay 512; no new request fields; no reasoning knob — no `-1026` deployment evidence).
+- **Diagnostics:** TRUNCATED refusals carry validated numeric-only usage (all three counts safe non-negative integers or omitted; code unchanged); generic detail preserved; no content/reasoning/raw-body leakage at validator → transport → run-record → Zone L layers. Server plumbs usage into refused live run records; Zone L renders it only for TRUNCATED with complete numeric usage, labeled provider-claimed / diagnostic-only / not billing.
+- **Reasoning `low`:** documented as conditional, separately approved optimization only (runbook §9: Baseten depth table vs control-table ambiguity, Meta strength mapping low=8 vs default xhigh=512), with exact `-1026` evidence required before any implementation.
+- **Records:** new task file, runbook §5 + §9, STATUS (phase/branch/task/handoff/QA rows), this handoff.
+- **Tests:** L-BT-7e (2048/512 shape, no extras, no reasoning flag), L-BT-7d (diagnostics battery incl. no-leak + no-detail-shape), L-ATT-14 (truncated attempt → refused record with usage, exactly one spend, no retry, counters 1/2). Pre-existing L-BT-8 (network-failure redaction) untouched; existing authorization suites untouched and green.
+
+### Validation
+- Local on pushed head: `pnpm lint` 0 problems · root `tsc` clean · dashboard `tsc` clean · unit 586/586 · security 141/141 · `f01:baseline` certified exact-SHA · `git diff --check` clean.
+- Hosted CI is tracked per pushed head on PR #41 (exact HEAD + run links in the PR body, not repeated here so this record never rots); baseline + stack workflows were green on the docs commit (`ce9f922`, run 41459930857).
+- Zero provider calls, zero credential reads, D9 pin `meta-models/muse-spark-open-1026`, F01 pin unchanged.
+
+### Next action
+Independent exact-HEAD audit of the new Draft PR; STOP afterwards — no merge, deploy, preflight, key reads, spend, retry, or live inference. The owner decides separately whether to authorize another Baseten send.
+
 <!-- HANDOFF_ENTRIES_END -->

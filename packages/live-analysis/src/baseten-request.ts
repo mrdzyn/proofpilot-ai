@@ -15,8 +15,13 @@ import { BASETEN_APPROVED_ENDPOINT } from './config.ts';
 export const MAX_VIDEO_BYTES = 25_000_000;
 /** Provider inline/base64 request-body cap for Muse Spark Open (100 MiB). */
 export const MAX_INLINE_BODY_BYTES = 100 * 1024 * 1024;
-/** Fixed generation caps from the approved architecture. */
-export const ANALYZE_MAX_TOKENS = 1024;
+/** Fixed generation caps from the approved architecture.
+ * Analyze runs at 2048 (raised from 1024 for the QA-01 truncation
+ * remediation: a reasoning model can exhaust 1024 output tokens before
+ * producing completion text; the sanitizer still caps accepted text at
+ * 8,192 characters). Any further increase needs its own reviewed change.
+ * Proposals stay at 512. */
+export const ANALYZE_MAX_TOKENS = 2048;
 export const PROPOSE_MAX_TOKENS = 512;
 
 export type VideoPartRefusal = 'NOT_MP4_BYTES' | 'VIDEO_TOO_LARGE' | 'BODY_TOO_LARGE';
