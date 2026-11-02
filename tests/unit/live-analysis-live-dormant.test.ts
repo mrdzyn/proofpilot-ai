@@ -12,7 +12,7 @@ import path from 'node:path';
 import { createCompanion, type ApiMeta, type Companion } from '../../packages/live-analysis/src/server.ts';
 import { LocalSessionManager } from '../../packages/live-analysis/src/local-session.ts';
 import { OfflineMockPermitLedger } from '../../packages/live-analysis/src/mock-permits.ts';
-import { BASETEN_DOCUMENTED_DIRECT_MODEL } from '../../packages/live-analysis/src/config.ts';
+import { D9_APPROVED_MODEL } from '../../packages/live-analysis/src/config.ts';
 import {
   createBasetenTransport,
   type BasetenTransport,
@@ -63,7 +63,7 @@ function countingDouble(calls: { count: number }): LiveFetch {
       status: 200,
       url,
       json: () => Promise.resolve({
-        model: BASETEN_DOCUMENTED_DIRECT_MODEL,
+        model: D9_APPROVED_MODEL,
         choices: [{ message: { content: 'live tap then count one' }, finish_reason: 'stop' }],
         usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
       }),
@@ -74,7 +74,7 @@ function countingDouble(calls: { count: number }): LiveFetch {
 
 function liveTransportDouble(calls: { count: number }): BasetenTransport {
   const created = createBasetenTransport({
-    model: BASETEN_DOCUMENTED_DIRECT_MODEL,
+    model: D9_APPROVED_MODEL,
     apiKey: 'NOT-A-REAL-KEY-0000',
     fetchImpl: countingDouble(calls),
     timeoutMs: 2000,
@@ -94,7 +94,7 @@ async function freshLiveApp(calls: { count: number }): Promise<Companion> {
     session: new LocalSessionManager(),
     permits: new OfflineMockPermitLedger(),
     liveTransport: liveTransportDouble(calls),
-    liveModel: BASETEN_DOCUMENTED_DIRECT_MODEL,
+    liveModel: D9_APPROVED_MODEL,
   });
   closers.push(() => app.close().catch(() => undefined));
   return app;

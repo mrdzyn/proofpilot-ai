@@ -118,7 +118,7 @@ test('BT-LIVE-01 live transport is pinned, injected, and redirect-refusing', () 
   const body = readFileSync(path.join(root, 'baseten-transport.ts'), 'utf8');
   const source = body.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
   assert.match(source, /BASETEN_APPROVED_ENDPOINT/, 'destination is the pinned constant');
-  assert.match(source, /BASETEN_DOCUMENTED_DIRECT_MODEL/, 'model identity is the documented direct ID');
+  assert.match(source, /D9_APPROVED_MODEL/, 'model identity is the hackathon-approved D9 pin, never the public listing');
   assert.match(source, /readonly fetchImpl: LiveFetch/, 'fetch implementation is required and explicit');
   assert.match(source, /redirect: 'error'/, 'redirects refuse instead of following');
   assert.doesNotMatch(source, /['"]https?:\/\//, 'no endpoint string literals in the transport');

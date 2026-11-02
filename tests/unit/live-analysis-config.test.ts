@@ -108,18 +108,25 @@ test('L-CFG-3: the approved F01 media pin is exactly the certified clip SHA-256'
   assert.match(APPROVED_F01_MEDIA_SHA256, /^[0-9a-f]{64}$/, 'the pin is a well-formed 64-hex SHA-256');
 });
 
-test('L-CFG-2: D9 approves exactly one byte-identical model ID', () => {
-  assert.equal(D9_APPROVED_MODEL, 'meta-models/muse-spark-open');
-  assert.equal(D9_APPROVED_MODEL, BASETEN_DOCUMENTED_DIRECT_MODEL, 'the pin is the documented direct-Baseten ID');
-  assert.deepEqual(validateLiveModel(BASETEN_DOCUMENTED_DIRECT_MODEL), {
+test('L-CFG-2: D9 approves exactly the hackathon-issued model ID, never the public one', () => {
+  assert.equal(D9_APPROVED_MODEL, 'meta-models/muse-spark-open-1026');
+  assert.notEqual(
+    D9_APPROVED_MODEL,
+    BASETEN_DOCUMENTED_DIRECT_MODEL,
+    'account-specific authorization is distinct from the generic public listing',
+  );
+  assert.deepEqual(validateLiveModel('meta-models/muse-spark-open-1026'), {
     ok: true,
-    model: 'meta-models/muse-spark-open',
+    model: 'meta-models/muse-spark-open-1026',
   });
   for (const value of [
+    // The unsuffixed public ID was approved in error (PR #36); the
+    // hackathon-issued key authorizes only the -1026 ID, so it refuses here.
+    'meta-models/muse-spark-open',
     'meta/muse-spark-open',
-    'meta-models/muse-spark-open-1026',
-    'META-MODELS/MUSE-SPARK-OPEN',
-    ' meta-models/muse-spark-open',
+    'META-MODELS/MUSE-SPARK-OPEN-1026',
+    ' meta-models/muse-spark-open-1026',
+    'meta-models/muse-spark-open-1026 ',
     '',
     null,
     undefined,

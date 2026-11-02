@@ -2,14 +2,22 @@
  * UI-C3-02-D9 (activation): pure, OFFLINE-ONLY Baseten configuration preflight.
  *
  * This module NEVER reads process.env, credentials, a file, or the network.
- * D9 model approval is recorded below as the exact direct-Baseten identifier
- * (owner decision 2026-11-02, PR #34 authorization; corroborated by the
- * official Baseten Model APIs documentation). The approval is a single
- * source literal compared by exact string equality only — never assigned
- * from configuration, never translated, never a fallback.
+ * D9 model approval is recorded below as the exact hackathon-issued
+ * identifier (organizer's Baseten email: the hackathon-issued key works
+ * ONLY with `meta-models/muse-spark-open-1026`). Account-specific
+ * authorization is distinct from generic public documentation: the public
+ * listing (`BASETEN_DOCUMENTED_DIRECT_MODEL`) describes what Baseten
+ * documents generally, never what this key may call. The approval is a
+ * single source literal compared by exact string equality only — never
+ * assigned from configuration, never translated, never a fallback.
  */
 export const BASETEN_APPROVED_BASE_URL = 'https://inference.baseten.co/v1' as const;
 export const BASETEN_APPROVED_ENDPOINT = 'https://inference.baseten.co/v1/chat/completions' as const;
+/**
+ * Generic public-documentation listing. Informational only: no issued key
+ * in this project is authorized for it, and the D9 gate refuses it. Never
+ * substitute it for the hackathon-approved ID.
+ */
 export const BASETEN_DOCUMENTED_DIRECT_MODEL = 'meta-models/muse-spark-open' as const;
 
 /**
@@ -23,16 +31,17 @@ export const BASETEN_DOCUMENTED_DIRECT_MODEL = 'meta-models/muse-spark-open' as 
 export const APPROVED_F01_MEDIA_SHA256 = 'e9df68b14c48300818f9ec9407b884413037f29305f17a5da3cc4fac05eeafdf' as const;
 
 /**
- * D9 live-model approval. APPROVED: exactly one direct-Baseten identifier
- * may pass the live gate — `meta-models/muse-spark-open`, byte-identical to
- * `BASETEN_DOCUMENTED_DIRECT_MODEL` (asserted in tests). Any other value —
- * aliases (`meta/muse-spark-open`), dated variants, empty, or non-strings —
- * refuses with MODEL_UNAVAILABLE_OR_UNAPPROVED. Compared by exact string
- * equality only: never assigned from configuration, never translated, never
- * a fallback. The null-approval path no longer exists: every live gate
- * compares against this literal, so removing it fails the build.
+ * D9 live-model approval. APPROVED: exactly one hackathon-issued identifier
+ * may pass the live gate — `meta-models/muse-spark-open-1026`, asserted
+ * distinct from `BASETEN_DOCUMENTED_DIRECT_MODEL` (tests). The unsuffixed
+ * public ID was approved in error (PR #36) and now refuses, as do the
+ * OpenRouter alias, dated variants, empty, and non-strings, with
+ * MODEL_UNAVAILABLE_OR_UNAPPROVED. Compared by exact string equality only:
+ * never assigned from configuration, never translated, never a fallback.
+ * The null-approval path no longer exists: every live gate compares against
+ * this literal, so removing it fails the build.
  */
-export const D9_APPROVED_MODEL: string = 'meta-models/muse-spark-open';
+export const D9_APPROVED_MODEL: string = 'meta-models/muse-spark-open-1026';
 
 export type LiveModelResult =
   | Readonly<{ ok: true; model: string }>

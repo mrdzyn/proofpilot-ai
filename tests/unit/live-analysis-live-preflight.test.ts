@@ -12,7 +12,8 @@ import {
 } from '../../packages/live-analysis/src/preflight.ts';
 
 const FAKE_KEY = 'NOT-A-REAL-KEY-0000-PREFLIGHT';
-const PINNED = 'meta-models/muse-spark-open';
+const PINNED = 'meta-models/muse-spark-open-1026';
+const GENERIC_PUBLIC = 'meta-models/muse-spark-open';
 
 interface RecordedCall {
   url: string;
@@ -128,7 +129,7 @@ test('L-PRE-5: misconfigured inputs refuse before any egress', async () => {
     input({ baseUrl: 'https://evil.example/v1' }),
     input({ baseUrl: 'https://inference.baseten.co/v1/chat/completions' }),
     input({ model: 'meta/muse-spark-open' }),
-    input({ model: 'meta-models/muse-spark-open-1026' }),
+    input({ model: 'meta-models/muse-spark-open' }),
     input({ model: '' }),
     input({ apiKey: '' }),
     input({ apiKey: undefined }),
@@ -150,4 +151,36 @@ test('L-PRE-6: the D9 pin is enforced in preflight, not just in the gate', async
   assert.equal(result.ok, false, 'an alias never reaches the account even when listed');
   assert.equal((result as { code: string }).code, 'PREFLIGHT_MISCONFIGURED');
   assert.equal(calls.length, 0);
+});
+
+test('L-PRE-7: preflight checks the hackathon ID and never infers access from the public ID', async () => {
+  // The unsuffixed public ID was approved in error (PR #36); it refuses at
+  // the gate even when the account lists it — public listing is not key
+  // authorization.
+  const listed = makeDouble(200, { data: [{ id: GENERIC_PUBLIC }] });
+  const gated = await checkAccountAvailability(listed.fetchImpl, input({ model: GENERIC_PUBLIC }));
+  assert.equal(gated.ok, false);
+  assert.equal((gated as { code: string }).code, 'PREFLIGHT_MISCONFIGURED');
+  assert.equal(listed.calls.length, 0, 'no egress for the refused public ID');
+  // A catalog that lists only the public ID does not list the hackathon ID:
+  // preflight reports model-absent so the owner CLI stops before any send.
+  const { fetchImpl, calls } = makeDouble(200, { data: [{ id: GENERIC_PUBLIC }, { id: 'other-model' }] });
+  const absent = await checkAccountAvailability(fetchImpl, input());
+  assert.deepEqual(absent, {
+    ok: true,
+    modelListed: false,
+    catalogCount: 2,
+    endpoint: BASETEN_APPROVED_BASE_URL,
+  }, 'access is never inferred from the general model');
+  assert.equal(calls.length, 1, 'the single catalog call was the only egress');
+  assertKeyFree('model-absent result', absent);
+  // The hackathon ID listed: reachable and named.
+  const okDouble = makeDouble(200, { data: [{ id: GENERIC_PUBLIC }, { id: PINNED }] });
+  const ok = await checkAccountAvailability(okDouble.fetchImpl, input());
+  assert.deepEqual(ok, {
+    ok: true,
+    modelListed: true,
+    catalogCount: 2,
+    endpoint: BASETEN_APPROVED_BASE_URL,
+  });
 });
