@@ -72,16 +72,24 @@ test('L-ATT-3: no refund path exists on the ledger surface', () => {
   assert.equal(ledger.left('analyze'), 0);
 });
 
-test('L-ATT-4: the send spender consumes exactly once per run, however often the hook fires', () => {
+test('L-ATT-4: the send spender authorizes one send, then refuses repeats', () => {
   const ledger = createLiveAttemptLedger({ analyses: 1, proposals: 1 });
   const spendAnalyze = createLiveSendSpender(ledger, 'analyze');
-  spendAnalyze();
-  spendAnalyze();
-  spendAnalyze();
+  assert.deepEqual(spendAnalyze(), { ok: true }, 'first invocation authorizes the send');
+  assert.deepEqual(
+    spendAnalyze(),
+    { ok: false, code: 'LIVE_ATTEMPT_EXHAUSTED' },
+    'a repeat invocation is not a second authorization',
+  );
+  assert.deepEqual(
+    spendAnalyze(),
+    { ok: false, code: 'LIVE_ATTEMPT_EXHAUSTED' },
+    'a third invocation authorizes nothing either',
+  );
   assert.equal(ledger.left('analyze'), 0, 'one run spends one attempt despite a triple-fired hook');
   assert.equal(ledger.left('propose'), 1, 'the other action is untouched');
   const spendPropose = createLiveSendSpender(ledger, 'propose');
-  spendPropose();
+  assert.deepEqual(spendPropose(), { ok: true });
   assert.equal(ledger.left('propose'), 0);
 });
 
@@ -89,12 +97,26 @@ test('L-ATT-5: one-attempt-only under concurrency; budget of N yields exactly N 
   const ledger: LiveAttemptLedger = createLiveAttemptLedger({ analyses: 1, proposals: 3 });
   const racers = Array.from({ length: 10 }, () => createLiveSendSpender(ledger, 'analyze'));
   const outcomes = await Promise.all(racers.map((spend) => Promise.resolve().then(spend)));
-  assert.equal(outcomes.length, 10);
+  assert.equal(outcomes.filter((o) => o.ok).length, 1, 'a budget of one authorizes exactly one sender');
+  assert.equal(outcomes.filter((o) => !o.ok).length, 9, 'the other nine racers are refused');
+  for (const denied of outcomes.filter((o) => !o.ok)) {
+    assert.deepEqual(denied, { ok: false, code: 'LIVE_ATTEMPT_EXHAUSTED' });
+  }
   assert.equal(ledger.left('analyze'), 0, 'a budget of one survives a ten-way race with exactly one spend');
   const proposeRacers = Array.from({ length: 10 }, () => createLiveSendSpender(ledger, 'propose'));
-  await Promise.all(proposeRacers.map((spend) => Promise.resolve().then(spend)));
+  const proposeOutcomes = await Promise.all(proposeRacers.map((spend) => Promise.resolve().then(spend)));
+  assert.equal(proposeOutcomes.filter((o) => o.ok).length, 3, 'a budget of three authorizes exactly three senders');
   assert.equal(ledger.left('propose'), 0, 'a budget of three is fully spent, never overdrawn');
   assert.equal(ledger.consume('propose'), false, 'no credit beyond the budget');
+});
+
+test('L-ATT-7: an exhausted ledger authorizes nothing and spends nothing', () => {
+  const ledger = createLiveAttemptLedger({ analyses: 0, proposals: 0 });
+  const spend = createLiveSendSpender(ledger, 'analyze');
+  assert.deepEqual(spend(), { ok: false, code: 'LIVE_ATTEMPT_EXHAUSTED' });
+  assert.equal(ledger.left('analyze'), 0, 'failed authorization consumes no attempt');
+  assert.deepEqual(spend(), { ok: false, code: 'LIVE_ATTEMPT_EXHAUSTED' }, 'a refused spender stays refused');
+  assert.equal(ledger.consume('analyze'), false, 'still nothing to consume');
 });
 
 // Dormant server proof: with a live transport injected and a seeded attempt

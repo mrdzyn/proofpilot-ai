@@ -16,22 +16,37 @@
 import type { MockPermitKind } from './mock-permits.ts';
 
 /**
+ * Send-boundary authorization result. The transport must check it
+ * synchronously before the single POST and refuse without sending when
+ * authorization is denied.
+ */
+export type LiveSendAuthorization =
+  | Readonly<{ ok: true }>
+  | Readonly<{ ok: false; code: 'LIVE_ATTEMPT_EXHAUSTED' }>;
+
+/**
  * Exactly-once send-boundary spender for one run. The returned callback is
- * safe to invoke from a transport `onSend` hook: the first call consumes one
- * ledger attempt, later calls are no-ops. There is no restore path by
- * construction, so a duplicate hook invocation can never double-spend and no
- * failure path can resurrect the attempt.
+ * invoked from the transport `onSend` hook: the first call atomically
+ * consumes one ledger attempt and authorizes the send; every later call —
+ * and any call against an exhausted ledger — is denied and consumes
+ * nothing, so a duplicate hook invocation or a second run sharing the
+ * spender can never authorize another send. There is no restore path by
+ * construction, so no failure path can resurrect the attempt.
  */
 export function createLiveSendSpender(
   ledger: LiveAttemptLedger,
   kind: MockPermitKind,
-): () => void {
+): () => LiveSendAuthorization {
   let spent = false;
   return () => {
-    if (!spent) {
-      spent = true;
-      ledger.consume(kind);
+    if (spent) {
+      return { ok: false, code: 'LIVE_ATTEMPT_EXHAUSTED' };
     }
+    spent = true;
+    if (!ledger.consume(kind)) {
+      return { ok: false, code: 'LIVE_ATTEMPT_EXHAUSTED' };
+    }
+    return { ok: true };
   };
 }
 

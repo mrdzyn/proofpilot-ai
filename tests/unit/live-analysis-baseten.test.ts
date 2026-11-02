@@ -27,6 +27,11 @@ import {
   type LiveFetch,
   type LiveFetchResponse,
 } from '../../packages/live-analysis/src/baseten-transport.ts';
+import {
+  createLiveAttemptLedger,
+  createLiveSendSpender,
+  type LiveSendAuthorization,
+} from '../../packages/live-analysis/src/live-attempts.ts';
 
 const FAKE_KEY = 'NOT-A-REAL-KEY-0000';
 const APPROVED = BASETEN_DOCUMENTED_DIRECT_MODEL;
@@ -129,11 +134,11 @@ function makeTransport(
 const neverCancelled = (): boolean => false;
 
 function trackedHooks(cancelled: () => boolean = neverCancelled): {
-  hooks: { isCancelled: () => boolean; onSend: () => void };
+  hooks: { isCancelled: () => boolean; onSend: () => { ok: true } };
   sent: { count: number };
 } {
   const sent = { count: 0 };
-  return { hooks: { isCancelled: cancelled, onSend: () => { sent.count += 1; } }, sent };
+  return { hooks: { isCancelled: cancelled, onSend: () => { sent.count += 1; return { ok: true }; } }, sent };
 }
 
 test('L-BT-1: construction pins the exact documented model and refuses aliases', () => {
@@ -354,4 +359,71 @@ test('L-BT-9: response validator is strict about identity, shape, and usage', ()
   const badUsage = validateBasetenResponse(liveBody({ usage: { prompt_tokens: 1.5, completion_tokens: 0, total_tokens: 1 } }), APPROVED);
   assert.equal(badUsage.ok, false);
   if (!badUsage.ok) assert.equal(badUsage.code, 'TRANSPORT_USAGE');
+});
+
+test('L-BT-10: exhausted authorization refuses before send with zero outbound calls', async () => {
+  const { fetchImpl, calls } = makeDouble({ jsonValue: liveBody() });
+  const transport = makeTransport(fetchImpl);
+  const denied = { ok: false as const, code: 'LIVE_ATTEMPT_EXHAUSTED' as const };
+  const reply = await transport.respond(
+    { kind: 'analyze', runId: 'r', sha256: 'a'.repeat(64), videoBytes: 512, videoPart: realPart() },
+    { isCancelled: neverCancelled, onSend: () => denied },
+  );
+  assert.equal(reply.ok, false, 'denied authorization never becomes a reply');
+  if (!reply.ok) {
+    assert.equal(reply.code, 'LIVE_ATTEMPT_EXHAUSTED');
+    assert.ok(!reply.detail.includes(FAKE_KEY), 'no key material in the refusal detail');
+    assert.ok(!reply.detail.includes('Bearer'), 'no auth scheme in the refusal detail');
+  }
+  assert.equal(calls.length, 0, 'zero outbound requests when authorization is denied');
+});
+
+test('L-BT-11: one authorization allows exactly one send across competing spenders', async () => {
+  const { fetchImpl, calls } = makeDouble({ jsonValue: liveBody() });
+  const transport = makeTransport(fetchImpl);
+  const ledger = createLiveAttemptLedger({ analyses: 1, proposals: 0 });
+  const first = createLiveSendSpender(ledger, 'analyze');
+  const second = createLiveSendSpender(ledger, 'analyze');
+  const attempt = (spend: () => LiveSendAuthorization): Promise<unknown> =>
+    transport.respond(
+      { kind: 'analyze', runId: 'r', sha256: 'a'.repeat(64), videoBytes: 512, videoPart: realPart() },
+      { isCancelled: neverCancelled, onSend: spend },
+    );
+  const [a, b] = await Promise.all([attempt(first), attempt(second)]);
+  const winners = [a, b].filter((r) => (r as { ok: boolean }).ok);
+  const refused = [a, b].filter((r) => !(r as { ok: boolean }).ok);
+  assert.equal(winners.length, 1, 'exactly one send authorized');
+  assert.equal(refused.length, 1, 'exactly one sender refused');
+  assert.equal((refused[0] as { code: string }).code, 'LIVE_ATTEMPT_EXHAUSTED');
+  assert.equal(calls.length, 1, 'exactly one outbound POST');
+  assert.equal(ledger.left('analyze'), 0, 'the single attempt is spent');
+  // Repeating the winner's spender authorizes nothing further.
+  const again = await attempt(first);
+  assert.equal((again as { ok: boolean }).ok, false);
+  assert.equal((again as { code: string }).code, 'LIVE_ATTEMPT_EXHAUSTED');
+  assert.equal(calls.length, 1, 'no additional outbound POST');
+  assert.equal(ledger.left('analyze'), 0, 'failed authorization consumes nothing');
+});
+
+test('L-BT-12: failure after an authorized send never restores the spent attempt', async () => {
+  const { fetchImpl, calls } = makeDouble({ status: 500, jsonValue: liveBody() });
+  const transport = makeTransport(fetchImpl);
+  const ledger = createLiveAttemptLedger({ analyses: 1, proposals: 0 });
+  const spend = createLiveSendSpender(ledger, 'analyze');
+  const hooks = { isCancelled: neverCancelled, onSend: spend };
+  const failed = await transport.respond(
+    { kind: 'analyze', runId: 'r', sha256: 'a'.repeat(64), videoBytes: 512, videoPart: realPart() },
+    hooks,
+  );
+  assert.equal((failed as { ok: boolean }).ok, false);
+  assert.equal((failed as { code: string }).code, 'TRANSPORT_HTTP');
+  assert.equal(calls.length, 1, 'the authorized send went out exactly once');
+  assert.equal(ledger.left('analyze'), 0, 'the HTTP failure did not restore the attempt');
+  const retry = await transport.respond(
+    { kind: 'analyze', runId: 'r', sha256: 'a'.repeat(64), videoBytes: 512, videoPart: realPart() },
+    hooks,
+  );
+  assert.equal((retry as { ok: boolean }).ok, false);
+  assert.equal((retry as { code: string }).code, 'LIVE_ATTEMPT_EXHAUSTED');
+  assert.equal(calls.length, 1, 'no retry outbound POST after exhaustion');
 });

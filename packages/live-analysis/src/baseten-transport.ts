@@ -22,9 +22,11 @@
  *   (`'stop'`) may become a result; truncated, refused, or unexpected finish
  *   reasons never turn partial output into a success;
  * - send-boundary accounting: the caller's `onSend` hook fires exactly once
- *   immediately before the single POST; the attempt is spent there and never
- *   restored by timeout, cancel-after-send, HTTP error, malformed reply,
- *   or model mismatch;
+ *   immediately before the single POST and its authorization is enforced in
+ *   the same synchronous block (denial refuses `LIVE_ATTEMPT_EXHAUSTED`
+ *   with zero outbound requests); an authorized attempt is spent there and
+ *   never restored by timeout, cancel-after-send, HTTP error, malformed
+ *   reply, or model mismatch;
  * - cancellation and deadline: `isCancelled` aborts mid-flight; the
  *   request deadline aborts the socket; a cancelled-before-send never
  *   touches the double;
@@ -38,6 +40,7 @@ import { BASETEN_APPROVED_ENDPOINT, BASETEN_DOCUMENTED_DIRECT_MODEL } from './co
 import { maxTokensFor } from './baseten-request.ts';
 import type { VideoPart } from './baseten-request.ts';
 import type { MockPermitKind } from './mock-permits.ts';
+import type { LiveSendAuthorization } from './live-attempts.ts';
 import type { SanitizedUsage } from './responses.ts';
 
 /** Fixed analysis preamble: free-form observations + stated uncertainty. */
@@ -64,6 +67,7 @@ const REJECTED_MODEL_ALIASES: ReadonlyArray<string> = [
 
 export type BasetenTransportRefusal =
   | 'MODEL_UNAVAILABLE_OR_UNAPPROVED'
+  | 'LIVE_ATTEMPT_EXHAUSTED'
   | 'NO_CREDENTIAL'
   | 'TRANSPORT_MISCONFIGURED'
   | 'TRANSPORT_HTTP'
@@ -101,9 +105,12 @@ export interface BasetenTransportHooks {
    * Fired exactly once, synchronously immediately before the single POST is
    * sent. The caller spends the live attempt authorization here — at the
    * irreversible outbound-send boundary — and never restores it, whatever
-   * the outcome. Not fired when validation or pre-send cancellation refuses.
+   * the outcome. The transport checks the returned authorization
+   * synchronously and refuses with `LIVE_ATTEMPT_EXHAUSTED`, without
+   * sending, when it is denied. Not fired when validation or pre-send
+   * cancellation refuses.
    */
-  readonly onSend: () => void;
+  readonly onSend: () => LiveSendAuthorization;
 }
 
 export interface BasetenTransport {
@@ -315,6 +322,17 @@ export function createBasetenTransport(
           throw new BasetenCancelled();
         }
         const body: BasetenChatBody = buildBasetenChatBody({ model, kind: request.kind, videoPart: request.videoPart });
+        // Irreversible outbound-send boundary: the spend hook fires exactly
+        // once, synchronously, and its authorization is checked in the same
+        // synchronous block — no await sits between check and send, so no
+        // check-then-send race is possible. A denial refuses without any
+        // outbound request and without arming any timer. Everything after an
+        // authorized send — timeout, cancel, HTTP error, malformed reply,
+        // mismatch — keeps the spent attempt.
+        const authorization = hooks.onSend();
+        if (!authorization.ok) {
+          return refusal('LIVE_ATTEMPT_EXHAUSTED', 'live attempt authorization exhausted; no provider request was sent');
+        }
         const ctrl = new AbortController();
         let timedOut = false;
         const timer = setTimeout(() => {
@@ -327,11 +345,6 @@ export function createBasetenTransport(
           }
         }, 25);
         const started = Date.now();
-        // Irreversible outbound-send boundary: the spend hook fires exactly
-        // once, synchronously before the single POST. Everything after this
-        // point — timeout, cancel, HTTP error, malformed reply, mismatch —
-        // keeps the spent attempt.
-        hooks.onSend();
         try {
           const response = await fetchImpl(BASETEN_APPROVED_ENDPOINT, {
             method: 'POST',

@@ -631,10 +631,13 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
         kind === 'analyze'
           ? sanitizeLiveAnalysisResponse(raw, approved)
           : sanitizeLiveProposalResponse(raw, approved);
-      // Send-boundary spend: exactly one live attempt is consumed when the
-      // transport actually sends (its onSend hook), and never restored —
-      // timeout, cancel-after-send, HTTP error, malformed reply, model
-      // mismatch, and sanitizer refusal all keep the spent attempt.
+      // Send-boundary spend: the spender authorizes at most one send per
+      // run (its onSend hook), and the transport enforces that
+      // authorization synchronously before the single POST — an exhausted
+      // ledger blocks the outbound request even though the earlier
+      // pre-check passed. Nothing is ever restored: timeout,
+      // cancel-after-send, HTTP error, malformed reply, model mismatch,
+      // and sanitizer refusal all keep the spent attempt.
       const spendSend = createLiveSendSpender(liveAttempts, kind);
       const settled = settleRun(run, kind,
         liveTransport.respond(
