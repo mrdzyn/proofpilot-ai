@@ -73,6 +73,10 @@ export interface LiveAttemptLedger {
 }
 
 function floorCount(value: unknown): number {
+  // The repeatable standing policy opts in with `unlimited` (Infinity):
+  // consuming never depletes it, while every other hostile seed floors to
+  // zero. Proposals stay numeric-only (the CLI refuses any nonzero value).
+  if (value === Number.POSITIVE_INFINITY) return Number.POSITIVE_INFINITY;
   return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : 0;
 }
 

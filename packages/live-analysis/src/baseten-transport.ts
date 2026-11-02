@@ -244,24 +244,12 @@ export function validateBasetenResponse(
   if (typeof first !== 'object' || first === null) {
     return { ok: false, code: 'TRANSPORT_SHAPE' };
   }
-  const message = first['message'] as Record<string, unknown> | null | undefined;
-  const text = (typeof message === 'object' && message !== null ? message['content'] : undefined) as unknown;
-  if (typeof text !== 'string' || text.length === 0) {
-    return { ok: false, code: 'TRANSPORT_SHAPE' };
-  }
+  // Finish reason decides BEFORE content: a `length` stop is TRUNCATED even
+  // when the content is empty or absent (D9-LIVE-02 returned 2xx JSON that
+  // the old order misreported as SHAPE). Only an explicitly documented
+  // successful completion ('stop') may become a result; truncated, refused,
+  // or unexpected finish reasons never turn partial output into a success.
   const finishReason = first['finish_reason'];
-  const usage = record['usage'] as Record<string, unknown> | null | undefined;
-  const prompt = typeof usage === 'object' && usage !== null ? usage['prompt_tokens'] : undefined;
-  const completion = typeof usage === 'object' && usage !== null ? usage['completion_tokens'] : undefined;
-  const total = typeof usage === 'object' && usage !== null ? usage['total_tokens'] : undefined;
-  const isUsageInt = (value: unknown): value is number =>
-    typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
-  if (!isUsageInt(prompt) || !isUsageInt(completion) || !isUsageInt(total)) {
-    return { ok: false, code: 'TRANSPORT_USAGE' };
-  }
-  // Completion validation: only an explicitly documented successful
-  // completion ('stop') may become a result. Truncated, refused, or
-  // unexpected finish reasons never turn partial output into a success.
   if (finishReason === 'length') {
     return { ok: false, code: 'TRANSPORT_TRUNCATED' };
   }
@@ -270,6 +258,20 @@ export function validateBasetenResponse(
   }
   if (finishReason !== 'stop') {
     return { ok: false, code: 'TRANSPORT_SHAPE' };
+  }
+  const message = first['message'] as Record<string, unknown> | null | undefined;
+  const text = (typeof message === 'object' && message !== null ? message['content'] : undefined) as unknown;
+  if (typeof text !== 'string' || text.length === 0) {
+    return { ok: false, code: 'TRANSPORT_SHAPE' };
+  }
+  const usage = record['usage'] as Record<string, unknown> | null | undefined;
+  const prompt = typeof usage === 'object' && usage !== null ? usage['prompt_tokens'] : undefined;
+  const completion = typeof usage === 'object' && usage !== null ? usage['completion_tokens'] : undefined;
+  const total = typeof usage === 'object' && usage !== null ? usage['total_tokens'] : undefined;
+  const isUsageInt = (value: unknown): value is number =>
+    typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+  if (!isUsageInt(prompt) || !isUsageInt(completion) || !isUsageInt(total)) {
+    return { ok: false, code: 'TRANSPORT_USAGE' };
   }
   return {
     ok: true,

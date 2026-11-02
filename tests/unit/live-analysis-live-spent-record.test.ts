@@ -15,6 +15,7 @@ import path from 'node:path';
 import {
   checkSnapshotContinuity,
   LiveSpendRecordError,
+  STANDING_APPROVAL_ID_RE,
   openSpentRecord,
   remainingLiveBudget,
 } from '../../packages/live-analysis/src/live-spent-record.ts';
@@ -529,4 +530,34 @@ test('L-REC-10: empty file is ambiguous with truncation: refused without approva
   const rec = openSpentRecord(p, { bootstrapApprovalId: BOOT });
   assert.equal(rec.countSpent('analyze'), 0);
   rec.release();
+});
+
+test('L-REC-18: the record exposes its genesis approval identity for server binding', async () => {
+  const p = sub('identity-18.jsonl');
+  const id = 'd9live-v2-test-rec-18';
+  const rec = openSpentRecord(p, { bootstrapApprovalId: id });
+  assert.equal(rec.approvalId(), id, 'fresh bootstrap anchors the supplied identity');
+  rec.record({ runId: 'r-1', sha256: SHA_A, kind: 'analyze', spentAt: 1 });
+  rec.release();
+  const reopened = openSpentRecord(p);
+  assert.equal(reopened.approvalId(), id, 'the identity survives spends and reopens');
+  reopened.release();
+  const foreign = openSpentRecord(p, { bootstrapApprovalId: 'd9live-v2-test-rec-18-other' });
+  assert.equal(foreign.approvalId(), id, 'a different bootstrap id never re-genesises or replaces the anchored identity');
+  foreign.release();
+});
+
+test('L-REC-19: standing namespace is versioned; historical identities never match it', () => {
+  for (const good of ['d9live-v2-owner-session-1', 'd9live-v2-a', 'd9live-v2-TEST-99-x']) {
+    assert.equal(STANDING_APPROVAL_ID_RE.test(good), true, `${good} carries the versioned namespace`);
+  }
+  for (const bad of ['d9i1-test-bootstrap-act-5', 'd9live-v1-old', 'd9live-v2-', 'meta-models/muse-spark-open', '', 'd9live-v2-x!y']) {
+    assert.equal(STANDING_APPROVAL_ID_RE.test(bad), false, `${JSON.stringify(bad)} is not a standing identity`);
+  }
+});
+
+test('L-REC-20: unlimited budgets survive recorded spend; hostile seeds still floor', async () => {
+  assert.equal(remainingLiveBudget(Number.POSITIVE_INFINITY, 0), Number.POSITIVE_INFINITY);
+  assert.equal(remainingLiveBudget(Number.POSITIVE_INFINITY, 7), Number.POSITIVE_INFINITY, 'spends never deplete unlimited');
+  assert.equal(remainingLiveBudget(3, 1), 2, 'finite budgets still subtract');
 });

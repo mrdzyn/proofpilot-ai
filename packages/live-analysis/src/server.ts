@@ -40,6 +40,7 @@ import {
 import { createLiveAttemptLedger, createLiveSendSpender } from './live-attempts.ts';
 import {
   LiveSpendRecordError,
+  STANDING_APPROVAL_ID_RE,
   openSpentRecord,
   remainingLiveBudget,
   type LiveSpentRecord,
@@ -60,7 +61,8 @@ export type StartupRefusal =
   | 'LIVE_RECORD_LOCKED'
   | 'LIVE_SPEND_RECORD_CORRUPT'
   | 'LIVE_RECORD_UNSAFE'
-  | 'LIVE_SPEND_RECORD_ROLLBACK';
+  | 'LIVE_SPEND_RECORD_ROLLBACK'
+  | 'LIVE_APPROVAL_MISMATCH';
 
 /**
  * Live-attempt precheck decision table (unit-tested): D9 approval first,
@@ -310,7 +312,10 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
   // Durable spent-run record with exclusive ownership: missing or empty
   // records initialize only with an explicit bootstrap approval; corrupt,
   // unsafe, rolled-back, or contended state refuses startup (fail closed,
-  // never re-arm, never share authorization across processes).
+  // never re-arm, never share authorization across processes). A supplied
+  // bootstrap id is bound against the record's genesis: a foreign genesis
+  // (for example a historical one-shot record presented to a new session)
+  // never authorizes, so records and geneses cannot be repurposed.
   let spentRecord: LiveSpentRecord | null = null;
   if (liveTransport !== null && options.liveSpentRecordPath !== undefined && options.liveSpentRecordPath !== '') {
     try {
@@ -324,6 +329,24 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
         });
       }
       throw error;
+    }
+    if (options.liveBootstrapApprovalId !== undefined &&
+      spentRecord.approvalId() !== options.liveBootstrapApprovalId) {
+      try { spentRecord.release(); } catch { /* best-effort lock release */ }
+      throw Object.assign(new Error('companion refuses to start: supplied approval does not match the record genesis (LIVE_APPROVAL_MISMATCH)'), {
+        code: 'LIVE_APPROVAL_MISMATCH' satisfies StartupRefusal,
+      });
+    }
+    // Repeatable standing-policy sessions (unlimited analyses) run only
+    // under the versioned standing approval identity: a historical one-shot
+    // genesis never carries the namespace, so it can never back unlimited
+    // sends even when its spent count would otherwise allow them.
+    if (options.liveAnalysesLeft === Number.POSITIVE_INFINITY &&
+      !STANDING_APPROVAL_ID_RE.test(spentRecord.approvalId())) {
+      try { spentRecord.release(); } catch { /* best-effort lock release */ }
+      throw Object.assign(new Error('companion refuses to start: unlimited analyses require the versioned standing approval identity (LIVE_APPROVAL_MISMATCH)'), {
+        code: 'LIVE_APPROVAL_MISMATCH' satisfies StartupRefusal,
+      });
     }
   }
   // Live provider-attempt budget, separate from the mock success quota, minus
@@ -446,11 +469,20 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
       quota: { analysesLeft, proposalsLeft },
       // Live provider-attempt budget: effective allocation minus durable
       // recorded spend. Reported counts only — never a billing figure.
+      // `unlimited` marks the repeatable standing-policy opt-in (Infinity
+      // serializes as null, so the flag carries the meaning instead);
+      // `spent` is the durable per-action spend for run/attempt counters.
       live: {
         transport: words.liveTransport,
+        armed: liveTransport !== null,
         d9: words.d9,
         modelOk: words.modelOk,
+        unlimited: options.liveAnalysesLeft === Number.POSITIVE_INFINITY,
         attemptsLeft: { analyze: liveAttempts.left('analyze'), propose: liveAttempts.left('propose') },
+        spent: {
+          analyze: spentRecord?.countSpent('analyze') ?? 0,
+          propose: spentRecord?.countSpent('propose') ?? 0,
+        },
         spentRecord: options.liveSpentRecordPath !== undefined && options.liveSpentRecordPath !== '' ? 'configured' : 'none',
         mediaPin: liveMediaSha256 !== undefined,
         poisoned: livePoisoned,
@@ -812,6 +844,13 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
       // never happens. Nothing is ever restored: timeout, cancel-after-send,
       // HTTP error, malformed reply, model mismatch, and sanitizer refusal
       // all keep the spent attempt.
+      //
+      // Durable run identity: the local run counter resets per companion
+      // process, so the ledger entry id suffixes the per-ledger spend
+      // sequence (`<local-run-id>#spend-<n>`). The sequence is stable within
+      // a ledger — single-flight serializes sends and the exclusive lock
+      // serializes processes — so repeated requests, including after a
+      // restart, always land under unique durable run ids.
       const spendSend = createLiveSendSpender(liveAttempts, kind, () => {
         // Unreachable when startup enforced the record rule (nonzero budget
         // requires a path), but a missing record must fail loudly — never
@@ -819,7 +858,8 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
         if (spentRecord === null) {
           throw new LiveSpendRecordError('LIVE_SPEND_RECORD_FAILED', 'live budget requires a spent-record path');
         }
-        spentRecord.record({ runId: run.runId, sha256, kind, spentAt: now() });
+        const seq = spentRecord.countSpent(kind) + 1;
+        spentRecord.record({ runId: `${run.runId}#spend-${seq}`, sha256, kind, spentAt: now() });
       });
       // A record-append failure surfaces as a rejected send promise (the
       // async transport body runs the hook before any await, but a throw

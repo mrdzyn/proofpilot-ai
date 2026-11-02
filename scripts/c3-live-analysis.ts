@@ -4,16 +4,22 @@
 //   node scripts/c3-live-analysis.ts [--port 5188] [--serve <distDir>|none]
 //       [--base-url https://inference.baseten.co/v1]
 //       [--mock-latency-ms 1200] [--analyses 3] [--proposals 1]
-//       [--live [--live-analyses 1] [--live-proposals 0]
+//       [--live [--live-analyses 1|unlimited] [--live-proposals 0]
 //        [--live-spent-record <path>] [--live-media-sha256 <hex>]
 //        [--live-approval-id <id>]]
 //
-// Owner authorization bound (PR #34: one F01 analysis, zero proposals):
-// `--live` refuses before companion startup unless `--live-analyses` is 0
-// (zero-budget diagnostic) or 1 and `--live-proposals` is 0; a positive
-// live-analysis budget additionally requires `--live-media-sha256` to equal
-// the approved F01 SHA-256 exactly. Numeric live-budget flags must be
-// canonical non-negative integers (no junk suffixes, no negatives).
+// Owner standing policy (issue #39: repeatable manually initiated analyses,
+// zero proposals): `--live` refuses before companion startup unless
+// `--live-proposals` is 0. `--live-analyses` is 0 (zero-budget diagnostic),
+// a finite non-negative integer, or `unlimited` (explicit opt-in; the ledger
+// still spends exactly once per send and every spend is durably recorded).
+// A positive live-analysis budget additionally requires `--live-media-sha256`
+// to equal the approved F01 SHA-256 exactly, a spent-record path, and — for
+// `unlimited` — the versioned standing approval identity (`d9live-v2-…`).
+// Every provider attempt additionally needs a fresh single-use terminal
+// permit plus an explicit dashboard click: the budget never sends on its own,
+// never retries, and never runs in parallel. Numeric live-budget flags must
+// be canonical non-negative integers (no junk suffixes, no negatives).
 //
 // Terminal commands (stdin): pair | permit <analyze|propose> <sha256> <bytes>
 // | revoke | status | quit. Pairing codes and permits are created ONLY here,
@@ -53,6 +59,7 @@ import {
   checkAccountAvailability,
   type PreflightFetch,
 } from '../packages/live-analysis/src/preflight.ts';
+import { STANDING_APPROVAL_ID_RE } from '../packages/live-analysis/src/live-spent-record.ts';
 
 function flagValue(argv: string[], name: string): string | null {
   const i = argv.indexOf(name);
@@ -71,16 +78,18 @@ function flagInt(argv: string[], name: string, fallback: number): number {
 }
 
 /**
- * Strict canonical non-negative integer parsing for live-budget flags.
- * `parseInt` truncation ("1junk" -> 1) must never widen an authorization
- * bound, so only all-digit strings pass; anything else refuses before the
- * companion starts, with zero listener and zero network.
+ * Strict canonical parsing for the live-analyses budget flag. Accepts
+ * all-digit non-negative integers or the literal `unlimited` (explicit
+ * standing-policy opt-in, Infinity). `parseInt` truncation ("1junk" -> 1)
+ * must never widen an authorization bound, so anything else refuses before
+ * the companion starts, with zero listener and zero network.
  */
 function flagLiveBudget(argv: string[], name: string, fallback: number): number {
   const raw = flagValue(argv, name);
   if (raw === null) return fallback;
+  if (name === '--live-analyses' && raw === 'unlimited') return Number.POSITIVE_INFINITY;
   if (!/^[0-9]+$/.test(raw)) {
-    console.error(`refused: ${name} must be a canonical non-negative integer (got ${JSON.stringify(raw)})`);
+    console.error(`refused: ${name} must be a canonical non-negative integer${name === '--live-analyses' ? " or 'unlimited'" : ''} (got ${JSON.stringify(raw)})`);
     process.exit(2);
   }
   const n = Number.parseInt(raw, 10);
@@ -119,6 +128,7 @@ let liveTransport: BasetenTransport | null = null;
 let liveModel: string | undefined;
 let liveAnalysesLeft = 0;
 let liveProposalsLeft = 0;
+let liveUnlimited = false;
 let liveSpentRecordPath: string | undefined;
 let liveMediaSha256: string | undefined;
 let liveBootstrapApprovalId: string | undefined;
@@ -184,25 +194,36 @@ if (liveRequested || preflightRequested) {
   liveSpentRecordPath = flagValue(argv, '--live-spent-record') ?? undefined;
   liveMediaSha256 = flagValue(argv, '--live-media-sha256') ?? undefined;
   liveBootstrapApprovalId = flagValue(argv, '--live-approval-id') ?? undefined;
-  // Owner authorization bound (PR #34: one F01 analysis, zero proposals).
-  // Enforced here in the production CLI — before the companion starts and
-  // before any transport exists — so no flag combination can arm more than
-  // one analysis or any proposal request. The shared ledger stays general
-  // for test doubles; this gate is the production policy.
+  // Owner standing policy (issue #39: repeatable manually initiated
+  // analyses, zero proposals). Enforced here in the production CLI — before
+  // the companion starts and before any transport exists. `--live-analyses`
+  // is 0 (diagnostic), a finite count, or `unlimited`; `--live-proposals`
+  // is always 0. The budget alone authorizes nothing: every provider attempt
+  // additionally needs a fresh single-use terminal permit plus an explicit
+  // dashboard click (no auto-send, no retry, no parallel sends). The shared
+  // ledger stays general for test doubles; this gate is the production
+  // policy.
   if (liveProposalsLeft !== 0) {
     console.error('refused: --live-proposals must be 0 (no proposal request is approved)');
     process.exit(2);
   }
-  if (liveAnalysesLeft > 1) {
-    console.error('refused: --live-analyses must be 0 or 1 (at most one live analysis is approved)');
-    process.exit(2);
-  }
-  // The approved analysis is bound to the certified F01 clip. A positive
+  liveUnlimited = liveAnalysesLeft === Number.POSITIVE_INFINITY;
+  // The approved analyses are bound to the certified F01 clip. A positive
   // live-analysis budget without the exact owner-approved media pin refuses
   // here — omission, mismatch, and malformed pins alike — so a different
   // synthetic or private video can never be armed by accident.
   if (liveAnalysesLeft > 0 && liveMediaSha256 !== APPROVED_F01_MEDIA_SHA256) {
     console.error('refused: a positive live-analysis budget requires --live-media-sha256 to be exactly the approved F01 SHA-256');
+    process.exit(2);
+  }
+  // Repeatable sessions run only under the versioned standing approval
+  // identity: the bootstrap id must carry the `d9live-v2-` namespace, so a
+  // legacy or historical approval string can never open an unlimited ledger.
+  // (The server re-checks the record genesis itself at startup, so pointing
+  // an unlimited run at a historical record refuses there too.)
+  if (liveUnlimited && liveBootstrapApprovalId !== undefined &&
+    !STANDING_APPROVAL_ID_RE.test(liveBootstrapApprovalId)) {
+    console.error('refused: --live-analyses unlimited requires a versioned standing approval id (--live-approval-id d9live-v2-…)');
     process.exit(2);
   }
   if (liveAnalysesLeft + liveProposalsLeft > 0 && (liveSpentRecordPath === undefined || liveSpentRecordPath === '')) {
@@ -276,7 +297,7 @@ const rl = createInterface({ input: process.stdin, output: process.stdout, termi
 if (liveRequested) {
   // ARMED banner: it never prints credential values, only presence.
   console.log(`ui-c3-02 companion (LIVE Baseten path ARMED) on http://127.0.0.1:${String(companion.port)}`);
-  console.log(`live: model=${liveModel ?? 'none'} endpoint=${BASETEN_APPROVED_BASE_URL} budget=analyses:${liveAnalysesLeft} proposals:${liveProposalsLeft} record=${liveSpentRecordPath ?? 'none'} pin=${liveMediaSha256 === undefined ? 'none' : 'set'} credential=BASETEN_API_KEY present`);
+  console.log(`live: model=${liveModel ?? 'none'} endpoint=${BASETEN_APPROVED_BASE_URL} budget=analyses:${liveUnlimited ? 'unlimited' : liveAnalysesLeft} proposals:${liveProposalsLeft} record=${liveSpentRecordPath ?? 'none'} pin=${liveMediaSha256 === undefined ? 'none' : 'set'} credential=BASETEN_API_KEY present`);
 } else {
   console.log(`ui-c3-02 companion (mock transport, no live inference) on http://127.0.0.1:${String(companion.port)}`);
 }

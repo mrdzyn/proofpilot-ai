@@ -333,3 +333,97 @@ test('L-ACT-5: effective budget subtracts durable spend; restart cannot re-arm',
   );
   assert.equal(calls.count, 0, 'zero provider calls across both instances');
 });
+
+test('L-ACT-6: a supplied approval id binds the record genesis — foreign geneses refuse startup', async () => {
+  const calls = { count: 0 };
+  const recordPath = path.join(root, 'binding-spent.jsonl');
+  const seed = openSpentRecord(recordPath, { bootstrapApprovalId: 'd9live-v2-test-act-6' });
+  seed.release();
+  // Reopening with the same standing identity proceeds (restart path).
+  const same: Companion = await createCompanion({
+    port: 5195,
+    bind: false,
+    serveRoot: null,
+    uploads: await freshUploads('binding-same'),
+    session: new LocalSessionManager(),
+    permits: new OfflineMockPermitLedger(),
+    liveTransport: liveTransportDouble(calls),
+    liveModel: D9_APPROVED_MODEL,
+    liveAnalysesLeft: Number.POSITIVE_INFINITY,
+    liveProposalsLeft: 0,
+    liveSpentRecordPath: recordPath,
+    liveBootstrapApprovalId: 'd9live-v2-test-act-6',
+    liveMediaSha256: SHA_A,
+  });
+  await same.close();
+  // A different approval id on the same record refuses — the foreign
+  // genesis (here standing, but not this session's) never authorizes.
+  await assert.rejects(
+    createCompanion({
+      port: 5196,
+      bind: false,
+      serveRoot: null,
+      uploads: await freshUploads('binding-foreign'),
+      session: new LocalSessionManager(),
+      permits: new OfflineMockPermitLedger(),
+      liveTransport: liveTransportDouble(calls),
+      liveModel: D9_APPROVED_MODEL,
+      liveAnalysesLeft: 1,
+      liveProposalsLeft: 0,
+      liveSpentRecordPath: recordPath,
+      liveBootstrapApprovalId: 'd9live-v2-test-act-6-other',
+      liveMediaSha256: SHA_A,
+    }),
+    (error: unknown) => error instanceof Error && error.message.includes('LIVE_APPROVAL_MISMATCH'),
+    'pointing a new session at an existing ledger refuses instead of repurposing it',
+  );
+  assert.equal(calls.count, 0, 'zero provider calls on refused startup');
+});
+
+test('L-ACT-7: unlimited analyses require the versioned standing identity', async () => {
+  const calls = { count: 0 };
+  const legacyPath = path.join(root, 'legacy-spent.jsonl');
+  const legacy = openSpentRecord(legacyPath, { bootstrapApprovalId: 'd9i1-test-bootstrap-act-7' });
+  legacy.release();
+  // A historical (non-namespaced) genesis can never back unlimited sends.
+  await assert.rejects(
+    createCompanion({
+      port: 5197,
+      bind: false,
+      serveRoot: null,
+      uploads: await freshUploads('unlimited-legacy'),
+      session: new LocalSessionManager(),
+      permits: new OfflineMockPermitLedger(),
+      liveTransport: liveTransportDouble(calls),
+      liveModel: D9_APPROVED_MODEL,
+      liveAnalysesLeft: Number.POSITIVE_INFINITY,
+      liveProposalsLeft: 0,
+      liveSpentRecordPath: legacyPath,
+      liveBootstrapApprovalId: 'd9i1-test-bootstrap-act-7',
+      liveMediaSha256: SHA_A,
+    }),
+    (error: unknown) => error instanceof Error && error.message.includes('LIVE_APPROVAL_MISMATCH'),
+    'unlimited on a historical record refuses instead of repurposing it',
+  );
+  // The versioned standing identity opens unlimited cleanly, zero budget
+  // still arms for diagnostics, and status reports the unlimited marker.
+  const standingPath = path.join(root, 'standing-spent.jsonl');
+  const standing: Companion = await createCompanion({
+    port: 5198,
+    bind: false,
+    serveRoot: null,
+    uploads: await freshUploads('unlimited-standing'),
+    session: new LocalSessionManager(),
+    permits: new OfflineMockPermitLedger(),
+    liveTransport: liveTransportDouble(calls),
+    liveModel: D9_APPROVED_MODEL,
+    liveAnalysesLeft: Number.POSITIVE_INFINITY,
+    liveProposalsLeft: 0,
+    liveSpentRecordPath: standingPath,
+    liveBootstrapApprovalId: 'd9live-v2-test-act-7',
+    liveMediaSha256: SHA_A,
+  });
+  closers.push(() => standing.close().catch(() => undefined));
+  await standing.close();
+  assert.equal(calls.count, 0, 'zero provider calls on refused and clean startups');
+});

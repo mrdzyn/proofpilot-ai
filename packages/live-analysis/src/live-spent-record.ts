@@ -100,6 +100,16 @@ type StoredLine = GenesisLine | SpendLine;
 const GENESIS_PREV = 'GENESIS-LIVE-SPEND-RECORD-v1';
 const APPROVAL_ID_RE = /^[A-Za-z0-9][A-Za-z0-9-]{2,79}$/;
 
+/**
+ * Standing-policy approval-identity namespace (issue #39): repeatable
+ * owner-supervised sessions bootstrap (and re-open) only under a versioned
+ * `d9live-v2-` identity. Historical one-shot geneses (D9-LIVE-01/D9-LIVE-02
+ * and earlier) never carry this prefix, so they can never authorize a
+ * repeatable session — pointing a repeatable run at a historical record
+ * refuses instead of repurposing it.
+ */
+export const STANDING_APPROVAL_ID_RE = /^d9live-v2-[A-Za-z0-9][A-Za-z0-9-]{0,70}$/;
+
 function digestOf(prev: string, body: string): string {
   return createHash('sha256').update(`${prev}\n${body}`, 'utf8').digest('hex');
 }
@@ -198,6 +208,13 @@ export interface LiveSpentRecord {
   /** Number of recorded spent attempts for the action. */
   countSpent(kind: MockPermitKind): number;
   /**
+   * The owner approval id anchored in this record's genesis. The server
+   * binds a supplied bootstrap id against it: a foreign genesis never
+   * authorizes, so historical records cannot be repurposed for new
+   * sessions.
+   */
+  approvalId(): string;
+  /**
    * Record one authorized send: verify lock ownership, append, fsync, and
    * advance the lock tip. Throws LiveSpendRecordError on any failure; the
    * caller must treat the send as failed and poison the live path.
@@ -252,6 +269,7 @@ export function checkSnapshotContinuity(
 
 interface RecordSnapshot extends ChainSnapshot {
   readonly empty: boolean;
+  readonly genesisApprovalId: string | null;
 }
 
 function readSnapshot(recordPath: string): RecordSnapshot {
@@ -264,6 +282,7 @@ function readSnapshot(recordPath: string): RecordSnapshot {
       else proposals += 1;
     }
   }
+  const first = lines.length > 0 ? lines[0] : undefined;
   return {
     tip: lines.length > 0 && lines[lines.length - 1] !== undefined
       ? (lines[lines.length - 1] as StoredLine).digest
@@ -271,6 +290,7 @@ function readSnapshot(recordPath: string): RecordSnapshot {
     analyses,
     proposals,
     empty: lines.length === 0,
+    genesisApprovalId: first !== undefined && first.entry === 'genesis' ? first.approvalId : null,
   };
 }
 
@@ -350,6 +370,7 @@ export function openSpentRecord(
   let tip: string;
   let analyses: number;
   let proposals: number;
+  let genesisApprovalId: string;
   try {
     const authoritative = readSnapshot(recordPath);
     const continuity = checkSnapshotContinuity(
@@ -376,6 +397,15 @@ export function openSpentRecord(
         );
       }
       tip = writeGenesis(recordPath, bootstrapId);
+      genesisApprovalId = bootstrapId;
+    } else {
+      // A non-empty chain always begins with exactly one approval genesis
+      // (verified by readChain); a foreign genesis never authorizes here —
+      // the server binds any supplied bootstrap id against it.
+      if (authoritative.genesisApprovalId === null) {
+        throw new LiveSpendRecordError('LIVE_SPEND_RECORD_CORRUPT', 'record has no approval genesis');
+      }
+      genesisApprovalId = authoritative.genesisApprovalId;
     }
   } catch (error) {
     releaseOwnedLock(lockPath, nonce);
@@ -404,6 +434,9 @@ export function openSpentRecord(
   return {
     countSpent(kind: MockPermitKind): number {
       return kind === 'analyze' ? analyses : proposals;
+    },
+    approvalId(): string {
+      return genesisApprovalId;
     },
     record(entry: SpentAttemptEntry): void {
       checkEntryShape(entry);
@@ -666,6 +699,9 @@ function refuseContendedLock(lockPath: string): never {
  * floored at zero. Hostile configured values floor to zero, never to credit.
  */
 export function remainingLiveBudget(configured: unknown, recordedSpent: number): number {
+  // Unlimited standing-policy budgets survive recorded spend: every attempt
+  // still appends its own durable spend (the ledger only grows).
+  if (configured === Number.POSITIVE_INFINITY) return Number.POSITIVE_INFINITY;
   const base = typeof configured === 'number' && Number.isSafeInteger(configured) && configured > 0
     ? configured
     : 0;

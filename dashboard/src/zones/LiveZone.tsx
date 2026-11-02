@@ -57,6 +57,10 @@ interface Refusal {
   recovery: string;
 }
 
+const quotaSpentRecovery = (live: boolean): string => live
+  ? 'The live spend ledger is exhausted for this record path. Every send was permanently recorded; do not restart to re-arm — no further live request is possible on this record.'
+  : 'The demo quota for this companion session is exhausted. Restart the companion for a fresh demo budget.';
+
 const RECOVERY: Record<string, string> = {
   NO_PERMIT: 'Ask the owner to run the terminal permit command for this exact hash, bytes and action BEFORE uploading, then press Upload again.',
   QUOTA_SPENT: 'The demo quota for this companion session is exhausted. Restart the companion for a fresh demo budget.',
@@ -95,6 +99,37 @@ export function LiveZone() {
   const [run, setRun] = useState<RunResult | null>(null);
   const [refusal, setRefusal] = useState<Refusal | null>(null);
   const [kind, setKind] = useState<'analyze' | 'propose'>('analyze');
+  // Live-mode awareness (issue #39): null means the mock path. Resolved from
+  // /api/status after pairing and refreshed after every settled run, so the
+  // labels, counters, and recovery text always describe the armed path.
+  const [liveMode, setLiveMode] = useState<{ unlimited: boolean; left: number | null; spent: number } | null>(null);
+
+  const refreshLiveMode = async (token: string): Promise<void> => {
+    try {
+      const data = await api<{
+        ok: boolean;
+        live?: {
+          armed?: boolean;
+          unlimited?: boolean;
+          attemptsLeft?: { analyze?: number | null };
+          spent?: { analyze?: number };
+        };
+      }>('/api/status', { method: 'GET' }, token);
+      if (data.ok && data.live?.armed === true) {
+        setKind('analyze');
+        setLiveMode({
+          unlimited: data.live.unlimited === true,
+          left: typeof data.live.attemptsLeft?.analyze === 'number' ? data.live.attemptsLeft.analyze : null,
+          spent: typeof data.live.spent?.analyze === 'number' ? data.live.spent.analyze : 0,
+        });
+      } else if (data.ok) {
+        setLiveMode(null);
+      }
+      // Non-ok status: keep the previous mode (safe mock assumption stands).
+    } catch {
+      // Status unreadable: stay on the safe mock assumption.
+    }
+  };
   const pollRef = useRef<number | null>(null);
   const sessionRef = useRef<string | null>(null);
   sessionRef.current = session;
@@ -131,15 +166,36 @@ export function LiveZone() {
       );
       if (out.ok && typeof out.sessionToken === 'string') {
         setSession(out.sessionToken);
-        const status = await api<{ ok: boolean; config?: { modelOk?: boolean } }>(
+        const status = await api<{
+          ok: boolean;
+          config?: { modelOk?: boolean };
+          live?: {
+            armed?: boolean;
+            unlimited?: boolean;
+            attemptsLeft?: { analyze?: number | null };
+            spent?: { analyze?: number };
+          };
+        }>(
           '/api/status',
           { method: 'GET' },
           out.sessionToken,
         );
         if (status.ok && status.config?.modelOk === false) {
           // Live model not approved for this companion; the mock demo below still runs.
+          setLiveMode(null);
           setPhase('ready');
         } else if (status.ok) {
+          if (status.live?.armed === true) {
+            // Owner-armed live path: label it as live before any action.
+            setKind('analyze');
+            setLiveMode({
+              unlimited: status.live.unlimited === true,
+              left: typeof status.live.attemptsLeft?.analyze === 'number' ? status.live.attemptsLeft.analyze : null,
+              spent: typeof status.live.spent?.analyze === 'number' ? status.live.spent.analyze : 0,
+            });
+          } else {
+            setLiveMode(null);
+          }
           setPhase('ready');
         } else {
           setPhase('config-blocked');
@@ -217,6 +273,8 @@ export function LiveZone() {
           if (!found || found.state === 'analyzing') return;
           stopPolling();
           setRun(found);
+          // Counters (attempts left / spent) change on every settle.
+          if (token !== null) void refreshLiveMode(token);
           // A terminal run consumed the staging (server discards at encode):
           // clear it so the next cycle starts from a fresh upload.
           if (found.state === 'done') {
@@ -228,7 +286,8 @@ export function LiveZone() {
           } else {
             const result = (found.result ?? {}) as { code?: string; detail?: string };
             const code = result.code ?? 'REFUSED';
-            setRefusal({ code, detail: result.detail ?? 'run refused', recovery: RECOVERY[code] ?? 'See the run record below.' });
+            const recovery = code === 'QUOTA_SPENT' ? quotaSpentRecovery(liveMode !== null) : (RECOVERY[code] ?? 'See the run record below.');
+            setRefusal({ code, detail: result.detail ?? 'run refused', recovery });
             setPhase(code === 'QUOTA_SPENT' ? 'quota' : 'refused');
           }
         })
@@ -260,7 +319,8 @@ export function LiveZone() {
         startPolling(out.runId, kind);
       } else {
         const code = out.code ?? 'REFUSED';
-        setRefusal({ code, detail: out.detail ?? 'request refused', recovery: RECOVERY[code] ?? 'See the companion terminal.' });
+        const recovery = code === 'QUOTA_SPENT' ? quotaSpentRecovery(liveMode !== null) : (RECOVERY[code] ?? 'See the companion terminal.');
+        setRefusal({ code, detail: out.detail ?? 'request refused', recovery });
         setPhase(code === 'QUOTA_SPENT' ? 'quota' : 'refused');
       }
     } catch {
@@ -301,10 +361,18 @@ export function LiveZone() {
       title="L · Live Analysis via the localhost companion (explicit opt-in, mock demo)"
       tone="model"
       blurb={
-        <>
-          Optional loopback companion demo. <NeutralChip>MOCK FIXTURE — NOT A PROVIDER RESPONSE</NeutralChip>{' '}
-          <NeutralChip>D9 APPROVED — LIVE OWNER-ONLY</NeutralChip>
-        </>
+        liveMode !== null ? (
+          <>
+            <NeutralChip>LIVE VIA BASETEN — OWNER-ARMED, USES PAID INFERENCE</NeutralChip>{' '}
+            <NeutralChip>D9 APPROVED — LIVE OWNER-ONLY</NeutralChip> Every action below sends to the provider only after a fresh terminal
+            permit plus your explicit click; each send is permanently recorded.
+          </>
+        ) : (
+          <>
+            Optional loopback companion demo. <NeutralChip>MOCK FIXTURE — NOT A PROVIDER RESPONSE</NeutralChip>{' '}
+            <NeutralChip>D9 APPROVED — LIVE OWNER-ONLY</NeutralChip>
+          </>
+        )
       }
     >
       {phase === 'unavailable' && (
@@ -350,10 +418,19 @@ export function LiveZone() {
       )}
       {(phase === 'ready' || phase === 'uploading' || phase === 'analyzing' || phase === 'complete' || phase === 'proposed' || phase === 'refused' || phase === 'cancelled' || phase === 'quota') && (
         <div>
-          <Note>
-            Every run below uses the in-process mock transport and canned fixture text unless this page is paired with an owner-started `--live`
-            companion. Model identity, usage, and run id are echoed from the sanitized record.
-          </Note>
+          {liveMode !== null ? (
+            <Note>
+              Live mode: the Analyze action below sends one provider request to the hackathon-approved model (paid inference) after your
+              explicit click — never automatically. Attempts left: {liveMode.unlimited ? 'unlimited' : String(liveMode.left ?? '?')} · sent
+              and permanently recorded: {liveMode.spent}. Proposals stay disabled (zero-proposal policy). Model identity, usage, and run
+              id are echoed from the sanitized record; credentials and raw provider payloads never render.
+            </Note>
+          ) : (
+            <Note>
+              Every run below uses the in-process mock transport and canned fixture text unless this page is paired with an owner-started
+              `--live` companion. Model identity, usage, and run id are echoed from the sanitized record.
+            </Note>
+          )}
           <div className="mt-3">
             <span className="text-sm font-semibold" id="live-action-label">Action (named in the terminal permit)</span>
             <div className="flex flex-wrap gap-2 mt-1" role="radiogroup" aria-labelledby="live-action-label">
@@ -366,12 +443,16 @@ export function LiveZone() {
                   className="px-3 py-1 text-sm font-semibold border-2 rounded bg-white"
                   style={{ borderColor: kind === a ? '#111111' : '#9aa1ab' }}
                   onClick={() => changeKind(a)}
-                  disabled={phase === 'uploading' || phase === 'analyzing'}
+                  disabled={phase === 'uploading' || phase === 'analyzing' || (liveMode !== null && a === 'propose')}
+                  title={liveMode !== null && a === 'propose' ? 'Proposals stay disabled (zero-proposal policy)' : undefined}
                 >
                   {a}
                 </button>
               ))}
             </div>
+            {liveMode !== null && (
+              <p className="text-sm text-[#3d4148] mt-1">Proposals stay disabled (zero-proposal policy); live sends are analyses only.</p>
+            )}
           </div>
           <div className="mt-3">
             <label className="text-sm font-semibold" htmlFor="live-mp4">Synthetic F01 MP4</label>
@@ -418,13 +499,15 @@ export function LiveZone() {
                 className="px-3 py-1 text-sm font-semibold border-2 border-[#111111] rounded bg-white"
                 onClick={() => void doAnalyze()}
               >
-                {kind === 'analyze' ? 'Analyze with mock fixture' : 'Propose correction (mock)'}
+                {kind === 'analyze'
+                  ? (liveMode !== null ? 'Analyze live with Baseten (billable inference)' : 'Analyze with mock fixture')
+                  : 'Propose correction (mock)'}
               </button>
             </div>
           )}
           {phase === 'analyzing' && (
             <div className="mt-2">
-              <LoadingState what={`mock ${kind} — polling the companion run record`} />
+              <LoadingState what={`${liveMode !== null ? `live ${kind} (billable)` : `mock ${kind}`} — polling the companion run record`} />
               <div className="mt-2">
                 <button
                   type="button"
@@ -465,7 +548,7 @@ export function LiveZone() {
           {phase === 'quota' && (
             <ErrorState
               message={refusal !== null ? `Demo quota exhausted (${refusal.code}).` : 'Demo quota exhausted.'}
-              recovery="This companion session has no mock runs left. Restart the companion for a fresh demo budget."
+              recovery={liveMode !== null ? quotaSpentRecovery(true) : 'This companion session has no mock runs left. Restart the companion for a fresh demo budget.'}
             />
           )}
         </div>

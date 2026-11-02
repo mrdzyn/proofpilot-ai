@@ -132,21 +132,13 @@ test('L-CLI-5: --preflight gates before any fetch; combined flags refuse', async
   }
 });
 
-test('L-CLI-6: oversized live budgets refuse with no listener and no egress', async () => {
+test('L-CLI-6: proposals refuse (zero-proposal policy); repeatable analysis counts arm', async () => {
   const dir = mkdtempSync(path.join(tmpdir(), 'pp-cli-record-'));
   try {
     const record = path.join(dir, 'spent.jsonl');
-    const cases: { args: string[]; pattern: RegExp; label: string }[] = [
-      {
-        args: ['--live', '--port', '0', '--live-analyses', '2', '--live-media-sha256', F01_PIN, '--live-spent-record', record],
-        pattern: /--live-analyses must be 0 or 1/,
-        label: '2 analyses',
-      },
-      {
-        args: ['--live', '--port', '0', '--live-analyses', '10', '--live-media-sha256', F01_PIN, '--live-spent-record', record],
-        pattern: /--live-analyses must be 0 or 1/,
-        label: '10 analyses',
-      },
+    // Any proposal budget refuses with no listener and no egress — finite
+    // or proposal-only (and `unlimited` is not even a proposals value).
+    const refusals: { args: string[]; pattern: RegExp; label: string }[] = [
       {
         args: ['--live', '--port', '0', '--live-analyses', '1', '--live-proposals', '1', '--live-media-sha256', F01_PIN, '--live-spent-record', record],
         pattern: /--live-proposals must be 0/,
@@ -157,15 +149,85 @@ test('L-CLI-6: oversized live budgets refuse with no listener and no egress', as
         pattern: /--live-proposals must be 0/,
         label: 'proposal-only budget',
       },
+      {
+        args: ['--live', '--port', '0', '--live-analyses', '1', '--live-proposals', 'unlimited', '--live-media-sha256', F01_PIN, '--live-spent-record', record],
+        pattern: /--live-proposals must be a canonical non-negative integer/,
+        label: 'unlimited proposals',
+      },
     ];
-    for (const { args, pattern, label } of cases) {
+    for (const { args, pattern, label } of refusals) {
       const out = await runCli(args, fakeEnv());
       const combined = `${out.stdout}\n${out.stderr}`;
       assert.equal(out.code, 2, `${label} refuses with exit 2 (got ${out.code}): ${combined}`);
-      assert.match(combined, pattern, `${label} names the authorization bound`);
+      assert.match(combined, pattern, `${label} names the zero-proposal bound`);
       assert.ok(!combined.includes('on http://127.0.0.1'), `${label}: no listener starts on refusal`);
       assertNoKeyLeak(label, combined);
     }
+    // Repeatable analysis budgets arm cleanly (standing policy, issue #39):
+    // finite counts start with the exact pin, a record path, and a fresh
+    // bootstrap approval (one ledger per count, so no genesis is reused).
+    for (const analyses of ['2', '10']) {
+      const out = await runCli(
+        ['--live', '--port', '0', '--serve', 'none',
+          '--live-analyses', analyses, '--live-proposals', '0',
+          '--live-spent-record', path.join(dir, `spent-${analyses}.jsonl`),
+          '--live-media-sha256', F01_PIN,
+          '--live-approval-id', `d9live-v2-test-cli-6-${analyses}`],
+        fakeEnv(),
+      );
+      const combined = `${out.stdout}\n${out.stderr}`;
+      assert.equal(out.code, 0, `analyses=${analyses} arms (got ${out.code}): ${combined}`);
+      assert.match(combined, new RegExp(`budget=analyses:${analyses} proposals:0`), 'banner names the finite budget');
+      assertNoKeyLeak(`analyses=${analyses}`, combined);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('L-CLI-6b: unlimited analyses arm only under the versioned standing identity', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'pp-cli-unlimited-'));
+  try {
+    // Unlimited with the versioned standing identity arms cleanly.
+    const ok = await runCli(
+      ['--live', '--port', '0', '--serve', 'none',
+        '--live-analyses', 'unlimited', '--live-proposals', '0',
+        '--live-spent-record', path.join(dir, 'spent.jsonl'),
+        '--live-media-sha256', F01_PIN,
+        '--live-approval-id', 'd9live-v2-test-cli-6b'],
+      fakeEnv(),
+    );
+    const okCombined = `${ok.stdout}\n${ok.stderr}`;
+    assert.equal(ok.code, 0, `unlimited with standing identity arms (got ${ok.code}): ${okCombined}`);
+    assert.match(okCombined, /budget=analyses:unlimited proposals:0/, 'banner names the unlimited opt-in');
+    assertNoKeyLeak('unlimited arming', okCombined);
+    // Unlimited with a legacy (non-namespaced) approval id refuses before
+    // the companion starts — no listener, no network.
+    const legacy = await runCli(
+      ['--live', '--port', '0', '--serve', 'none',
+        '--live-analyses', 'unlimited',
+        '--live-spent-record', path.join(dir, 'legacy.jsonl'),
+        '--live-media-sha256', F01_PIN,
+        '--live-approval-id', 'd9i1-test-bootstrap-cli-legacy'],
+      fakeEnv(),
+    );
+    const legacyCombined = `${legacy.stdout}\n${legacy.stderr}`;
+    assert.equal(legacy.code, 2, `legacy approval id refuses unlimited (got ${legacy.code}): ${legacyCombined}`);
+    assert.match(legacyCombined, /versioned standing approval id/, 'names the identity requirement');
+    assert.ok(!legacyCombined.includes('on http://127.0.0.1'), 'no listener starts on refusal');
+    assertNoKeyLeak('legacy identity refusal', legacyCombined);
+    // Unlimited without a record path refuses (restart can never re-arm
+    // an in-memory-only budget).
+    const noRecord = await runCli(
+      ['--live', '--port', '0', '--live-analyses', 'unlimited',
+        '--live-media-sha256', F01_PIN,
+        '--live-approval-id', 'd9live-v2-test-cli-6b-norecord'],
+      fakeEnv(),
+    );
+    const noRecordCombined = `${noRecord.stdout}\n${noRecord.stderr}`;
+    assert.equal(noRecord.code, 2, `unlimited without a record refuses (got ${noRecord.code}): ${noRecordCombined}`);
+    assert.match(noRecordCombined, /--live-spent-record/, 'record rule holds for unlimited');
+    assertNoKeyLeak('unlimited record refusal', noRecordCombined);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
