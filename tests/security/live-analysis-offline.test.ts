@@ -2,10 +2,10 @@
 // helpers. Future real transport must be a separate reviewed implementation.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
-const names = ['config.ts', 'request-guard.ts', 'local-session.ts', 'mock-permits.ts'];
+const names = ['config.ts', 'request-guard.ts', 'local-session.ts', 'mock-permits.ts', 'live-spent-record.ts'];
 const root = path.resolve(import.meta.dirname, '../../packages/live-analysis/src');
 
 test('I2 helpers cannot read environment, start a listener, or contact providers', () => {
@@ -24,6 +24,8 @@ test('I2 helpers cannot read environment, start a listener, or contact providers
       /\bspawn\s*\(/,
       /\bexecFile\s*\(/,
       /\bBASETEN_API_KEY\b/,
+      /\bBASETEN_API_BASE_URL\b/,
+      /\bBASETEN_MODEL\b/,
       /\bPROOFPILOT_ALLOW_BILLABLE_CALLS\b/,
     ]) assert.doesNotMatch(source, re, `${filename}: prohibited live surface ${re}`);
   }
@@ -37,7 +39,7 @@ test('I2 helpers cannot read environment, start a listener, or contact providers
 // reviewed exception that may name an INJECTED fetch implementation — and it
 // still calls no ambient `fetch(`, reads no env/secret, names no endpoint
 // string, and describes no response format. Dedicated assertions below.
-const serverSide = ['server.ts', 'uploads.ts', 'baseten-request.ts', 'responses.ts', 'mock-transport.ts', 'baseten-transport.ts'];
+const serverSide = ['server.ts', 'uploads.ts', 'baseten-request.ts', 'responses.ts', 'mock-transport.ts', 'baseten-transport.ts', 'live-spent-record.ts', 'live-attempts.ts'];
 
 test('I2/I4 server modules stay offline, loopback-only, and D9-blocked', () => {
   for (const filename of serverSide) {
@@ -53,6 +55,8 @@ test('I2/I4 server modules stay offline, loopback-only, and D9-blocked', () => {
       /\bchild_process\b/,
       /\bworker_threads\b/,
       /\bBASETEN_API_KEY\b/,
+      /\bBASETEN_API_BASE_URL\b/,
+      /\bBASETEN_MODEL\b/,
       /\bPROOFPILOT_ALLOW_BILLABLE_CALLS\b/,
       /\b0\.0\.0\.0\b/,
       /\bresponse_format\b/,
@@ -62,6 +66,46 @@ test('I2/I4 server modules stay offline, loopback-only, and D9-blocked', () => {
       assert.match(source, /127\.0\.0\.1/, 'server.ts binds loopback only');
     } else {
       assert.doesNotMatch(source, /\.listen\s*\(/, `${filename}: only server.ts may listen`);
+    }
+  }
+});
+
+// UI-C3-02-D9-I1: owner credential names live only in the owner-started CLI.
+// The runtime, dashboard, and every other script must not name them; only
+// scripts/c3-live-analysis.ts reads exactly BASETEN_API_KEY,
+// BASETEN_API_BASE_URL, and BASETEN_MODEL from its own environment, and only
+// after --live passes the D9 gate. (scripts/lint.mjs names BASETEN_API_KEY
+// inside its own secret-detection pattern, which is the policy scanner
+// itself — not credential use.)
+test('D9-I1 owner credential names live only in the owner-started CLI', () => {
+  const repoRoot = path.resolve(import.meta.dirname, '../..');
+  const cli = readFileSync(path.join(repoRoot, 'scripts/c3-live-analysis.ts'), 'utf8');
+  for (const name of ['BASETEN_API_KEY', 'BASETEN_API_BASE_URL']) {
+    assert.match(cli, new RegExp(`\\b${name}\\b`), `CLI names ${name}`);
+  }
+  assert.match(cli, /\bBASETEN_MODEL\b/, 'CLI names BASETEN_MODEL');
+  const strip = (body: string): string =>
+    body.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const walk = (dir: string): string[] => {
+    const out: string[] = [];
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name !== 'node_modules') out.push(...walk(full));
+      } else if (/\.(ts|tsx)$/.test(entry.name)) {
+        out.push(full);
+      }
+    }
+    return out;
+  };
+  const codeRoots = [
+    path.join(repoRoot, 'packages/live-analysis/src'),
+    path.join(repoRoot, 'dashboard/src'),
+  ];
+  for (const file of codeRoots.flatMap(walk)) {
+    const source = strip(readFileSync(file, 'utf8'));
+    for (const re of [/\bBASETEN_API_KEY\b/, /\bBASETEN_API_BASE_URL\b/, /\bBASETEN_MODEL\b/, /process\.env\b/]) {
+      assert.doesNotMatch(source, re, `${path.relative(repoRoot, file)}: credential name or env read outside the CLI (${re})`);
     }
   }
 });

@@ -4,6 +4,10 @@
 // behavior, cancellation, deadline, typed refusals, and redaction.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync, unlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import {
   ANALYZE_MAX_TOKENS,
   PROPOSE_MAX_TOKENS,
@@ -32,6 +36,12 @@ import {
   createLiveSendSpender,
   type LiveSendAuthorization,
 } from '../../packages/live-analysis/src/live-attempts.ts';
+import {
+  LiveSpendRecordError,
+  openSpentRecord,
+} from '../../packages/live-analysis/src/live-spent-record.ts';
+
+const RACER = path.resolve(import.meta.dirname, '../helpers/record-racer.ts');
 
 const FAKE_KEY = 'NOT-A-REAL-KEY-0000';
 const APPROVED = BASETEN_DOCUMENTED_DIRECT_MODEL;
@@ -147,6 +157,9 @@ test('L-BT-1: construction pins the exact documented model and refuses aliases',
     'meta/muse-spark-open',
     'meta-models/muse-spark-open-1026',
     'meta-models/other-model',
+    // D9-I1 reconciled lookalikes (public-docs discrepancy): refused, never substituted.
+    'meta/Muse-Spark-Open-816B-A42B',
+    'meta-models/Muse-Spark-Open-816B-A42B',
     '',
     null,
     undefined,
@@ -426,4 +439,104 @@ test('L-BT-12: failure after an authorized send never restores the spent attempt
   assert.equal((retry as { ok: boolean }).ok, false);
   assert.equal((retry as { code: string }).code, 'LIVE_ATTEMPT_EXHAUSTED');
   assert.equal(calls.length, 1, 'no retry outbound POST after exhaustion');
+});
+
+test('L-BT-13: one record-backed authorization permits at most one outbound POST', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'pp-bt13-'));
+  try {
+    const { fetchImpl, calls } = makeDouble({ jsonValue: liveBody() });
+    const transport = makeTransport(fetchImpl);
+    const recordPath = path.join(dir, 'spent.jsonl');
+    const ledger = createLiveAttemptLedger({ analyses: 1, proposals: 0 });
+    const authorize = (runId: string) => (): void => {
+      const handle = openSpentRecord(recordPath, { bootstrapApprovalId: 'd9i1-test-bootstrap-bt13' });
+      try {
+        handle.record({ runId, sha256: 'a'.repeat(64), kind: 'analyze', spentAt: 1 });
+      } finally {
+        handle.release();
+      }
+    };
+    const attempt = (spend: () => LiveSendAuthorization): Promise<unknown> =>
+      transport.respond(
+        { kind: 'analyze', runId: 'r', sha256: 'a'.repeat(64), videoBytes: 512, videoPart: realPart() },
+        { isCancelled: neverCancelled, onSend: spend },
+      );
+    const first = createLiveSendSpender(ledger, 'analyze', authorize('r-1'));
+    const second = createLiveSendSpender(ledger, 'analyze', authorize('r-2'));
+    const [a, b] = await Promise.all([attempt(first), attempt(second)]);
+    assert.equal([a, b].filter((r) => (r as { ok: boolean }).ok).length, 1, 'exactly one send authorized');
+    assert.equal(calls.length, 1, 'exactly one outbound POST across both competitors');
+    const reopened = openSpentRecord(recordPath);
+    assert.equal(reopened.countSpent('analyze'), 1, 'exactly one debit durably recorded');
+    reopened.release();
+    const stored = readFileSync(recordPath, 'utf8').split('\n').map((l) => l.trim()).filter((l) => l !== '');
+    assert.equal(stored.length, 2, 'genesis plus exactly one spend: approval identity intact');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// MAJOR-1 no-takeover egress proof: a stale lock left by a crashed companion
+// refuses two independent authorized-send attempts with zero outbound POSTs;
+// only the documented supervised recovery (dead holder verified, lock
+// cleared by hand) lets the owner through — and then exactly one POST goes
+// out across all instances.
+test('L-BT-14: a stale lock authorizes zero fetches; supervised recovery permits exactly one', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'pp-bt14-'));
+  try {
+    const { fetchImpl, calls } = makeDouble({ jsonValue: liveBody() });
+    const transport = makeTransport(fetchImpl);
+    const recordPath = path.join(dir, 'spent.jsonl');
+    // Three ledger attempts: each stale-locked refusal still consumes its
+    // in-memory attempt (MAJOR-3 rule — a throw after consume is never
+    // restored), so recovery needs its own. The durable record is untouched
+    // by refusals, which is what lets the owner resume.
+    const ledger = createLiveAttemptLedger({ analyses: 3, proposals: 0 });
+    const authorize = (runId: string) => (): void => {
+      const handle = openSpentRecord(recordPath, { bootstrapApprovalId: 'd9i1-test-bootstrap-bt14' });
+      try {
+        handle.record({ runId, sha256: 'a'.repeat(64), kind: 'analyze', spentAt: 1 });
+      } finally {
+        handle.release();
+      }
+    };
+    const attempt = (spend: () => LiveSendAuthorization): Promise<unknown> =>
+      transport.respond(
+        { kind: 'analyze', runId: 'r', sha256: 'a'.repeat(64), videoBytes: 512, videoPart: realPart() },
+        { isCancelled: neverCancelled, onSend: spend },
+      );
+    const crashed = spawnSync(
+      process.execPath,
+      [RACER, recordPath, path.join(dir, 'out'), 'abandon', 'unused-run', 'd9i1-test-bootstrap-bt14'],
+      { encoding: 'utf8' },
+    );
+    assert.equal(crashed.status, 0, `abandon child must exit cleanly: ${crashed.stderr}`);
+    const lockPath = `${recordPath}.lock`;
+    const first = createLiveSendSpender(ledger, 'analyze', authorize('r-1'));
+    const second = createLiveSendSpender(ledger, 'analyze', authorize('r-2'));
+    const locked = (error: unknown): boolean =>
+      error instanceof LiveSpendRecordError && error.code === 'LIVE_RECORD_LOCKED';
+    await assert.rejects(attempt(first), locked, 'first stale-locked attempt throws LOCKED');
+    await assert.rejects(attempt(second), locked, 'second stale-locked attempt throws LOCKED');
+    assert.equal(calls.length, 0, 'zero outbound POSTs while a stale lock is held');
+    // Supervised recovery per runbook section 4c: the holder is dead, no
+    // companion runs in this test, the lock is cleared by hand.
+    const holder = JSON.parse(readFileSync(lockPath, 'utf8')) as { pid: number };
+    assert.throws(
+      () => process.kill(holder.pid, 0),
+      (error: unknown) => (error as NodeJS.ErrnoException).code === 'ESRCH',
+      'the holder is dead before the lock is touched',
+    );
+    unlinkSync(lockPath);
+    const recovered = createLiveSendSpender(ledger, 'analyze', authorize('r-3'));
+    const c = await attempt(recovered);
+    assert.equal((c as { ok: boolean }).ok, true, 'the owner resumes after supervised recovery');
+    assert.equal(calls.length, 1, 'exactly one outbound POST across all instances');
+    const reopened = openSpentRecord(recordPath);
+    assert.equal(reopened.countSpent('analyze'), 1, 'exactly one debit durably recorded');
+    reopened.release();
+    assert.equal(ledger.left('analyze'), 0, 'both refused attempts and the recovered send are spent');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
