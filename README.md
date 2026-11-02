@@ -75,9 +75,9 @@ flowchart TB
     F["Synthetic F01 sample store"]
     O["Trusted Playwright baseline"]
     V["Validated local recording"]
-    S["Muse Spark visual model target"]
-    H["Untrusted observation or proposal"]
-    W["Muse Wonder code / proposal target"]
+    S["Muse Spark 1.3 video-analysis target"]
+    H["Untrusted observation or historical proposal"]
+    W["Muse Wonder code-role default (unused; not a dependency)"]
     C["Hand-authored PC-1 control"]
     R["Protected browser verifier"]
     E["Deterministic verdict + hashed evidence"]
@@ -86,7 +86,6 @@ flowchart TB
 
     F --> O --> E
     V --> S --> H
-    W -. "configured target; no smoke result claimed" .-> H
     C --> R --> E
     L -->|"mock only"| V
     L -. "not active" .-> B
@@ -116,8 +115,7 @@ The state below reflects repository evidence and the current project status. It 
 - **F01 mobile baseline — `REPRODUCED`:** the expected mobile failure is observed; desktop control passes.
 - **Hand-authored PC-1 — `VERIFIED` 3/3:** three clean trusted replays for the hand-authored control only.
 - **Historical Muse Spark proposal — `PROPOSAL_ACCEPTED`:** one proposal artifact exists; it is untrusted, unexecuted and not verified.
-- **Meta model discovery — PASS:** exact configured IDs are available. Discovery does not establish inference behavior.
-- **Per-model minimal smoke tests — NOT TESTED:** no smoke-test pass is claimed for the selected model roles here. Historical Spark runs are documented separately in [project status](docs/STATUS.md).
+- **Historical Muse Spark 1.3 video smoke — COMPLETED ONCE (operator-reported):** the second of two authorized Meta video-analysis attempts returned a schema-valid, untrusted symptom. This is neither a model-verified fix nor a current-access guarantee. **Muse Wonder smoke — NOT TESTED; Baseten live smoke — NOT TESTED.** See [live smoke evidence](docs/LIVE-SMOKE.md).
 - **Baseten live inference — disabled:** D9 is pending. No Baseten live inference has run.
 - **Public hosted sandbox / arbitrary-site auto-fix — unavailable:** outside the implemented local synthetic workflow.
 
@@ -125,12 +123,12 @@ The state below reflects repository evidence and the current project status. It 
 
 ### Model roles
 
-The checked-in defaults in [`.env.example`](.env.example) use these exact Meta model IDs:
+The checked-in defaults in [`.env.example`](.env.example) name these Meta model IDs:
 
 - **Visual / multimodal:** `muse-spark-1.3`
-- **Code reasoning / patch-proposal target:** `muse-wonder-1.0`
+- **Code-role configuration default (unused; not a runtime dependency):** `muse-wonder-1.0`
 
-Contributor variants are not the default targets. The historical Muse Spark proposal remains the one recorded in project evidence; the Muse Wonder target is not represented as a completed inference. Model discovery and inference are separate checks.
+Contributor variants are not configured as defaults. Candidate proposals currently use Muse Spark. Muse Wonder is an unused configuration default, not an implemented dependency or patcher. Its smoke test remains untested.
 
 See [project status](docs/STATUS.md), the [historical Meta execution report](docs/LIVE-C3-01-EXECUTION-REPORT.md), and [hackathon contribution provenance](HACKATHON_CONTRIBUTIONS.md) for the detailed record.
 
