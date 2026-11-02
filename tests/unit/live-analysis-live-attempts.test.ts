@@ -19,6 +19,7 @@ import {
   createLiveSendSpender,
   type LiveAttemptLedger,
 } from '../../packages/live-analysis/src/live-attempts.ts';
+import { openSpentRecord } from '../../packages/live-analysis/src/live-spent-record.ts';
 import { createCompanion, type ApiMeta, type Companion } from '../../packages/live-analysis/src/server.ts';
 import { LocalSessionManager } from '../../packages/live-analysis/src/local-session.ts';
 import { OfflineMockPermitLedger } from '../../packages/live-analysis/src/mock-permits.ts';
@@ -119,6 +120,44 @@ test('L-ATT-7: an exhausted ledger authorizes nothing and spends nothing', () =>
   assert.equal(ledger.consume('analyze'), false, 'still nothing to consume');
 });
 
+test('L-ATT-8: the authorize callback fires exactly once per authorized send', () => {
+  const ledger = createLiveAttemptLedger({ analyses: 1, proposals: 0 });
+  let calls = 0;
+  const spend = createLiveSendSpender(ledger, 'analyze', () => {
+    calls += 1;
+  });
+  assert.deepEqual(spend(), { ok: true });
+  assert.equal(calls, 1, 'recorded exactly once at the send boundary');
+  assert.deepEqual(spend(), { ok: false, code: 'LIVE_ATTEMPT_EXHAUSTED' });
+  assert.equal(calls, 1, 'repeat invocation records nothing more');
+});
+
+test('L-ATT-9: a throwing authorize callback denies the send without restoring', () => {
+  const ledger = createLiveAttemptLedger({ analyses: 1, proposals: 0 });
+  const spend = createLiveSendSpender(ledger, 'analyze', () => {
+    throw new Error('disk unavailable (test double)');
+  });
+  assert.throws(() => spend(), /disk unavailable/, 'the failure propagates so the send never happens');
+  assert.equal(ledger.left('analyze'), 0, 'the ledger stays consumed — a retry cannot double-spend');
+  assert.deepEqual(spend(), { ok: false, code: 'LIVE_ATTEMPT_EXHAUSTED' }, 'the failed run stays denied');
+});
+
+test('L-ATT-10: the authorize callback composes with the durable record', () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'pp-att-record-'));
+  try {
+    const recordPath = path.join(dir, 'spent.jsonl');
+    const ledger = createLiveAttemptLedger({ analyses: 1, proposals: 0 });
+    const spend = createLiveSendSpender(ledger, 'analyze', () => {
+      openSpentRecord(recordPath).record({ runId: 'r-1', sha256: 'a'.repeat(64), kind: 'analyze', spentAt: 1 });
+    });
+    assert.deepEqual(spend(), { ok: true });
+    const reopened = openSpentRecord(recordPath);
+    assert.equal(reopened.countSpent('analyze'), 1, 'the send-boundary callback durably recorded the spend');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 // Dormant server proof: with a live transport injected and a seeded attempt
 // budget, analyze still refuses at the D9 gate — zero provider calls, the
 // seeded budget unconsumed (the only spend site is the transport onSend
@@ -209,6 +248,7 @@ test('L-ATT-6: dormant server spends neither the live budget nor mock quota befo
     liveModel: BASETEN_DOCUMENTED_DIRECT_MODEL,
     liveAnalysesLeft: 1,
     liveProposalsLeft: 1,
+    liveSpentRecordPath: path.join(sub, 'spent.jsonl'),
   });
   closers.push(() => app.close().catch(() => undefined));
   const code = app.sessions.issueTerminalCode();

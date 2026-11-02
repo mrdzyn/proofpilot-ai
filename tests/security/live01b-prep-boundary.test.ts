@@ -39,13 +39,29 @@ test('the activation locks that remain: quota is the approved constant, the pin 
   // c3-b2b-verify-authenticated.ts is the reviewed SEC-P2-02 authenticated verification command
   // (same five flags, no key/trust-root/bypass flags, no env, real artifact hard-disabled before
   // any read; covered by tests/unit/artifact-auth.test.ts command-surface tests).
-  // c3-live-analysis.ts is the UI-C3-02-I2/I4 offline companion entry point (owner direction:
-  // localhost only, mock transport, no env/credential/provider calls; no live inference path).
+  // c3-live-analysis.ts is the UI-C3-02-I2/I4 offline companion entry point, expanded by the
+  // reviewed D9-I1 contract (tasks/UI-C3-02-D9-I1.md): localhost only, mock by default, and the
+  // single owner-started place that may read the three live env names and wrap the owner-process
+  // fetch for injection — only after --live passes the D9 gate (still null, so --live refuses).
   // Never expanded to make a test pass: any further CLI is a reviewed contract change (see
   // tasks/SEC-P2-02-ARTIFACT-AUTHENTICITY.md and the I2/I4 integration PR notes).
   const scripts = readdirSync(path.join(root, 'scripts')).filter((f) => /^c3-/.test(f)).sort();
   assert.deepEqual(scripts, ['c3-activation-digest.ts', 'c3-approve-live-run.ts', 'c3-b2b-verify-authenticated.ts', 'c3-b2b-verify-proposal.ts', 'c3-live-analysis.ts', 'c3-live-proposal.ts', 'c3-live-rehearsal.ts', 'c3-offline-verification.ts', 'c3-pin-check.ts', 'c3-proposal-preflight.ts', 'c3-stage-spike.ts']);
-  assert.doesNotMatch(code('scripts/c3-live-analysis.ts'), /process\.env|fetch|createProvider|MODEL_API_KEY|BASETEN_API_KEY|PROOFPILOT_ALLOW_BILLABLE_CALLS|runProductionProposalAttempt|openMetaProposalCall/);
+  const cli = code('scripts/c3-live-analysis.ts');
+  // D9-I1 reviewed expansion: the owner-started CLI may read the three live
+  // env names and wrap the owner-process fetch for injection. Still
+  // forbidden: other providers, billable-call flags, the Meta production
+  // runner, and any literal-URL fetch (no direct provider calls).
+  assert.doesNotMatch(cli, /createProvider|MODEL_API_KEY|PROOFPILOT_ALLOW_BILLABLE_CALLS|runProductionProposalAttempt|openMetaProposalCall/);
+  assert.doesNotMatch(cli, /fetch\(\s*['"`]/, 'no literal-URL fetch: the injected wrapper takes the URL as a parameter');
+  const envReads = [...cli.matchAll(/process\.env\[([^\]]+)\]/g)].map((m) => m[1]);
+  assert.ok(envReads.length > 0, 'live env reads exist in the CLI');
+  for (const key of envReads) {
+    assert.ok(
+      key === "'BASETEN_API_KEY'" || key === "'BASETEN_API_BASE_URL'" || key === "'BASETEN_MODEL'",
+      `only the three documented variables may be read: ${key ?? ''}`,
+    );
+  }
 });
 
 test('the production runner is reachable only through the gated entry point (and the owner CLI through it): the index, the staging runner and the approval CLI cannot reach it', () => {

@@ -63,11 +63,23 @@ const DIRECT_MODEL_SHAPE = /^meta-models\/[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const REJECTED_MODEL_ALIASES: ReadonlyArray<string> = [
   'meta/muse-spark-open', // OpenRouter alias: different provider path, never substitute.
   'meta-models/muse-spark-open-1026', // Superseded version pin.
+  // D9-I1 discrepancy record (Nov 2026, public docs only): another Baseten
+  // library example shows 'meta/Muse-Spark-Open-816B-A42B' (OpenRouter-style
+  // namespace, not a Model API ID), and Meta's deployment guide names the
+  // HuggingFace checkpoint 'meta-models/Muse-Spark-Open-816B-A42B'. Only the
+  // Baseten changelog example 'meta-models/muse-spark-open' is proposed for
+  // D9; the lookalikes refuse here and can never be substituted.
+  'meta/Muse-Spark-Open-816B-A42B',
+  'meta-models/Muse-Spark-Open-816B-A42B',
 ];
 
 export type BasetenTransportRefusal =
   | 'MODEL_UNAVAILABLE_OR_UNAPPROVED'
   | 'LIVE_ATTEMPT_EXHAUSTED'
+  // Server-side spend-record failure mapped through the live settle channel:
+  // the send never happened, and the run settles refused with baseten
+  // provenance (never restored, live path poisoned for the process).
+  | 'LIVE_SPEND_RECORD_FAILED'
   | 'NO_CREDENTIAL'
   | 'TRANSPORT_MISCONFIGURED'
   | 'TRANSPORT_HTTP'

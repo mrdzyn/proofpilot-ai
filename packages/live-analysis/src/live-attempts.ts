@@ -36,6 +36,14 @@ export type LiveSendAuthorization =
 export function createLiveSendSpender(
   ledger: LiveAttemptLedger,
   kind: MockPermitKind,
+  /**
+   * Invoked synchronously exactly once, immediately after the first
+   * successful consume and before the authorization is returned. The server
+   * uses it to append the durable spent-run record. When it throws, the
+   * authorization is denied (the ledger stays consumed — never restored) and
+   * the error propagates so the send never happens.
+   */
+  onAuthorize?: () => void,
 ): () => LiveSendAuthorization {
   let spent = false;
   return () => {
@@ -45,6 +53,9 @@ export function createLiveSendSpender(
     spent = true;
     if (!ledger.consume(kind)) {
       return { ok: false, code: 'LIVE_ATTEMPT_EXHAUSTED' };
+    }
+    if (onAuthorize !== undefined) {
+      onAuthorize();
     }
     return { ok: true };
   };

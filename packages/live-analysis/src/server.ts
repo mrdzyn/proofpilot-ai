@@ -38,13 +38,39 @@ import {
   type BasetenTransport,
 } from './baseten-transport.ts';
 import { createLiveAttemptLedger, createLiveSendSpender } from './live-attempts.ts';
+import {
+  LiveSpendRecordError,
+  openSpentRecord,
+  remainingLiveBudget,
+  type LiveSpentRecord,
+} from './live-spent-record.ts';
 import { MAX_STAGED_BYTES, StagedUploads } from './uploads.ts';
 import type { ValidatedVideo } from '../../intake/src/media.ts';
 
 export const COMPANION_VERSION = '0.1-i2i4-mock';
 export const DEFAULT_PORT = 5188;
 
-export type StartupRefusal = 'ENDPOINT_UNAPPROVED' | 'ADDRESS_IN_USE';
+export type StartupRefusal = 'ENDPOINT_UNAPPROVED' | 'ADDRESS_IN_USE' | 'LIVE_BUDGET_REQUIRES_RECORD' | 'LIVE_MEDIA_PIN_INVALID' | 'LIVE_SPEND_RECORD_FAILED';
+
+/**
+ * Live-attempt precheck decision table (unit-tested): D9 approval first,
+ * then spend-record health, then remaining budget. The server maps codes to
+ * refusal details; the transport enforces the final send-boundary gate.
+ */
+export type LivePrecheckResult =
+  | Readonly<{ ok: true }>
+  | Readonly<{ ok: false; code: 'MODEL_UNAVAILABLE_OR_UNAPPROVED' | 'LIVE_SPEND_RECORD_FAILED' | 'QUOTA_SPENT' }>;
+
+export function checkLivePrecheck(input: {
+  readonly d9Approved: boolean;
+  readonly poisoned: boolean;
+  readonly attemptsLeft: number;
+}): LivePrecheckResult {
+  if (!input.d9Approved) return { ok: false, code: 'MODEL_UNAVAILABLE_OR_UNAPPROVED' };
+  if (input.poisoned) return { ok: false, code: 'LIVE_SPEND_RECORD_FAILED' };
+  if (!(input.attemptsLeft > 0)) return { ok: false, code: 'QUOTA_SPENT' };
+  return { ok: true };
+}
 
 export interface CompanionOptions {
   /** Listener port. Ignored when `bind` is false (dispatch-only use). */
@@ -74,9 +100,27 @@ export interface CompanionOptions {
    * authorizes one provider attempt per action, spent at send and never
    * restored. Defaults to zero (fail-closed); explicit owner allocation is
    * required alongside D9.
+   *
+   * A nonzero live budget additionally requires `liveSpentRecordPath`: the
+   * durable spent-run record that survives restarts. Startup refuses without
+   * it (`LIVE_BUDGET_REQUIRES_RECORD`).
    */
   liveAnalysesLeft?: number;
   liveProposalsLeft?: number;
+  /**
+   * Path to the durable spent-run record (hash-chained JSONL, created mode
+   * 0600 when missing). Required when any live budget is configured; a
+   * corrupt record refuses startup. Never a credential, body, or secret —
+   * run id, media SHA-256, kind, and timestamp only.
+   */
+  liveSpentRecordPath?: string;
+  /**
+   * Optional pinned demonstration-media SHA-256 for the live path. When set
+   * (must be 64 lowercase hex), live attempts whose declared media differs
+   * refuse with MEDIA_NOT_PINNED before any slot, permit, or quota is
+   * touched. The mock path ignores it.
+   */
+  liveMediaSha256?: string;
   analysesLeft?: number;
   proposalsLeft?: number;
   runTimeoutMs?: number;
@@ -185,17 +229,49 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
   // transport (tests) owns its own policy.
   const customTransport = options.transport ?? null;
   const defaultLatencyMs = options.transportLatencyMs ?? 1200;
-  // Dormant live seam: never constructed by the CLI in this slice. D9
-  // approval (`validateLiveModel`) is checked per attempt below.
+  // Live seam: constructed only by the owner-started `--live` CLI after its
+  // own gates. D9 approval (`validateLiveModel`) is checked per attempt
+  // below; D9 stays null in this slice so every live attempt still refuses.
   const liveTransport = options.liveTransport ?? null;
   const liveModel = options.liveModel;
-  // Live provider-attempt budget, separate from the mock success quota.
-  // Spent exactly once per send via the transport's onSend hook; failures
-  // after send never restore, and sanitized success never spends again.
+  // Optional pinned demonstration media for the live path; malformed pins
+  // refuse startup rather than silently never matching.
+  const liveMediaSha256 = options.liveMediaSha256;
+  if (liveMediaSha256 !== undefined && !/^[0-9a-f]{64}$/.test(liveMediaSha256)) {
+    throw Object.assign(new Error('companion refuses to start: live media pin is not a 64-hex SHA-256'), { code: 'LIVE_MEDIA_PIN_INVALID' satisfies StartupRefusal });
+  }
+  // A nonzero live budget without a durable spent-run record would re-arm on
+  // restart (the in-memory ledger resets), so startup refuses it outright.
+  const liveBudgetRequested = (typeof options.liveAnalysesLeft === 'number' ? options.liveAnalysesLeft : 0) +
+    (typeof options.liveProposalsLeft === 'number' ? options.liveProposalsLeft : 0);
+  if (liveTransport !== null && liveBudgetRequested > 0 &&
+    (options.liveSpentRecordPath === undefined || options.liveSpentRecordPath === '')) {
+    throw Object.assign(new Error('companion refuses to start: live budget requires a spent-record path'), { code: 'LIVE_BUDGET_REQUIRES_RECORD' satisfies StartupRefusal });
+  }
+  // Durable spent-run record: created empty when missing, verified when
+  // present. Corrupt state refuses startup (fail closed, never re-arm).
+  let spentRecord: LiveSpentRecord | null = null;
+  if (liveTransport !== null && options.liveSpentRecordPath !== undefined && options.liveSpentRecordPath !== '') {
+    try {
+      spentRecord = openSpentRecord(options.liveSpentRecordPath);
+    } catch (error) {
+      if (error instanceof LiveSpendRecordError) {
+        throw Object.assign(new Error(`companion refuses to start: ${error.code}`), { code: 'LIVE_SPEND_RECORD_FAILED' satisfies StartupRefusal });
+      }
+      throw error;
+    }
+  }
+  // Live provider-attempt budget, separate from the mock success quota, minus
+  // durable recorded spend. Spent exactly once per send via the transport's
+  // onSend hook (which also appends the record); failures after send never
+  // restore, and sanitized success never spends again.
   const liveAttempts = createLiveAttemptLedger({
-    analyses: options.liveAnalysesLeft ?? 0,
-    proposals: options.liveProposalsLeft ?? 0,
+    analyses: remainingLiveBudget(options.liveAnalysesLeft ?? 0, spentRecord?.countSpent('analyze') ?? 0),
+    proposals: remainingLiveBudget(options.liveProposalsLeft ?? 0, spentRecord?.countSpent('propose') ?? 0),
   });
+  // A failed durable record append poisons the live path for the rest of the
+  // process: an unrecorded send must never be followed by another send.
+  let livePoisoned = false;
   let analysesLeft = options.analysesLeft ?? 3;
   let proposalsLeft = options.proposalsLeft ?? 1;
   const runTimeoutMs = options.runTimeoutMs ?? 120_000;
@@ -290,13 +366,28 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
   }
 
   function publicStatus(authenticated: boolean): Record<string, unknown> {
+    const liveConfigured = liveTransport !== null;
     return {
       service: 'ui-c3-02-companion',
       version: COMPANION_VERSION,
-      transport: 'mock-fixture (no live inference; D9 pending)',
+      transport: liveConfigured
+        ? 'mock-fixture + baseten-live (D9-gated; no live call without owner approval)'
+        : 'mock-fixture (no live inference; D9 pending)',
       paired: authenticated,
       config: { urlOk: true, modelOk: false, d9: 'pending (blocks any live call)' },
+      // Mock success quota: spent only by sanitized mock success, never by
+      // live attempts (live requests do not consult it; see handleAnalyzePropose).
       quota: { analysesLeft, proposalsLeft },
+      // Live provider-attempt budget: effective allocation minus durable
+      // recorded spend. Reported counts only — never a billing figure.
+      live: {
+        transport: liveConfigured ? 'baseten-live (D9-gated)' : 'none',
+        d9: 'pending (blocks any live call)',
+        attemptsLeft: { analyze: liveAttempts.left('analyze'), propose: liveAttempts.left('propose') },
+        spentRecord: options.liveSpentRecordPath !== undefined && options.liveSpentRecordPath !== '' ? 'configured' : 'none',
+        mediaPin: liveMediaSha256 !== undefined,
+        poisoned: livePoisoned,
+      },
       busy: flight !== null,
     };
   }
@@ -540,22 +631,36 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
     if (typeof uploadId !== 'string' || typeof sha256 !== 'string' || !Number.isSafeInteger(bytes)) {
       return refusal('BAD_PAYLOAD', 'uploadId, sha256 and bytes are required', 400);
     }
-    // D9-first live gate: a supplied live transport without a D9-approved
-    // model refuses before any slot, permit, or quota is touched. Unreachable
-    // while D9 is pending; the mock path below is unaffected.
+    // Live gate: a supplied live transport is admitted only with a D9-approved
+    // model, a healthy spend record, and remaining live budget — checked
+    // before any slot, permit, or quota is touched. Unreachable while D9 is
+    // pending; the mock path below is unaffected.
     const liveGate = liveTransport !== null ? validateLiveModel(liveModel) : null;
-    if (liveGate !== null && !liveGate.ok) {
-      return refusal('MODEL_UNAVAILABLE_OR_UNAPPROVED', 'D9 pending: live Baseten inference is not approved; no live request was made', 403);
+    const liveActive = liveGate !== null && liveGate.ok;
+    if (liveTransport !== null) {
+      const pre = checkLivePrecheck({
+        d9Approved: liveActive,
+        poisoned: livePoisoned,
+        attemptsLeft: liveAttempts.left(kind),
+      });
+      if (!pre.ok) {
+        const detail = pre.code === 'MODEL_UNAVAILABLE_OR_UNAPPROVED'
+          ? 'D9 pending: live Baseten inference is not approved; no live request was made'
+          : pre.code === 'LIVE_SPEND_RECORD_FAILED'
+            ? 'live spend record unavailable; no live request was made'
+            : 'live attempt budget is exhausted for this action; no provider call was made';
+        return refusal(pre.code, detail, 403);
+      }
+      // Pinned demonstration media: the declared bytes must equal the owner
+      // pin before any slot, permit, or quota is touched. Mock ignores it.
+      if (liveMediaSha256 !== undefined && sha256 !== liveMediaSha256) {
+        return refusal('MEDIA_NOT_PINNED', 'live request requires the pinned demonstration media; no provider call was made', 422);
+      }
     }
-    const liveApprovedModel: string | null = liveGate !== null && liveGate.ok ? liveGate.model : null;
-    // Live attempt budget, checked before any slot, permit, or quota is
-    // touched. Reaching this line with a live transport requires D9, so this
-    // check is dormant in this slice; it is ordered here so the live attempt
-    // can never draw from the mock success quota or block a slot when empty.
-    if (liveApprovedModel !== null && liveAttempts.left(kind) <= 0) {
-      return refusal('QUOTA_SPENT', 'live attempt budget is exhausted for this action; no provider call was made', 403);
-    }
-    if (quotaFor(kind) <= 0) {
+    const liveApprovedModel: string | null = liveActive && liveGate !== null && liveGate.ok ? liveGate.model : null;
+    // Mock success quota gates the mock path only. Live requests are governed
+    // solely by the live ledger above and never consult or spend mock quota.
+    if (!liveActive && quotaFor(kind) <= 0) {
       return refusal('QUOTA_SPENT', 'demo quota exhausted; mock runs stop here', 429);
     }
     // Single-flight acquisition is synchronous: no await precedes it, so two
@@ -635,18 +740,48 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
       // run (its onSend hook), and the transport enforces that
       // authorization synchronously before the single POST — an exhausted
       // ledger blocks the outbound request even though the earlier
-      // pre-check passed. Nothing is ever restored: timeout,
-      // cancel-after-send, HTTP error, malformed reply, model mismatch,
-      // and sanitizer refusal all keep the spent attempt.
-      const spendSend = createLiveSendSpender(liveAttempts, kind);
+      // pre-check passed. The authorization also appends the durable
+      // spent-run record; a failed append poisons the live path and the send
+      // never happens. Nothing is ever restored: timeout, cancel-after-send,
+      // HTTP error, malformed reply, model mismatch, and sanitizer refusal
+      // all keep the spent attempt.
+      const spendSend = createLiveSendSpender(liveAttempts, kind, () => {
+        // Unreachable when startup enforced the record rule (nonzero budget
+        // requires a path), but a missing record must fail loudly — never
+        // silently send unrecorded.
+        if (spentRecord === null) {
+          throw new LiveSpendRecordError('live budget requires a spent-record path');
+        }
+        spentRecord.record({ runId: run.runId, sha256, kind, spentAt: now() });
+      });
+      // A record-append failure surfaces as a rejected send promise (the
+      // async transport body runs the hook before any await, but a throw
+      // inside an async function rejects rather than throwing). The tap below
+      // poisons the live path for the rest of the process; the mapper turns
+      // the failure into a typed refused run. Nothing was sent in either case.
+      const rawResponse = liveTransport.respond(
+        { kind, runId: run.runId, sha256, videoBytes: bytes as number, videoPart: part.part },
+        { isCancelled: () => run.cancelled, onSend: spendSend },
+      );
+      rawResponse.then(
+        undefined,
+        (error: unknown) => {
+          if (error instanceof LiveSpendRecordError) livePoisoned = true;
+        },
+      );
       const settled = settleRun(run, kind,
-        liveTransport.respond(
-          { kind, runId: run.runId, sha256, videoBytes: bytes as number, videoPart: part.part },
-          { isCancelled: () => run.cancelled, onSend: spendSend },
-        ).then((reply) => {
-          if (!reply.ok) throw new LiveTransportRefused(reply.code, reply.detail);
-          return { model: reply.model, text: reply.text, usage: reply.usage, finishReason: reply.finishReason };
-        }),
+        rawResponse.then(
+          (reply) => {
+            if (!reply.ok) throw new LiveTransportRefused(reply.code, reply.detail);
+            return { model: reply.model, text: reply.text, usage: reply.usage, finishReason: reply.finishReason };
+          },
+          (error: unknown) => {
+            if (error instanceof LiveSpendRecordError) {
+              throw new LiveTransportRefused('LIVE_SPEND_RECORD_FAILED', 'live spend record unavailable; no provider request was sent');
+            }
+            throw error;
+          },
+        ),
         {
           sanitize,
           identity: { model: approved },
