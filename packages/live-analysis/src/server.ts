@@ -6,9 +6,9 @@
  * locally validated session; mutating POSTs additionally require an exact
  * same-origin Origin. Pairing codes come only from the owner terminal
  * (`pair` command); permits come only from the owner terminal (`permit`
- * command). The model gate stays D9-blocked: analyze/propose run through the
- * MOCK transport and strict sanitizers, and no live request can be assembled
- * in this slice.
+ * command). Without `--live`, analyze/propose run through the MOCK transport
+ * and strict sanitizers, and no live request can be assembled. With `--live`
+ * and the D9 pin, the approved model may pass the live gate below.
  *
  * No environment reads, no credentials, no network egress, no persistence of
  * raw video/base64/model text. Staged uploads are always deleted.
@@ -85,8 +85,8 @@ export function checkLivePrecheck(input: {
 /**
  * Activation-state wording for `/api/status` (unit-tested): the reported
  * D9/live state is derived from the actual validated gate, never hardcoded.
- * While D9 is pending the strings describe the block; a future approved
- * state would report it instead of claiming live is disabled.
+ * Unapproved companions describe the block; an approved live companion
+ * reports it instead of claiming live is disabled.
  */
 export interface ActivationStateWords {
   readonly transport: string;
@@ -138,10 +138,10 @@ export interface CompanionOptions {
   /** Latency for the built-in cancelling mock transport; ignored when `transport` is supplied. */
   transportLatencyMs?: number;
   /**
-   * Dormant Baseten live seam (test-only in this slice: the CLI never passes
-   * it). When present, the D9 gate must approve `liveModel` or the attempt
-   * refuses before any slot, permit, or quota is touched. Unreachable while
-   * D9 is pending.
+   * Owner-gated Baseten live seam (supplied only by the owner-started `--live`
+   * CLI after its own gates). When present, the D9 gate must approve
+   * `liveModel` or the attempt refuses before any slot, permit, or quota is
+   * touched.
    */
   liveTransport?: BasetenTransport | null;
   /** Exact model ID the live transport claims; checked against the D9 approval. */
@@ -290,7 +290,7 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
   const defaultLatencyMs = options.transportLatencyMs ?? 1200;
   // Live seam: constructed only by the owner-started `--live` CLI after its
   // own gates. D9 approval (`validateLiveModel`) is checked per attempt
-  // below; D9 stays null in this slice so every live attempt still refuses.
+  // below; anything but the pinned model still refuses.
   const liveTransport = options.liveTransport ?? null;
   const liveModel = options.liveModel;
   // Optional pinned demonstration media for the live path; malformed pins
@@ -700,8 +700,8 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
     }
     // Live gate: a supplied live transport is admitted only with a D9-approved
     // model, a healthy spend record, and remaining live budget — checked
-    // before any slot, permit, or quota is touched. Unreachable while D9 is
-    // pending; the mock path below is unaffected.
+    // before any slot, permit, or quota is touched. The mock path below is
+    // unaffected by the gate outcome.
     const liveGate = liveTransport !== null ? validateLiveModel(liveModel) : null;
     const liveActive = liveGate !== null && liveGate.ok;
     if (liveTransport !== null) {
@@ -791,8 +791,8 @@ export async function createCompanion(options: CompanionOptions = {}): Promise<C
       releaseFlight(myEpoch);
       return refusal(part.code, 'verified bytes failed wire encoding', 422);
     }
-    // Dormant live branch: reachable only when D9 approves the model
-    // (impossible in this slice). It reuses the same permit, quota,
+    // Live branch: reachable only when D9 approves the model.
+    // It reuses the same permit, quota,
     // single-flight, epoch, cancellation, and settle machinery as mock.
     if (liveTransport !== null && liveApprovedModel !== null) {
       const approved = liveApprovedModel;

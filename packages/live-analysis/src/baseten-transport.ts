@@ -1,11 +1,11 @@
 /**
- * UI-C3-02-BT-LIVE-01: dormant, fail-closed Baseten live transport.
+ * UI-C3-02-D9 (activation): fail-closed Baseten live transport.
  *
- * Status: D9 is pending, so this module can never perform a live call from
- * product code in this slice: the server gate (`validateLiveModel`, D9
- * pending) is the sole authorization point, the CLI passes no key and no
- * live transport, and construction is exercised only in tests with an
- * injected fetch double and a fake key.
+ * Status: D9 approved, but this module still never performs a live call on
+ * its own: the server gate (`validateLiveModel`) is the sole authorization
+ * point, only the owner-started `--live` CLI supplies a key and a live
+ * transport, and construction is exercised in tests with an injected fetch
+ * double and a fake key.
  *
  * Rules enforced here (behavioral + contract tests pin every one):
  * - exact provider/endpoint/model matching: the destination is always the
@@ -298,7 +298,7 @@ export interface BasetenTransportOptions {
 }
 
 /**
- * Construct the dormant transport. Refuses unless the model is byte-equal
+ * Construct the live transport. Refuses unless the model is byte-equal
  * to the documented direct-Baseten ID (aliases and superseded pins never
  * translate), the key is present, and the deadline is sane. D9 approval is
  * enforced separately at the server gate (`validateLiveModel`).

@@ -8,12 +8,12 @@ import { describeRunProvenance } from '../../dashboard/src/zones/liveProvenance.
 test('L-BT-10: mock results keep the exact fixture banner and labels', () => {
   const prov = describeRunProvenance({
     transport: 'mock-fixture',
-    mockModel: 'mock-fixture-model (D9 pending: not a live model)',
+    mockModel: 'mock-fixture-model (not a live model)',
     liveInference: false,
   });
   assert.equal(prov.isLive, false);
   assert.equal(prov.provider, 'mock');
-  assert.equal(prov.model, 'mock-fixture-model (D9 pending: not a live model)');
+  assert.equal(prov.model, 'mock-fixture-model (not a live model)');
   assert.equal(prov.transport, 'mock-fixture');
   assert.equal(prov.usageNote, 'fixture counts, not billing');
   assert.equal(prov.verdictChip, 'MOCK FIXTURE — NOT A PROVIDER RESPONSE');

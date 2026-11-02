@@ -211,7 +211,7 @@ test('L-ZONE-1: permit-before-upload, then mock analyze with run identity', asyn
     await page.getByRole('button', { name: 'Analyze with mock fixture', exact: true }).click();
     await page.getByText('live inference: no', { exact: false }).waitFor({ timeout: 30_000 });
     const body = await page.locator('main').innerText();
-    assert.ok(body.includes('mock-fixture-model (D9 pending: not a live model)'), 'mock model identity shown');
+    assert.ok(body.includes('mock-fixture-model (not a live model)'), 'mock model identity shown');
     assert.ok(body.includes('prompt 410'), 'fixture usage shown');
     assert.ok(body.includes('live inference: no'), 'no live inference stated');
     const zoneL = await page.locator('section[aria-labelledby="zL"]').innerText();
