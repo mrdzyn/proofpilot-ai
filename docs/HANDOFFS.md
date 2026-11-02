@@ -2007,4 +2007,32 @@ Then terminal `pair`, `permit analyze <sha256> <bytes>`, upload + analyze via Zo
 ### Next action
 Independent exact-HEAD review of the activation Draft PR; STOP afterwards — no merge, deploy, provider calls, key reads, spend, or live inference. The supervised one-shot runs only after review + merge approval + explicit owner go-ahead, via runbook §1–§3.
 
+## Handoff: UI-C3-02-A2 — PR #36 audit remediation (MAJOR-1/MAJOR-2 + preflight minor)
+
+- **Task / phase:** `tasks/UI-C3-02-D9-I1.md` (§Activation A1 remediation per PR #36 audit comment `6571922890`, audited HEAD `a333bab`)
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** ONE independent exact-HEAD rechecker, then project owner
+- **Branch:** `phase/ui-c3-02-d9-activation` (from `main@834c6c2`, PR #34 squash merge)
+- **Implementation head:** `a2498aa769c861ace2af2bb4f719efe6fe9dc8b6` (plus a docs commit)
+- **PR:** #36 (Draft, unmerged)
+- **State:** READY FOR RECHECK. No merge, deploy, provider calls, key reads, spend, or live inference. The repository `.env.local` was never listed, read, or referenced by value. The authenticated preflight was never run — it is owner-operated only.
+
+### Completed
+- **MAJOR-1 (1-analysis/0-proposal bound):** the production `--live` CLI refuses with exit 2 before companion startup (no listener, no transport, no egress) when `--live-proposals` is nonzero or `--live-analyses` exceeds 1 (zero allowed as an explicit zero-budget diagnostic). Live-budget flags use strict canonical-digit parsing (`flagLiveBudget`): junk-suffixed, signed, decimal, blank, and unsafe values refuse instead of `parseInt` truncation. The shared ledger, L-ATT doubles (incl. 2-budget L-ATT-6), and all mock flows are untouched.
+- **MAJOR-2 (exact F01 media pin):** new `APPROVED_F01_MEDIA_SHA256` in `packages/live-analysis/src/config.ts` (byte-identical to the certified F01 mobile clip `e9df68…afdf`, asserted by L-CFG-3). A positive live-analysis budget with an omitted, mismatched, or malformed `--live-media-sha256` refuses with exit 2 before the companion starts. The server's generalized pin seam (test doubles) is unchanged; the production CLI is the enforcement point.
+- **Minor (preflight 401/403):** `checkAccountAvailability` classifies 401/403 before JSON parsing, so a non-JSON unauthorized body reports `PREFLIGHT_UNAUTHORIZED` (still fail-closed, key-free); covered by L-PRE-3b.
+- **Tests:** new L-CLI-6 (oversized budgets refuse, no listener, no key leak), L-CLI-7 (malformed numerics refuse), L-CLI-8 (pin omission/mismatch/malformed refuse), L-CLI-9 (approved 1/0 + exact pin + record + approval id arms cleanly, pin value never printed); L-CLI-4 no-record case now passes the pin so it still exercises the record gate. All use fake credentials; no listener binds and no network egress on any refusal path.
+
+### Validation
+- `node --test tests/unit/live-analysis-live-cli.test.ts`: 9/9 PASS (5 existing + 4 new).
+- Full: unit 568/568, security 141/141; `pnpm lint` 0 problems (261 files); root `tsc` clean. Local, this worktree.
+- Required hosted CI: see the PR checks for the pushed head (run to be linked in the recheck request).
+
+### Continuation notes
+- `tests/security/live01b-prep-boundary.test.ts` carries a one-line comment-only modification that predates this slice (dirty in the worktree before any A2 edit); it was deliberately left uncommitted and is NOT part of the remediation.
+- Server `createCompanion` still accepts any well-formed generalized pin and any ledger seed by design (test-double seam); the 1/0 + exact-pin policy lives in the owner-started `--live` CLI only, per the audit's required fix.
+
+### Next action
+Independent exact-HEAD recheck of PR #36; STOP afterwards — no merge, deploy, provider calls, key reads, spend, or live inference.
+
 <!-- HANDOFF_ENTRIES_END -->
