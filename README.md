@@ -278,6 +278,10 @@ pnpm --dir dashboard build
 node scripts/c3-live-analysis.ts --port 5188 --serve "$PWD/dashboard/dist"
 ~~~
 
+**Keep that terminal open.** The companion reads its commands (`pair`, `permit`, `status`, `quit`) from standard input and exits if it is started without an interactive terminal or with input closed.
+
+**Checked so far:** from a clean checkout on Linux with Node.js 24.22.2 and pnpm 12.6.0, the root and dashboard frozen installs and the Vite build succeed, and the companion started without `--live` and served the dashboard with its "mock transport, no live inference" banner. The pair → upload → mock-analysis flow has **not** been independently evidenced; it is owner-run.
+
 Open **http://127.0.0.1:5188** and use the companion terminal's **pair** command to connect Zone L. Without the explicit **--live** flag, the companion starts in **mock-only** mode; it does not read Baseten credentials or send inference requests. To exercise mock analysis, choose an owner-generated synthetic MP4 and follow the UI's mock permit/upload flow. The certified F01 MP4 recording is **not checked into Git**.
 
 **For the owner's live-result demo:** keep the existing successful Zone L screen visible, and capture that result as-is. Do not start a second companion, click Analyze again, or spend another attempt to replace a vanished result. A real recording or screenshot can be shown in a narrated video after secret/privacy review. No key, private video, live spend ledger, or raw provider response belongs in this public repository.
