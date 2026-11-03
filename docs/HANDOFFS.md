@@ -2203,4 +2203,29 @@ Independent exact-HEAD audit of the new Draft PR; STOP afterwards — no merge, 
 ### Next action
 Independent review of the exact PR head; then owner decisions. STOP afterwards — no merge, deploy, inference, signing, enrollment or real-proposal execution.
 
+## Handoff: UI-C3-L-DEMO-01A — Zone L Evidence Replay CI fix (uncommitted video, unavailable-state fallback)
+
+- **Task / phase:** UI-C3-L-DEMO-01A (correction to UI-C3-L-DEMO-01; leaves that handoff unedited)
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** Independent reviewer, then project owner
+- **Branch:** `phase/ui-c3-l-demo-01` (from `origin/main@b1bb51f`; does not touch frozen V `a862f06`, authorization branch W, or PR #45 history)
+- **Implementation head:** `f0dc13dc1f289093e9a0e026c631f4b29c4a0b98` (uncommits the 57 KB clip, serves it from untracked `dashboard/public/replay/`, adds the checkout-aware unavailable state, narrows CSP `media-src` to `'self' blob:`; the branch tip adds only this handoff and the STATUS pointer)
+- **PR:** #47 (Draft, unmerged)
+- **State:** READY FOR REVIEW
+
+### Completed
+- Root cause of the red exact-HEAD CI on `bc68044`: `tests/security/b2a-boundary.test.ts:221` forbids any tracked `.mp4`/`.webm` (or `.proofpilot/`) file, and the demo commit had tracked `dashboard/src/assets/replay/f01-mobile-defect.mp4`. Reproduced locally at the identical line before fixing; no test was weakened or edited.
+- The clip is now untracked at `dashboard/public/replay/f01-mobile-defect.mp4` (local-only, SHA-256 `e9df68b1…` re-verified after the move) and is no longer statically imported, so clean-checkout builds never break. Stage 1 plays it when present; otherwise it renders "Recording unavailable in this checkout." with the export hint and the Cart 0/1 stills — the exact missing-evidence behavior the task contract requires. No footage is ever substituted.
+- Local one-command export (hash-checked, from the sanitized C3 evidence root): `shasum -a 256 .proofpilot/c3-b1/c3-b1-20261103T115426Z-b46ad0/<clip>` must equal `e9df68b1…eeafdf`, then copy the verified file to `dashboard/public/replay/f01-mobile-defect.mp4` and rebuild.
+- Corrects two lines of the UI-C3-L-DEMO-01 handoff without editing it: only the 3 Cart PNGs remain bundled (not "4 bundled assets"), and a clean-checkout bundle shows the poster stills + unavailable state for the clip rather than being "self-contained" for video. PNG hashes, verdicts, provenance labels and the walkthrough are unchanged.
+
+### Validation
+- Focused gate green: `tests/security/b2a-boundary.test.ts` 9/9 (was 8/9 with the identical `1 !== 0` failure at line 221).
+- Dashboard `typecheck` clean; `vite build` clean (single-file `dist/index.html` 617 KB + untracked `dist/replay/` clip served alongside).
+- Full gates + UI smoke (clip-present playback and clip-absent unavailable state, zero non-loopback requests, zero page errors) re-run on the final head; results in the completion summary.
+- `git diff --check` clean. Frozen V, W and PR #45 untouched; no merge, deploy, inference, signing, enrollment or real-proposal execution.
+
+### Next action
+Independent review of the exact PR head; then owner decisions. STOP afterwards — no merge, deploy, inference, signing, enrollment or real-proposal execution.
+
 <!-- HANDOFF_ENTRIES_END -->
