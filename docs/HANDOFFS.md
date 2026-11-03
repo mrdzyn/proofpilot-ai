@@ -2172,4 +2172,14 @@ Focused independent recheck of PR #40 at the final exact HEAD; STOP afterwards �
 ### Next action
 Independent exact-HEAD audit of the new Draft PR; STOP afterwards — no merge, deploy, preflight, key reads, spend, retry, or live inference. The owner decides separately whether to authorize another Baseten send.
 
+## Handoff: README-DEMO-01-T1 — README and owner-observed demo evidence (docs-only)
+
+- **Base:** protected main at b1bb51fa2602bf45dfb1d1f09d543ffc4affc5ca (audited PR #41 merged).
+- **Branch:** docs/readme-demo-baseten-qa01-success.
+- **Owner-provided evidence:** one accepted Baseten F01 analysis, local run local-2026-11-02-001, provider-reported 1631 prompt + 1309 completion = 2940 total; two visible taps with Cart 0 unchanged; explicit uncertainties. Prior single spend independently confirmed; second spend reconciliation pending owner readback.
+- **Scope:** README.md, docs/STATUS.md, docs/UI-C3-02-D9-RUNBOOK.md §10, and this handoff only. No runtime, model, token cap, security, image, media, provider, credential or ledger changes.
+- **Test objective:** accurate and usable 90-second demo story; mock-only public quick-start; preserve strict distinctions among certified F01 baseline, unverified live model observations, and hand-authored PC-1 independently VERIFIED 3/3. No fabricated footage, false publicly hosted claim, AI-fix verification claim, secrets or owner paths.
+- **Validation:** inspect four-file diff and Markdown anchors/links, ensure safe mock-only invocation and no net-new live permission; required hosted CI must pass before owner merger approval.
+- **Disposition:** docs-only Draft PR for independent review; no merge, deployment or live inference authorized.
+
 <!-- HANDOFF_ENTRIES_END -->
