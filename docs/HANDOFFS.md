@@ -2178,15 +2178,15 @@ Independent exact-HEAD audit of the new Draft PR; STOP afterwards — no merge, 
 - **From:** Implementation agent (Muse Code, powered by Muse Spark)
 - **To:** ONE independent security reviewer, then project owner
 - **Branch:** `phase/c3-final-readiness` (from `origin/main@b1bb51f`)
-- **PR:** (new Draft PR number to fill on open; Draft, unmerged)
+- **PR:** #43 (Draft, unmerged)
 - **State:** READY FOR REVIEW. Specification only — no code, provider, spend, proposal access, or ledger change. `.env.local` never listed, read, or referenced. Scope deliberately excludes the stored real proposal body: this handoff and the spec cite only its run id, label, and already-published adjustment values.
 
-### Findings delivered (remediated per both independent security audits of PR #43; second round: authN/authZ separation, exact stage order, STATUS snapshot dating, correction-vs-analysis axes)
+### Findings delivered (remediated per three independent security audits of PR #43; third round: parent-binding authorization, unforgeable mint bridge, STATUS Baseten row, handoff read-order)
 - **Attempt-2 reconciliation (PR #42, open/unmerged):** owner-reported accepted F01 analysis (1631/1309/2940, UNVERIFIED), ledger readback pending; accepted observation is not an AI-generated correction. Candidates remain stored `c3-live-meta-001` (Option A) or a future authorized send (Option B, deferred).
-- **MAJOR-1:** Option A now uses the authenticated command (`c3-b2b-verify-authenticated.ts`, manifest vs pinned roots before any read); legacy unauthenticated CLI explicitly excluded as the enabling vehicle.
-- **MAJOR-2:** enabling mechanism preserves default-deny at both CLI and exported `verifyRegisteredProposal` (authorized-set-gated, no flags/env/bypass); `REAL_ARTIFACT_DISABLED` accounted for.
-- **MAJOR-3:** exact test-file allowlist (authorization, authentication, direct-call bypass, refusal-drill integration) in a separate implementation PR; synthetic suites untouched.
-- **MINOR-1/2/3:** pre-Attempt-2 snapshot language retained as snapshot; STATUS primary branch = merged `main@b1bb51f`; five-flag contract kept exact (values cross-checked, no path flags); checklist ref corrected to `tasks/PP-META-I2-C3-B2B.md` §9.
+- **MAJOR-1:** parent-binding authorization (no self-reference): `V` = frozen code HEAD with no authorization values, D-R1 recorded after `V` exists, `W` = direct child holding only the record (`verificationParentSha = V`) plus enrollment; runtime checkout `W`, verification revision `V = HEAD~1` with a diff allowlist; P2 read precedes verification, auth gates registration/staging/execution. Legacy unauthenticated CLI excluded as the enabling vehicle.
+- **MAJOR-2:** exact mint bridge via one new Zone E module (`packages/core/src/model-real-authorization.ts`, the only minter): re-verifies Ed25519 from raw bytes against pinned roots, requires E1 object identity, binds proposal/manifest/record/`V` by equality, single-use consumption; direct programmatic calls without it still throw `REAL_ARTIFACT_DISABLED`; no flags/env/bypass.
+- **Test allowlist:** 5 exact test files (authorization incl. synthetic commit/V dry-run, authentication, new mint battery, bypass incl. importer allow-list + 4 guard-removal mutants, refusal-drill integration); synthetic suites untouched.
+- **MINOR-1/2:** STATUS Baseten row now separates historical refusals from owner-reported Attempt 2 ACCEPTED (observation, not correction; ledger pending); five-flag contract kept exact; checklist ref `tasks/PP-META-I2-C3-B2B.md` §9.
 - **Capability audit:** 12/20 readiness items exist merged+audited; 8 missing are decisions + one narrow enabling change, not infrastructure.
 - **Isolation:** minimum boundary = protected checkout + single-writer window + evidence hygiene (owner-operated); separate-UID/snapshot recommended.
 - **Assessment:** CONDITIONAL GO (offline demo now; real run only after owner decisions D-R1…D-R5 + review, spec §6). NO-GO on execution, spend, enrollment, or verdict transfer until then.
