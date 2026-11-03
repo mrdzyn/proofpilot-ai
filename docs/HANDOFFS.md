@@ -2182,4 +2182,84 @@ Independent exact-HEAD audit of the new Draft PR; STOP afterwards — no merge, 
 - **Validation:** inspect four-file diff and Markdown anchors/links, ensure safe mock-only invocation and no net-new live permission; required hosted CI must pass before owner merger approval.
 - **Disposition:** docs-only Draft PR for independent review; no merge, deployment or live inference authorized.
 
+## Handoff: UI-C3-L-DEMO-01 — Zone L Evidence Replay (judge-ready offline demo, new Draft PR)
+
+- **Task / phase:** UI-C3-L-DEMO-01 (task text is the contract; no separate phase spec)
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** Independent reviewer, then project owner
+- **Branch:** `phase/ui-c3-l-demo-01` (from `origin/main@b1bb51f`; does not touch frozen V `a862f06`, authorization branch W, or PR #45 history)
+- **Implementation head:** `e7c2acbcc477b84cc4bd16d3378899f9e7bf8e5c` (ReplayZone + manifest + bundled assets + App wiring + CSP line; the branch tip adds only this handoff and the STATUS pointer)
+- **PR:** #47 (Draft, unmerged)
+- **State:** READY FOR REVIEW
+
+### Completed
+- New `ReplayZone` (`dashboard/src/zones/ReplayZone.tsx`): guided five-stage Evidence Replay (F01 failure, Baseten analysis, Meta proposal, PC-1 fix, three replays) reusing ZoneSection/EvidenceTable/Row/Note/CodeBlock, chips, states and tokens; step nav with aria-current, per-media unavailable states, alt text, keyboard-operable controls. No fetch, no provider, no pairing, no new browser-test execution.
+- Sanitized manifest (`dashboard/src/lib/replayEvidence.ts`) + 4 bundled assets (57 KB mp4 verified vs STATUS hash; Cart 0/1 PNGs verified vs the C3 run). Full evidence hashes in-manifest; no secrets, paths, raw artifacts or keys. No `.proofpilot` literals anywhere in shell source (T-ABSENT-1 green).
+- Labels kept prominent and exact: PC-1 `HAND-AUTHORED — VERIFIED 3/3`; Meta proposal `ACCEPTED — NOT VERIFIED` (never staged/executed); Baseten `OWNER-OBSERVED — UNVERIFIED` (0 accepted; no output quoted).
+- Single-file build intact (`dist/index.html`, 693 KB). CSP: `media-src` gains `data:` for our own bundled clip — img-src already allowed it and the file comment already documented data: for local media. No new hosts, no exfiltration surface. Flagged for explicit review attention.
+- LiveZone untouched: pairing, mock/live modes, provider-send controls and security boundaries preserved.
+
+### Validation
+- Dashboard `typecheck` clean; `vite build` clean (49 modules). Root `test:unit` 586/586, `test:security` 141/141 (incl. T-ABSENT-1). `git diff --check` clean.
+- UI smoke (Playwright vs served dist, desktop 1280 + mobile 390): 8/8 — app loads, all three provenance labels visible, all five stages render with loaded media, defect video plays (10.0 s), mobile nav works, zero non-loopback requests, zero page errors.
+- Walkthrough: 68.7 s WebM (1280×800, VP9) at `.proofpilot/demo/zone-l-walkthrough/` (gitignored, not committed), frame-verified showing the replay zone, Cart 1 evidence and labels.
+- Hosted CI on the final head: see the PR checks (exact HEAD + run id reported in the completion summary, not repeated here so this record never rots).
+
+### Continuation notes
+- The CSP line is a security-boundary file: the change is additive-only (`data:` on `media-src`, matching `img-src`), required for our own bundled clip to play. Approve explicitly or propose the multi-file-dist alternative.
+- Nothing here stages or executes the stored Meta proposal; its authorized path (D-R1 → key ceremony → W → supervised run) is unchanged and still pending owner decisions.
+- Walkthrough video and C3 run evidence live outside the repo (gitignored); the committed bundle is self-contained and rebuildable with one command.
+
+### Next action
+Independent review of the exact PR head; then owner decisions. STOP afterwards — no merge, deploy, inference, signing, enrollment or real-proposal execution.
+
+## Handoff: UI-C3-L-DEMO-01A — Zone L Evidence Replay CI fix (uncommitted video, unavailable-state fallback)
+
+- **Task / phase:** UI-C3-L-DEMO-01A (correction to UI-C3-L-DEMO-01; leaves that handoff unedited)
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** Independent reviewer, then project owner
+- **Branch:** `phase/ui-c3-l-demo-01` (from `origin/main@b1bb51f`; does not touch frozen V `a862f06`, authorization branch W, or PR #45 history)
+- **Implementation head:** `f0dc13dc1f289093e9a0e026c631f4b29c4a0b98` (uncommits the 57 KB clip, serves it from untracked `dashboard/public/replay/`, adds the checkout-aware unavailable state, narrows CSP `media-src` to `'self' blob:`; the branch tip adds only this handoff and the STATUS pointer)
+- **PR:** #47 (Draft, unmerged)
+- **State:** READY FOR REVIEW
+
+### Completed
+- Root cause of the red exact-HEAD CI on `bc68044`: `tests/security/b2a-boundary.test.ts:221` forbids any tracked `.mp4`/`.webm` (or `.proofpilot/`) file, and the demo commit had tracked `dashboard/src/assets/replay/f01-mobile-defect.mp4`. Reproduced locally at the identical line before fixing; no test was weakened or edited.
+- The clip is now untracked at `dashboard/public/replay/f01-mobile-defect.mp4` (local-only, SHA-256 `e9df68b1…` re-verified after the move) and is no longer statically imported, so clean-checkout builds never break. Stage 1 plays it when present; otherwise it renders "Recording unavailable in this checkout." with the export hint and the Cart 0/1 stills — the exact missing-evidence behavior the task contract requires. No footage is ever substituted.
+- Local one-command export (hash-checked, from the sanitized C3 evidence root): `shasum -a 256 .proofpilot/c3-b1/c3-b1-20261103T115426Z-b46ad0/<clip>` must equal `e9df68b1…eeafdf`, then copy the verified file to `dashboard/public/replay/f01-mobile-defect.mp4` and rebuild.
+- Corrects two lines of the UI-C3-L-DEMO-01 handoff without editing it: only the 3 Cart PNGs remain bundled (not "4 bundled assets"), and a clean-checkout bundle shows the poster stills + unavailable state for the clip rather than being "self-contained" for video. PNG hashes, verdicts, provenance labels and the walkthrough are unchanged.
+
+### Validation
+- Focused gate green: `tests/security/b2a-boundary.test.ts` 9/9 (was 8/9 with the identical `1 !== 0` failure at line 221).
+- Dashboard `typecheck` clean; `vite build` clean (single-file `dist/index.html` 617 KB + untracked `dist/replay/` clip served alongside).
+- Full gates + UI smoke (clip-present playback and clip-absent unavailable state, zero non-loopback requests, zero page errors) re-run on the final head; results in the completion summary.
+- `git diff --check` clean. Frozen V, W and PR #45 untouched; no merge, deploy, inference, signing, enrollment or real-proposal execution.
+
+### Next action
+Independent review of the exact PR head; then owner decisions. STOP afterwards — no merge, deploy, inference, signing, enrollment or real-proposal execution.
+
+## Handoff: UI-C3-L-DEMO-01B — PR #47 evidence-accuracy audit remediation
+
+- **Task / phase:** UI-C3-L-DEMO-01B (correction to UI-C3-L-DEMO-01/01A; leaves those handoffs unedited)
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** Independent reviewer, then project owner
+- **Branch:** `phase/ui-c3-l-demo-01` (from `origin/main@b1bb51f`; does not touch frozen V `a862f06`, authorization branch W, or PR #45 history)
+- **Implementation head:** `f82be29b9e257be1c5f31fc4f395e4c6ff103917` (Stage 2 accepted-analysis section + Stage 5 three replay rows + manifest data; the branch tip adds only this handoff and the STATUS pointer)
+- **PR:** #47 (Draft, unmerged)
+- **State:** READY FOR REVIEW
+
+### Completed
+- **MAJOR-1:** Stage 2 no longer says "0 accepted model analyses". It keeps the three refused/spent attempts and adds the later owner-observed accepted Baseten F01 analysis (run `local-2026-11-02-001`, `baseten-live` provenance, 2048 cap, 1631/1309/2940 provider-reported usage, owner-pasted observations, UNVERIFIED marker, ledger-readback-pending spend note). Facts sourced read-only from runbook §10 on the PR #42 docs branch (pending review); raw model body never accessed, agent never ran it. No fix/diagnosis/billing claim; footer provenance label updated to match.
+- **MAJOR-2:** Stage 5 no longer aggregates. Three separate replay rows cite the real per-replay records from offline C3 run `c3-b1-20261103T115426Z-b46ad0`: nonce, `PC-1/replay-N` dir, ORACLE_PASS + exit 0, mobile/desktop Cart 1, candidate-record SHA and oracle-report SHA prefixes (replays 2/3 report SHAs recomputed with the identical method as replay 1, which matches the previously committed value). Nothing fabricated; rows stay labeled hand-authored PC-1, never the model proposal.
+- **MINOR-1:** PR #47 body updated (620 KB single-file build, untracked-clip arrangement, `media-src 'self' blob:`). `docs/STATUS.md` header reconciled to the active UI-C3-L-DEMO-01B task/branch (phase, working branch, active task lines only); all historic milestone/gate records untouched.
+
+### Validation
+- Dashboard `typecheck` clean; `vite build` clean (single-file `dist/index.html` ~620 KB + untracked `dist/replay/` clip served alongside).
+- Root `lint` 0 problems; `test:unit` 586/586; `test:security` 141/141 (boundary + T-ABSENT-1 green on the new content).
+- UI smoke (throwaway probe, deleted after run): 27/27 — three refusals + accepted-analysis text/usage/spend shown, zero-accepted claims gone, three replay rows with real nonces + report SHAs, aggregated row gone, hand-authored label kept, clip plays 10.04 s when present, unavailable state when blocked, zero non-loopback requests, zero page errors in both states. Walkthrough re-record not required (no visual/staging change to the recorded path beyond added rows).
+- `git diff --check` clean. Frozen V, W and PR #45 untouched; no merge, deploy, inference, signing, enrollment or real-proposal execution.
+
+### Next action
+Independent exact-HEAD recheck of PR #47; STOP afterwards — no merge, deploy, inference, signing, enrollment or real-proposal execution.
+
 <!-- HANDOFF_ENTRIES_END -->

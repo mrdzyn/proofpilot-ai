@@ -2,6 +2,7 @@ import { AnalysisZone } from './zones/AnalysisZone.tsx';
 import { CorrectionZone } from './zones/CorrectionZone.tsx';
 import { EvidenceZone } from './zones/EvidenceZone.tsx';
 import { LiveZone } from './zones/LiveZone.tsx';
+import { ReplayZone } from './zones/ReplayZone.tsx';
 import { RecordingZone } from './zones/RecordingZone.tsx';
 import { VerificationZone } from './zones/VerificationZone.tsx';
 import { HISTORICAL } from './lib/historical.ts';
@@ -39,6 +40,7 @@ export function App() {
         <CorrectionZone />
         <VerificationZone />
         <EvidenceZone />
+        <ReplayZone />
         <LiveZone />
         <section aria-label="Limitations" className="mt-10 border-t-2 border-[#111111] pt-4 text-sm text-[#3d4148]">
           <p>
