@@ -2172,4 +2172,32 @@ Focused independent recheck of PR #40 at the final exact HEAD; STOP afterwards �
 ### Next action
 Independent exact-HEAD audit of the new Draft PR; STOP afterwards — no merge, deploy, preflight, key reads, spend, retry, or live inference. The owner decides separately whether to authorize another Baseten send.
 
+## Handoff: C3-ENABLE-V1 — C3 enabling implementation (code-only V, new Draft PR)
+
+- **Task / phase:** C3-FINAL-READINESS §3 + §5 step 1 (spec in `docs/C3-FINAL-READINESS-SPRINT.md` on PR #43 @ `b399637`; round-5 doc fixes handled separately, not on this branch)
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** Independent security reviewer, then project owner
+- **Branch:** `phase/c3-real-run-enable` (from `origin/main@b1bb51f`; deliberately NOT built on the #43 branch)
+- **Implementation head:** `b12c334f9889dc1f9123dd09283a094d90497cae` (production + 5 test files; the branch tip adds only this handoff and the STATUS pointer)
+- **PR:** #45 (Draft, unmerged)
+- **State:** READY FOR REVIEW
+
+### Completed
+- `packages/core/src/model-real-authorization.ts` (new, Zone E): the only minter — Ed25519 re-verification from raw bytes, `trustRootsSha256` binding, E1 object identity, proposal/manifest/record/observed-V equality, single-use consumption up front; no fs/provenance/inference/network/env/child-process.
+- `packages/core/src/model-verification.ts`: real id admitted only with minted membership (consumed on check); direct programmatic calls still throw `REAL_ARTIFACT_DISABLED`.
+- `scripts/c3-b2b-verify-authenticated.ts`: ordered real-id gate (record first for a stable V-state message, then single-parent/clean/parent/diff checks, then the unchanged Zone P path with minting before the run). Five flags unchanged, none added, no env.
+- Five exact test files per the §3 list: authorization (record/parent/diff/clean/merge gates + synthetic commit/V dry-run against real git), authentication (tamper/replay/wrong-key/unknown-key/substituted-roots/altered-field batteries + eight-fields-carry-no-V proof), mint (non-forgeability, single-use, cross-V refusal, differential parser/signature agreement with Zone P on shared vectors), bypass (direct-call default-deny, importer allow-list, 4 guard-removal mutants, single-use across the E2 boundary to synthetic VERIFIED + retry refusal), refusal drill (real id exits 2 with zero evidence/stage at V).
+- What this is NOT: no `config/c3-real-run-authorization.json`, no trust-roots change, no W, no record values anywhere; the real run id still refuses at V; no stored-proposal read, no keys, no credentials, no provider calls, no merge/deploy.
+
+### Validation
+- `pnpm lint` — 271 files, 0 problems. `pnpm typecheck` — clean. `pnpm test:unit` — 603/603 (586 existing + 17 new). `pnpm test:security` — all green EXCEPT one stale expectation (see Continuation notes). Integration refusal drill (`tests/integration/c3-real-refusal.test.ts`) — green. `git diff --check` — clean.
+- Hosted CI on the final head: see the PR checks (exact HEAD + run id reported in the completion summary, not repeated here so this record never rots).
+
+### Continuation notes
+- KNOWN CONFLICT (reported, not silently fixed — the allow-list for this task forbids touching it): `tests/security/provenance-boundary.test.ts` 'E2 verifier has a minimal direct edge' still expects the old 6-entry import set for `model-verification.ts`; the mandated predicate import makes it 7 (`./model-real-authorization.ts` added). Actual vs expected shown by the runner; every other suite is green. Proposed reviewer-blessed fix is exactly one line: add `'./model-real-authorization.ts'` to that test's expected spec list. Do NOT treat the boundary file as silently editable — it needs the independent reviewer's explicit sign-off.
+- V is the code commit above; D-R1…D-R5, W creation, enrollment, the single supervised run and any merge decision are all out of scope and NOT AUTHORIZED by this work.
+
+### Next action
+Independent security review of the exact PR head against the §3 allow-list and the C3-B2B §9 checklist; then owner decisions. STOP afterwards — no merge, deploy, spend, key reads, proposal access or live inference.
+
 <!-- HANDOFF_ENTRIES_END -->
