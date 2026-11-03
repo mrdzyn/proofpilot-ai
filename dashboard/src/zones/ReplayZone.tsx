@@ -244,10 +244,11 @@ export function ReplayZone() {
                   {REPLAY_BASETEN.acceptedAttempt.analysisCap} · zero
                   proposals, no retries
                 </Row>
-                <Row head="Observations">
+                <Row head="Observations (paraphrased)">
                   <>
-                    <UntrustedMarker qualifier="UNVERIFIED MODEL OUTPUT" /> “
-                    {REPLAY_BASETEN.acceptedAttempt.observations}”
+                    <UntrustedMarker qualifier="UNVERIFIED MODEL OUTPUT" />{' '}
+                    Paraphrased summary of owner-observed model output:{' '}
+                    {REPLAY_BASETEN.acceptedAttempt.observations}
                   </>
                 </Row>
                 <Row head="Usage">
