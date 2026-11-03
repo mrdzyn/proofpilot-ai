@@ -28,7 +28,7 @@ import {
   loadAndAuthenticateProposalArtifact,
   parseTrustRoots,
 } from '../packages/provenance/src/artifact-auth.ts';
-import { ArtifactError, reloadAndBindArtifact } from '../packages/provenance/src/proposal-artifact.ts';
+import { ArtifactError, openNoFollowReadOnly, readBoundedBytes, reloadAndBindArtifact } from '../packages/provenance/src/proposal-artifact.ts';
 import { verifySourceProvenance, SourceProvenanceError } from '../packages/provenance/src/source-provenance.ts';
 import { registerModelProposal, ModelProposalError } from '../packages/core/src/model-proposal.ts';
 import {
@@ -50,6 +50,10 @@ const REAL_ARTIFACT_RUN_ID = 'c3-live-meta-001';
 const REAL_ARTIFACT_MESSAGE =
   `refused: ${REAL_ARTIFACT_RUN_ID} is the real stored model proposal and its execution path is HARD-DISABLED ` +
   `(no owner execution approval, no security review of a real run). This command verifies synthetic fixtures only.`;
+
+/** Sidecar bounds mirror `artifact-auth.ts` (manifest 2048, signature 256). */
+const SIDECAR_MANIFEST_BOUND = 2048;
+const SIDECAR_SIGNATURE_BOUND = 256;
 
 const { values } = parseArgs({
   options: {
@@ -155,14 +159,30 @@ try {
     inputSha256: artifact.inputSha256,
     artifactSha256: artifact.artifactHash,
   });
-  // Single-use minting for the real id only: re-verifies the signature from raw bytes and
-  // binds proposal, manifest, record and observed V. Direct programmatic calls without this
-  // step still throw REAL_ARTIFACT_DISABLED at the E2 boundary.
+  // Cross-phase binding: re-load the bytes immediately before the run and refuse unless they
+  // are the exact bytes validated, authenticated and registered above.
+  const bound = await reloadAndBindArtifact(repoRoot, runId as string, artifact.artifactHash);
+  // Same-bytes guarantee for the real id: the mint must verify the exact bytes Zone P
+  // authenticated. Re-read the sidecars through the pinned-descriptor reader and refuse on
+  // any difference from the gate texts — a mid-flight swap fails closed instead of splitting
+  // the two verifications across different bytes.
+  let rezonedManifestText = '';
+  let rezonedSignatureText = '';
+  if (realRun !== null) {
+    rezonedManifestText = await readSidecarHardened(`.proofpilot/evidence/proposals/${runId}/auth-manifest.json`, SIDECAR_MANIFEST_BOUND, 'manifest');
+    rezonedSignatureText = await readSidecarHardened(`.proofpilot/evidence/proposals/${runId}/auth-manifest.sig`, SIDECAR_SIGNATURE_BOUND, 'signature');
+    if (rezonedManifestText !== realRun.manifestText || rezonedSignatureText !== realRun.signatureText) {
+      fail(2, 'refused: sidecar bytes changed between the gate read and the authenticated read');
+    }
+  }
+  // Single-use minting for the real id only: re-verifies the signature from the re-read
+  // bytes and binds proposal, manifest, record and observed V. Direct programmatic calls
+  // without this step still throw REAL_ARTIFACT_DISABLED at the E2 boundary.
   if (realRun !== null) {
     mintSingleUseRealAuthorization({
       proposal: registered,
-      manifestText: realRun.manifestText,
-      signatureText: realRun.signatureText,
+      manifestText: rezonedManifestText,
+      signatureText: rezonedSignatureText,
       trustRootsText: realRun.trustRootsText,
       recordText: realRun.recordText,
       cliValues: {
@@ -175,9 +195,6 @@ try {
       observed: realRun.observed,
     });
   }
-  // Cross-phase binding: re-load the bytes immediately before the run and refuse unless they
-  // are the exact bytes validated, authenticated and registered above.
-  const bound = await reloadAndBindArtifact(repoRoot, runId as string, artifact.artifactHash);
   // Zone E replay path: identity-checked, three fresh stages, verdict from persisted evidence.
   // The Zone P attestation travels with the run and is persisted beside the evidence.
   const outDir = path.join(repoRoot, '.proofpilot/c3-b2b', `MODEL-${runId}-${stamp}`);
@@ -225,6 +242,28 @@ type RealRunContext = {
 };
 
 /**
+ * Re-read one sidecar through the pinned read-only descriptor (no-follow, bounded, read from
+ * the descriptor rather than the pathname), for the post-authentication same-bytes check.
+ */
+async function readSidecarHardened(rel: string, bound: number, what: string): Promise<string> {
+  const target = path.join(repoRoot, ...rel.split('/'));
+  let handle;
+  try {
+    handle = await openNoFollowReadOnly(target, `refused: ${what} sidecar is unreadable before the run`);
+  } catch (e) {
+    if (e instanceof ArtifactError) fail(2, `refused: ${e.message}`);
+    throw e;
+  }
+  try {
+    const bytes = await readBoundedBytes(handle!, bound);
+    if (bytes.length > bound) fail(2, `refused: ${what} sidecar exceeds its fixed bound`);
+    return bytes.toString('utf8');
+  } finally {
+    await handle!.close().catch(() => undefined);
+  }
+}
+
+/**
  * Ordered real-id authorization gate. Runs before any artifact, manifest or sidecar read.
  * The fixed-path record comes first so the V state (no record) always refuses with the
  * hard-disable message, whatever the checkout looks like; git parent-binding, tree and
@@ -246,8 +285,21 @@ async function refuseUnlessRealRunAuthorized(): Promise<RealRunContext> {
     fail(2, REAL_ARTIFACT_MESSAGE);
   }
   const rec = shape as Record<string, unknown>;
-  if (rec['runId'] !== runId || typeof rec['verificationParentSha'] !== 'string') {
+  if (rec['runId'] !== runId) {
     fail(2, REAL_ARTIFACT_MESSAGE);
+  }
+  // All five CLI values are cross-checked against the record before any artifact, manifest
+  // or sidecar access (§3): the remaining four here, the parent binding below.
+  const cliChecks = [
+    ['--source-sha', 'sourceSha', sourceSha],
+    ['--source-fixture-tree', 'sourceFixtureTree', sourceFixtureTree],
+    ['--source-analysis-id', 'sourceAnalysisId', sourceAnalysisId],
+    ['--verification-sha', 'verificationParentSha', verificationSha],
+  ] as const;
+  for (const [flag, field, value] of cliChecks) {
+    if (typeof rec[field] !== 'string' || rec[field] !== value) {
+      fail(2, `refused: ${flag} does not match the authorization record (RECORD_MISMATCH)`);
+    }
   }
   const authorizedParent = rec['verificationParentSha'] as string;
   let parentsLine: string;

@@ -256,6 +256,21 @@ test('bypass: the mint module importers are exactly the allow-list', () => {
   };
   walk(path.join(ROOT, 'packages'));
   walk(path.join(ROOT, 'scripts'));
+  for (const dir of ['dashboard', 'verifier']) {
+    const full = path.join(ROOT, dir);
+    if (existsSync(full)) {
+      const walkExt = (d: string) => {
+        for (const name of readdirSync(d, { withFileTypes: true })) {
+          if (name.name === 'node_modules') continue;
+          const p = path.join(d, name.name);
+          if (name.isDirectory()) { walkExt(p); continue; }
+          if (!p.endsWith('.ts') && !p.endsWith('.tsx')) continue;
+          if (readFileSync(p, 'utf8').includes('model-real-authorization')) hits.push(path.relative(ROOT, p));
+        }
+      };
+      walkExt(full);
+    }
+  }
   assert.deepEqual(hits.sort(), [
     'packages/core/src/model-verification.ts',
     'scripts/c3-b2b-verify-authenticated.ts',
@@ -286,6 +301,9 @@ test('bypass mutant M1: deleting the CLI parent/diff gate is caught by source or
   for (const needle of ["rev-list', '--parents'", "'--name-only'", 'status', '--porcelain', 'NOT_SINGLE_PARENT', 'DIRTY_TREE', 'DIFF_NOT_ALLOWLISTED']) {
     assert.ok(text.includes(needle), `CLI gate checks parent count, tree and diff (${needle})`);
   }
+  for (const needle of ['RECORD_MISMATCH', 'changed between the gate read and the authenticated read', 'readSidecarHardened']) {
+    assert.ok(text.includes(needle), `CLI gate pre-checks all five CLI values and re-reads sidecars (${needle})`);
+  }
   assert.ok(text.indexOf('mintSingleUseRealAuthorization({') > loadAt, 'minting happens after authentication, before the run');
   assert.doesNotMatch(text, /--trust-roots|--approval|--auth-record|--allow-/, 'no approval/trust-root/bypass flags exist');
 });
@@ -300,6 +318,17 @@ test('bypass mutant M2: deleting the mint signature re-verification is caught by
   const code = await codeOf(() => mintSingleUseRealAuthorization({ ...s.args, signatureText: foreignSig }));
   assert.equal(code, 'MINT:AUTH_SIGNATURE_INVALID', 'a parse-valid manifest with a foreign signature never mints');
   assert.equal(isRealRunAuthorized(s.args.proposal), false);
+});
+
+test('bypass mutant M3: deleting the core membership check is caught by source and behavior', async () => {
+  const text = stripComments(readFileSync(path.join(ROOT, 'packages/core/src/model-verification.ts'), 'utf8'));
+  assert.match(text, /isRealRunAuthorized/, 'the predicate is consulted at the real-id boundary (mutant: deleted check is caught here)');
+  assert.match(text, /REAL_ARTIFACT_DISABLED/, 'the unminted path keeps its dedicated code');
+  const dir = tmp();
+  const code = await codeOf(() => verifyRegisteredProposal(runOpts(dir)));
+  assert.equal(code, 'E2:REAL_ARTIFACT_DISABLED', 'behavioral: unminted direct calls refuse without reaching any lock, file or runner');
+  assert.ok(!existsSync(path.join(dir, 'out')), 'no evidence directory is created');
+  assert.ok(!existsSync(path.join(dir, 'coord.lock')), 'no lock is taken');
 });
 
 test('bypass mutant M4: deleting single-use consumption is caught by the second check', async () => {

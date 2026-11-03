@@ -194,11 +194,10 @@ export async function verifyRegisteredProposal(opts: VerifyRegisteredProposalOpt
   assertRegisteredModelProposal(opts.proposal);
   const proposal = opts.proposal;
   // The real stored model proposal is admitted at the execution boundary itself ONLY for a
-  // proposal carrying single-use authorization minted by the real-run authorization module, not
-  // only in the operator command: no programmatic caller can bypass the CLI gate, and no
-  // environment flag or credential lifts this refusal. Membership is consumed up front: if
-  // verification later throws, the authorization is already spent and any retry restarts from
-  // the full gate.
+  // proposal carrying single-use authorization minted by the real-run authorization module.
+  // No programmatic caller can reach the run without that membership, and no environment
+  // flag or credential lifts this refusal. Membership is consumed up front: if verification
+  // later throws, the authorization is already spent and any retry restarts from the full gate.
   if (proposal.runId === 'c3-live-meta-001' && !isRealRunAuthorized(proposal)) {
     throw new ModelVerificationError(
       'REAL_ARTIFACT_DISABLED',

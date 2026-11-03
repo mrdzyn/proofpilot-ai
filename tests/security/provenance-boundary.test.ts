@@ -553,13 +553,13 @@ test('E1 bridge has a minimal direct edge: only the core grammar leaf and the si
   assert.ok(!c.files.some((x) => /inference\/src|packages\/provenance/.test(x)), 'the bridge closure reaches no inference or provenance file');
 });
 
-test('E2 verifier has a minimal direct edge: grammar, stage, coordinator and the E1 bridge only', () => {
+test('E2 verifier has a minimal direct edge: grammar, stage, coordinator, the E1 bridge and the authorization bridge', () => {
   const f = 'packages/core/src/model-verification.ts';
   const text = code(read(f));
   const specs = [...new Set([...text.matchAll(/from\s*['"]([^'"]+)['"]/g)].map((m) => m[1]!))].sort();
   assert.deepEqual(
     specs,
-    ['./candidate-coordinator.ts', './candidate-stage.ts', './css-adjustments.ts', './model-proposal.ts', 'node:fs/promises', 'node:path'],
+    ['./candidate-coordinator.ts', './candidate-stage.ts', './css-adjustments.ts', './model-proposal.ts', './model-real-authorization.ts', 'node:fs/promises', 'node:path'],
     'no other module edge out of the E2 module',
   );
   assert.doesNotMatch(text, /import\s*\(|require\s*\(/, 'no dynamic import or require in the E2 module');
