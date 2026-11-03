@@ -26,6 +26,7 @@ import {
   type Runner,
 } from './candidate-coordinator.ts';
 import { assertRegisteredModelProposal, modelProposalIdOf } from './model-proposal.ts';
+import { isRealRunAuthorized } from './model-real-authorization.ts';
 
 export type ModelVerificationErrorCode =
   | 'BAD_SHA'
@@ -192,14 +193,16 @@ export type VerifyRegisteredProposalOptions = {
 export async function verifyRegisteredProposal(opts: VerifyRegisteredProposalOptions): Promise<ModelVerificationEntry> {
   assertRegisteredModelProposal(opts.proposal);
   const proposal = opts.proposal;
-  // The real stored model proposal is HARD-DISABLED at the execution boundary itself, not
-  // only in the operator command: no programmatic caller can bypass the CLI gate. A future
-  // owner-authorized real run needs a separately reviewed code change and security approval.
-  // No environment flag or credential lifts this refusal.
-  if (proposal.runId === 'c3-live-meta-001') {
+  // The real stored model proposal is admitted at the execution boundary itself ONLY for a
+  // proposal carrying single-use authorization minted by the real-run authorization module, not
+  // only in the operator command: no programmatic caller can bypass the CLI gate, and no
+  // environment flag or credential lifts this refusal. Membership is consumed up front: if
+  // verification later throws, the authorization is already spent and any retry restarts from
+  // the full gate.
+  if (proposal.runId === 'c3-live-meta-001' && !isRealRunAuthorized(proposal)) {
     throw new ModelVerificationError(
       'REAL_ARTIFACT_DISABLED',
-      'c3-live-meta-001 is the real stored model proposal and its execution path is HARD-DISABLED',
+      'c3-live-meta-001 is the real stored model proposal and its execution path is HARD-DISABLED without single-use authorization',
     );
   }
   const runId = proposal.runId;

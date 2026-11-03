@@ -9,11 +9,13 @@
 // flag, no trust-root flag, no bypass flag and no environment input: nothing in the
 // environment, credentials or config can widen either gate.
 //
-// The real stored artifact `c3-live-meta-001` is HARD-DISABLED: the command refuses that run
-// id before reading any file, staging anything or touching Git, whatever the environment
-// holds. Enabling the real artifact needs a separate owner decision, a code change and a
-// new security review — there is no flag, variable or trust-root entry that lifts this
-// refusal.
+// The real stored artifact `c3-live-meta-001` passes through an ordered authorization gate:
+// parent-binding record plus diff allow-list (exactly one parent, clean tree,
+// HEAD~1 == verificationParentSha, V..HEAD limited to the record and the enrollment),
+// then the usual authenticated path, with single-use minting before the run. Without a
+// complete gate the command refuses that run id before reading any artifact file, staging
+// anything or running anything, whatever the environment holds. There is no flag, variable
+// or trust-root entry that lifts this refusal.
 //
 // Exit codes mirror the C3-B1 script: 0 means VERIFIED; 1 means the pipeline completed with
 // a non-VERIFIED verdict; 2 means refused or errored before completing.
@@ -29,6 +31,13 @@ import {
 import { ArtifactError, reloadAndBindArtifact } from '../packages/provenance/src/proposal-artifact.ts';
 import { verifySourceProvenance, SourceProvenanceError } from '../packages/provenance/src/source-provenance.ts';
 import { registerModelProposal, ModelProposalError } from '../packages/core/src/model-proposal.ts';
+import {
+  AUTHORIZATION_DIFF_ALLOWLIST,
+  AUTHORIZATION_RECORD_PATH,
+  AUTHORIZATION_TRUST_ROOTS_PATH,
+  mintSingleUseRealAuthorization,
+  ModelAuthorizationError,
+} from '../packages/core/src/model-real-authorization.ts';
 import {
   verifyRegisteredProposal,
   ModelVerificationError,
@@ -76,11 +85,13 @@ const SHA40 = /^[0-9a-f]{40}$/;
 for (const [name, sha] of [['source-sha', sourceSha], ['source-fixture-tree', sourceFixtureTree], ['verification-sha', verificationSha]] as const) {
   if (!SHA40.test(sha as string)) fail(2, `refused: --${name} must be 40 lowercase hex characters`);
 }
-// The hard disable precedes every file read, stage, browser and Git call.
-if (runId === REAL_ARTIFACT_RUN_ID) fail(2, REAL_ARTIFACT_MESSAGE);
-
 const repoRoot = path.resolve(import.meta.dirname, '..');
 const git = (...args: string[]): string => execFileSync('git', args, { cwd: repoRoot, encoding: 'utf8', timeout: 30000 }).trim();
+
+// The real-id authorization gate precedes every artifact file read, stage, browser and
+// Git-gated call. At V (no authorization record) it refuses with the hard-disable message.
+let realRun: RealRunContext | null = null;
+if (runId === REAL_ARTIFACT_RUN_ID) realRun = await refuseUnlessRealRunAuthorized();
 const modelGit: ModelGit = {
   commitExists: async (sha) => {
     try {
@@ -144,6 +155,26 @@ try {
     inputSha256: artifact.inputSha256,
     artifactSha256: artifact.artifactHash,
   });
+  // Single-use minting for the real id only: re-verifies the signature from raw bytes and
+  // binds proposal, manifest, record and observed V. Direct programmatic calls without this
+  // step still throw REAL_ARTIFACT_DISABLED at the E2 boundary.
+  if (realRun !== null) {
+    mintSingleUseRealAuthorization({
+      proposal: registered,
+      manifestText: realRun.manifestText,
+      signatureText: realRun.signatureText,
+      trustRootsText: realRun.trustRootsText,
+      recordText: realRun.recordText,
+      cliValues: {
+        runId: runId as string,
+        sourceSha: sourceSha as string,
+        sourceFixtureTree: sourceFixtureTree as string,
+        sourceAnalysisId: sourceAnalysisId as string,
+        verificationSha: verificationSha as string,
+      },
+      observed: realRun.observed,
+    });
+  }
   // Cross-phase binding: re-load the bytes immediately before the run and refuse unless they
   // are the exact bytes validated, authenticated and registered above.
   const bound = await reloadAndBindArtifact(repoRoot, runId as string, artifact.artifactHash);
@@ -177,10 +208,87 @@ try {
   console.log(`provenance: source ${provenance.classes.sourceHead}, input ${provenance.classes.inputSha256}`);
   console.log(`evidence: ${path.join(outDir, `MODEL-${runId}`, VERIFICATION_FILE)}`);
 } catch (e) {
-  if (e instanceof AuthError || e instanceof ArtifactError || e instanceof SourceProvenanceError || e instanceof ModelProposalError || e instanceof ModelVerificationError) {
+  if (e instanceof AuthError || e instanceof ArtifactError || e instanceof SourceProvenanceError || e instanceof ModelProposalError || e instanceof ModelVerificationError || e instanceof ModelAuthorizationError) {
     fail(2, `refused: ${e.message}`);
   }
   if (e instanceof CoordinatorBusyError) fail(2, `refused: ${e.message}`);
   throw e;
 }
 process.exit(entry.status === 'VERIFIED' ? 0 : 1);
+
+type RealRunContext = {
+  recordText: string;
+  trustRootsText: string;
+  manifestText: string;
+  signatureText: string;
+  observed: { head: string; parent: string; parentCount: number; clean: boolean; diffNames: string[] };
+};
+
+/**
+ * Ordered real-id authorization gate. Runs before any artifact, manifest or sidecar read.
+ * The fixed-path record comes first so the V state (no record) always refuses with the
+ * hard-disable message, whatever the checkout looks like; git parent-binding, tree and
+ * diff checks follow, then the fixed trust-roots and sidecar texts for the mint. Any
+ * failure exits 2. No flags, no environment input, no alternate paths: every location
+ * below is a fixed repository-relative constant.
+ */
+async function refuseUnlessRealRunAuthorized(): Promise<RealRunContext> {
+  let recordText: string;
+  try {
+    recordText = await readFile(path.join(repoRoot, AUTHORIZATION_RECORD_PATH), 'utf8');
+  } catch {
+    fail(2, REAL_ARTIFACT_MESSAGE);
+  }
+  let shape: unknown;
+  try {
+    shape = JSON.parse(recordText!);
+  } catch {
+    fail(2, REAL_ARTIFACT_MESSAGE);
+  }
+  const rec = shape as Record<string, unknown>;
+  if (rec['runId'] !== runId || typeof rec['verificationParentSha'] !== 'string') {
+    fail(2, REAL_ARTIFACT_MESSAGE);
+  }
+  const authorizedParent = rec['verificationParentSha'] as string;
+  let parentsLine: string;
+  let statusOut: string;
+  try {
+    parentsLine = git('rev-list', '--parents', '-n', '1', 'HEAD');
+    statusOut = git('status', '--porcelain');
+  } catch {
+    fail(2, 'refused: cannot observe the checkout before any artifact access (git rev-list/status failed)');
+  }
+  const parts = parentsLine!.trim().split(/\s+/);
+  if (parts.length !== 2 || !parts[0] || !parts[1]) {
+    fail(2, 'refused: HEAD must have exactly one parent; a merge commit cannot be parent-bound (NOT_SINGLE_PARENT)');
+  }
+  const head = parts[0] as string;
+  const parent = parts[1] as string;
+  if (statusOut!.trim() !== '') fail(2, 'refused: the checkout tree is not clean (DIRTY_TREE)');
+  if (authorizedParent !== parent || authorizedParent !== verificationSha) {
+    fail(2, 'refused: HEAD is not the authorized child of the recorded parent (NOT_PARENT_CHILD)');
+  }
+  let diffOut: string;
+  try {
+    diffOut = git('diff', '--name-only', `${parent}..HEAD`);
+  } catch {
+    fail(2, 'refused: cannot observe the V..HEAD diff before any artifact access');
+  }
+  const names = diffOut!.split('\n').map((l) => l.trim()).filter((l) => l.length > 0).sort();
+  if (JSON.stringify(names) !== JSON.stringify([...AUTHORIZATION_DIFF_ALLOWLIST].sort())) {
+    fail(2, 'refused: V..HEAD carries files outside the authorization allow-list (DIFF_NOT_ALLOWLISTED)');
+  }
+  const readFixed = async (rel: string): Promise<string> =>
+    readFile(path.join(repoRoot, ...rel.split('/')), 'utf8').catch((): string =>
+      fail(2, `refused: ${rel} is unreadable before any artifact access`));
+  const trustRootsText = await readFixed(AUTHORIZATION_TRUST_ROOTS_PATH);
+  const manifestText = await readFixed(`.proofpilot/evidence/proposals/${runId}/auth-manifest.json`);
+  const signatureText = await readFixed(`.proofpilot/evidence/proposals/${runId}/auth-manifest.sig`);
+  return {
+    recordText: recordText!,
+    trustRootsText,
+    manifestText,
+    signatureText,
+    observed: { head, parent, parentCount: 1, clean: true, diffNames: names },
+  };
+}
