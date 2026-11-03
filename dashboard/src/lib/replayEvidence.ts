@@ -164,7 +164,7 @@ export const REPLAY_BASETEN = {
     runId: 'local-2026-11-02-001',
     provenance: 'baseten-live',
     analysisCap: 2048,
-    // Owner-pasted observation text (UNVERIFIED model output): the model
+    // Paraphrased owner-observed model output (UNVERIFIED): the model
     // described the mug page, two Add to Cart taps (~3-4 s, ~6-7 s) and
     // unchanged Cart 0, and listed what the clip does not establish (tap
     // registration, network/backend state, off-screen feedback).
@@ -177,5 +177,5 @@ export const REPLAY_BASETEN = {
       'Post-success ledger readback pending (reconcile under runbook section 5); no Attempt 3 approved.',
   },
   billing: 'No billed amount is established anywhere in this replay.',
-  note: 'Owner-supervised attempts, durably recorded SPENT. No retry authorized. The three refusals above produced no output; the single accepted analysis below is quoted only as UNVERIFIED observations — never as a fix, diagnosis, or billing record.',
+  note: 'Owner-supervised attempts, durably recorded SPENT. No retry authorized. The three refusals above produced no output; the single accepted analysis is paraphrased as UNVERIFIED observations — never as a fix, diagnosis, or billing record.',
 } as const;
