@@ -2172,4 +2172,35 @@ Focused independent recheck of PR #40 at the final exact HEAD; STOP afterwards �
 ### Next action
 Independent exact-HEAD audit of the new Draft PR; STOP afterwards — no merge, deploy, preflight, key reads, spend, retry, or live inference. The owner decides separately whether to authorize another Baseten send.
 
+## Handoff: UI-C3-L-DEMO-01 — Zone L Evidence Replay (judge-ready offline demo, new Draft PR)
+
+- **Task / phase:** UI-C3-L-DEMO-01 (task text is the contract; no separate phase spec)
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** Independent reviewer, then project owner
+- **Branch:** `phase/ui-c3-l-demo-01` (from `origin/main@b1bb51f`; does not touch frozen V `a862f06`, authorization branch W, or PR #45 history)
+- **Implementation head:** `e7c2acbcc477b84cc4bd16d3378899f9e7bf8e5c` (ReplayZone + manifest + bundled assets + App wiring + CSP line; the branch tip adds only this handoff and the STATUS pointer)
+- **PR:** #47 (Draft, unmerged)
+- **State:** READY FOR REVIEW
+
+### Completed
+- New `ReplayZone` (`dashboard/src/zones/ReplayZone.tsx`): guided five-stage Evidence Replay (F01 failure, Baseten analysis, Meta proposal, PC-1 fix, three replays) reusing ZoneSection/EvidenceTable/Row/Note/CodeBlock, chips, states and tokens; step nav with aria-current, per-media unavailable states, alt text, keyboard-operable controls. No fetch, no provider, no pairing, no new browser-test execution.
+- Sanitized manifest (`dashboard/src/lib/replayEvidence.ts`) + 4 bundled assets (57 KB mp4 verified vs STATUS hash; Cart 0/1 PNGs verified vs the C3 run). Full evidence hashes in-manifest; no secrets, paths, raw artifacts or keys. No `.proofpilot` literals anywhere in shell source (T-ABSENT-1 green).
+- Labels kept prominent and exact: PC-1 `HAND-AUTHORED — VERIFIED 3/3`; Meta proposal `ACCEPTED — NOT VERIFIED` (never staged/executed); Baseten `OWNER-OBSERVED — UNVERIFIED` (0 accepted; no output quoted).
+- Single-file build intact (`dist/index.html`, 693 KB). CSP: `media-src` gains `data:` for our own bundled clip — img-src already allowed it and the file comment already documented data: for local media. No new hosts, no exfiltration surface. Flagged for explicit review attention.
+- LiveZone untouched: pairing, mock/live modes, provider-send controls and security boundaries preserved.
+
+### Validation
+- Dashboard `typecheck` clean; `vite build` clean (49 modules). Root `test:unit` 586/586, `test:security` 141/141 (incl. T-ABSENT-1). `git diff --check` clean.
+- UI smoke (Playwright vs served dist, desktop 1280 + mobile 390): 8/8 — app loads, all three provenance labels visible, all five stages render with loaded media, defect video plays (10.0 s), mobile nav works, zero non-loopback requests, zero page errors.
+- Walkthrough: 68.7 s WebM (1280×800, VP9) at `.proofpilot/demo/zone-l-walkthrough/` (gitignored, not committed), frame-verified showing the replay zone, Cart 1 evidence and labels.
+- Hosted CI on the final head: see the PR checks (exact HEAD + run id reported in the completion summary, not repeated here so this record never rots).
+
+### Continuation notes
+- The CSP line is a security-boundary file: the change is additive-only (`data:` on `media-src`, matching `img-src`), required for our own bundled clip to play. Approve explicitly or propose the multi-file-dist alternative.
+- Nothing here stages or executes the stored Meta proposal; its authorized path (D-R1 → key ceremony → W → supervised run) is unchanged and still pending owner decisions.
+- Walkthrough video and C3 run evidence live outside the repo (gitignored); the committed bundle is self-contained and rebuildable with one command.
+
+### Next action
+Independent review of the exact PR head; then owner decisions. STOP afterwards — no merge, deploy, inference, signing, enrollment or real-proposal execution.
+
 <!-- HANDOFF_ENTRIES_END -->
