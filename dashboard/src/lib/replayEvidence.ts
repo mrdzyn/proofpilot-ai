@@ -5,10 +5,17 @@
 //   E-BASE certified recording set f01-20261027T122211Z-df375a (STATUS-pinned hashes)
 //   E-EXEC docs/LIVE-C3-01-EXECUTION-REPORT.md (reviewed, merged)
 //   E-D9   docs/UI-C3-02-D9-RUNBOOK.md §§7–9 + docs/STATUS.md (reviewed, merged)
-// Media bytes below are the copied files under dashboard/src/assets/replay/,
-// verified SHA-256-identical to their sources before bundling. No secrets, no
-// absolute paths, no raw artifacts, no signing keys anywhere in this module.
-import defectMp4 from '../assets/replay/f01-mobile-defect.mp4';
+// PNG stills below are copied files under dashboard/src/assets/replay/,
+// verified SHA-256-identical to their sources before bundling. The F01 defect
+// MP4 is NEVER committed (repo boundary test forbids tracked .mp4/.webm,
+// like the gitignored run-evidence root): when present at
+// dashboard/public/replay/ (local
+// export only, hash-checked against defectVideo.sha256 before copying), Vite
+// serves it at <base>/replay/f01-mobile-defect.mp4 and the stage-1 player
+// uses it; on checkouts without that untracked file the player renders the
+// documented unavailable state instead of substituting footage. No secrets,
+// no absolute paths, no raw artifacts, no signing keys anywhere in this
+// module.
 import baselineCart0 from '../assets/replay/baseline-mobile-cart0.png';
 import fixedMobileCart1 from '../assets/replay/pc1-mobile-cart1.png';
 import fixedDesktopCart1 from '../assets/replay/pc1-desktop-cart1.png';
@@ -16,9 +23,20 @@ import fixedDesktopCart1 from '../assets/replay/pc1-desktop-cart1.png';
 export const REPLAY_RUN_ID = 'c3-b1-20261103T115426Z-b46ad0';
 export const REPLAY_EVIDENCE_RUN = 'offline C3 run c3-b1-20261103T115426Z-b46ad0';
 
-export const REPLAY_MEDIA = {
+interface ReplayMedium {
+  src: string;
+  sha256: string;
+  label: string;
+}
+
+export const REPLAY_MEDIA: Record<
+  'defectVideo' | 'baselineCart0' | 'fixedMobileCart1' | 'fixedDesktopCart1',
+  ReplayMedium
+> = {
   defectVideo: {
-    src: defectMp4,
+    // Served from dashboard/public/replay/ when exported locally; absent on
+    // clean checkouts (player shows the unavailable state, never a substitute).
+    src: `${import.meta.env.BASE_URL}replay/f01-mobile-defect.mp4`,
     sha256:
       'e9df68b14c48300818f9ec9407b884413037f29305f17a5da3cc4fac05eeafdf',
     label: 'F01 mobile defect clip (390×844, ~10 s, certified recording)',
@@ -41,7 +59,7 @@ export const REPLAY_MEDIA = {
       '0e5c955572c90e0f2942fe28432bdfb762d4d95c10f65f43d7fdd2ac8769e576',
     label: 'PC-1 replay desktop after-tap (Cart 1, control passes)',
   },
-} as const;
+};
 
 export const REPLAY_VERDICTS = {
   baseline: {

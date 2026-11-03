@@ -74,8 +74,8 @@ function StageVideo() {
   if (failed) {
     return (
       <ErrorState
-        message="Recording unavailable."
-        recovery="The bundled F01 defect clip failed to load; no footage is substituted. Rebuild the dashboard bundle from the certified recording."
+        message="Recording unavailable in this checkout."
+        recovery="Video evidence is never committed to the repository. Export the verified clip (SHA-256 e9df68b14c48…) to dashboard/public/replay/ to play it locally. The stills below show the same before/after states; no footage is substituted."
       />
     );
   }

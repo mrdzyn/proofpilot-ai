@@ -7,12 +7,13 @@
       Local-only content policy. The built file is a single self-contained
       document (audited bundle inline), so script/style 'unsafe-inline' covers
       only our own bytes: no host sources are allowed anywhere, hence no
-      external, provider, or exfiltration traffic is possible. blob:/data: cover
-      local media; loopback ws: covers dev HMR only.
+      external, provider, or exfiltration traffic is possible. 'self'/blob:
+      cover the same-origin replay clip served from public/replay/ (video
+      bytes are never committed); loopback ws: covers dev HMR only.
     -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src blob: data:; connect-src 'self' ws://127.0.0.1:* ws://localhost:*; font-src 'self'; base-uri 'none'; form-action 'none'"
+      content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' ws://127.0.0.1:* ws://localhost:*; font-src 'self'; base-uri 'none'; form-action 'none'"
     />
     <title>ProofPilot AI — Local Demo Dashboard</title>
   </head>
