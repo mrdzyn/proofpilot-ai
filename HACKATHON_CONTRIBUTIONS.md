@@ -50,7 +50,7 @@ All fixture content (product name, copy, colours, the CSS gradient "image") is s
 
 ## AI assistance
 
-Implementation was performed by AI coding agents (Claude Code) under the owner's direction and task contracts. Independent review is performed by a separate agent/session.
+Implementation was performed by AI coding agents under the owner's direction and task contracts: **Claude Code** in the earlier phases and **Muse Code** (reported in its handoffs as powered by Muse Spark) in the later phases. Independent review is performed by a separate agent/session.
 
 | Work | Model recorded | Basis |
 |---|---|---|
@@ -58,8 +58,13 @@ Implementation was performed by AI coding agents (Claude Code) under the owner's
 | Audit remediation of PR #1 (MINOR-1/MINOR-2) | Claude Sonnet 5.5 | The remediation session reported `claude-sonnet-5-5`; its commits carry the `Claude Sonnet 5.5` trailer. |
 | C2A implementation (branch `phase/pp-meta-i1-c2a`) | Claude Sonnet 5.5 | The C2A session reported `claude-sonnet-5-5`; its commits carry the `Claude Sonnet 5.5` trailer. |
 | Pivot contract `tasks/PP-META-I2-C3.md` and its PR #6 audit remediation (docs only, branch `docs/pp-meta-i2-c3-pivot`) | Claude Sonnet 5.5 (configured) | The sessions were configured for `claude-sonnet-5-5`; the serving model was not independently confirmed. The commits carry the `Claude Sonnet 5.5` trailer. |
+| C3-B2B P1 onward, beginning with handoff `PP-META-I2-C3-B2B-P1-A1` in [`docs/HANDOFFS.md`](docs/HANDOFFS.md) | Muse Code (later entries add "powered by Muse Spark") | The handoff "From" field of each entry. Commits from this phase carry no model trailer (two carry only a generic `proofpilot-agent` trailer), so the model and version are **not independently confirmed**. |
 
-The owner indicated Claude Sonnet was intended for this project. No execution evidence supports Sonnet for the earlier C1 commits, so their attribution was not changed. If the owner has evidence that those sessions used a different model, the owner should say so and this table will be corrected in a new commit; history is not rewritten. Meta models (Muse Spark / Muse Wonder) are the product's runtime models, not development tools.
+The owner indicated Claude Sonnet was intended for this project. No execution evidence supports Sonnet for the earlier C1 commits, so their attribution was not changed. If the owner has evidence that those sessions used a different model, the owner should say so and this table will be corrected in a new commit; history is not rewritten.
+
+**Attribution limits.** Claude Code and Muse Code both act through the owner's GitHub account, so GitHub authorship and PR comments do not show which agent wrote a change. The handoff records (and commit trailers, where present) are the attribution evidence; for the Muse Code phase they are agent-reported. Independent review of pull requests has been performed by separate agent sessions (Claude Sonnet 5.5 and, owner-reported, GPT-6), also posting through the owner's account.
+
+**Meta models, two roles.** Meta's Muse models are the product's runtime models (Muse Spark for analysis; Muse Wonder is configured but unused and untested), and, per the handoff records above, Muse Spark also powers the Muse Code development agent used in the later phases. These are separate roles: development-agent output is not product evidence, and product model output remains `UNVERIFIED` until the trusted oracle verifies it.
 
 ## Publication and sanitized Git root
 
