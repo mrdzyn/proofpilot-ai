@@ -208,13 +208,14 @@ export function ReplayZone() {
               Stage 2 · Baseten Muse Spark Open video analysis (UNVERIFIED)
             </h3>
             <Note>
-              Three owner-supervised attempts, all refused and spent. Zero
-              accepted model analyses — so nothing below is quoted from a
-              provider. This analysis did not generate the Meta correction;
-              that came from a separate earlier Meta request.
+              Three owner-supervised attempts were refused and are spent. A
+              later owner-observed attempt was accepted (below) — a single
+              UNVERIFIED observation, not a fix or diagnosis. No Baseten
+              analysis generated the Meta correction; that came from a
+              separate earlier Meta request.
             </Note>
             <div className="mt-3">
-              <EvidenceTable caption="Recorded Baseten attempts (owner-observed, spent)">
+              <EvidenceTable caption="Three refused attempts (owner-observed, spent)">
                 {REPLAY_BASETEN.attempts.map((a) => (
                   <Row key={a.id} head={a.id}>
                     <>
@@ -222,9 +223,44 @@ export function ReplayZone() {
                     </>
                   </Row>
                 ))}
-                <Row head="Accepted">
-                  <NeutralChip>0 ACCEPTED MODEL ANALYSES</NeutralChip> billing
-                  unverified
+              </EvidenceTable>
+            </div>
+            <div className="mt-3">
+              <EvidenceTable caption="One accepted analysis (owner-observed, UNVERIFIED — not a fix)">
+                <Row head="Attempt">
+                  {REPLAY_BASETEN.acceptedAttempt.id}
+                </Row>
+                <Row head="Run">
+                  <span className="mono">
+                    {REPLAY_BASETEN.acceptedAttempt.runId}
+                  </span>{' '}
+                  · provenance{' '}
+                  <span className="mono">
+                    {REPLAY_BASETEN.acceptedAttempt.provenance}
+                  </span>
+                </Row>
+                <Row head="Model">
+                  {REPLAY_BASETEN.model} · analysis cap{' '}
+                  {REPLAY_BASETEN.acceptedAttempt.analysisCap} · zero
+                  proposals, no retries
+                </Row>
+                <Row head="Observations">
+                  <>
+                    <UntrustedMarker qualifier="UNVERIFIED MODEL OUTPUT" /> “
+                    {REPLAY_BASETEN.acceptedAttempt.observations}”
+                  </>
+                </Row>
+                <Row head="Usage">
+                  {REPLAY_BASETEN.acceptedAttempt.usage}
+                </Row>
+                <Row head="Status">
+                  <NeutralChip>
+                    {REPLAY_BASETEN.acceptedAttempt.status}
+                  </NeutralChip>{' '}
+                  {REPLAY_BASETEN.billing}
+                </Row>
+                <Row head="Spend">
+                  {REPLAY_BASETEN.acceptedAttempt.spend}
                 </Row>
               </EvidenceTable>
             </div>
@@ -293,12 +329,31 @@ export function ReplayZone() {
             </h3>
             <div className="mt-1">
               <EvidenceTable caption="Replay verdicts (trusted oracle, evidence finalized)">
-                <Row head="Replay 1–3">
+                <Row head="Summary">
                   <>
-                    <VerdictChip>✔ ORACLE_PASS ×3</VerdictChip> mobile
-                    passed/add-to-cart · Cart 1
+                    <VerdictChip>{`✔ ${REPLAY_VERDICTS.pc1.outcome}`}</VerdictChip>{' '}
+                    {REPLAY_VERDICTS.pc1.summary} · hand-authored PC-1 only,
+                    never the model proposal
                   </>
                 </Row>
+                {REPLAY_VERDICTS.pc1.replayRuns.map((r) => (
+                  <Row key={r.n} head={`Replay ${r.n}`}>
+                    <>
+                      <VerdictChip>{`✔ ${r.outcome} · exit ${r.oracleExit}`}</VerdictChip>{' '}
+                      nonce <span className="mono">{r.nonce}</span> ·{' '}
+                      <span className="mono">{r.evidenceDir}</span>
+                      <br />
+                      mobile passed/add-to-cart · Cart 1 · desktop passed ·
+                      Cart 1<br />
+                      record <span className="mono">
+                        {r.recordSha256.slice(0, 16)}…
+                      </span>{' '}
+                      · report <span className="mono">
+                        {r.oracleReportSha256.slice(0, 16)}…
+                      </span>
+                    </>
+                  </Row>
+                ))}
                 <Row head="Desktop control">
                   <>
                     <VerdictChip>✔ PASSED</VerdictChip> two-column layout,
@@ -331,10 +386,15 @@ export function ReplayZone() {
                     {REPLAY_VERDICTS.baseline.oracleReportSha256.slice(0, 16)}…
                   </span>
                 </Row>
-                <Row head="Replay-1 report">
-                  <span className="mono">
-                    {REPLAY_VERDICTS.pc1.pc1Replay1OracleSha256.slice(0, 16)}…
-                  </span>
+                <Row head="Replay reports">
+                  <>
+                    {REPLAY_VERDICTS.pc1.replayRuns.map((r) => (
+                      <span key={r.n} className="mono">
+                        R{r.n} {r.oracleReportSha256.slice(0, 16)}…{' '}
+                      </span>
+                    ))}
+                    (full hashes in the bundled manifest)
+                  </>
                 </Row>
               </EvidenceTable>
             </div>
@@ -366,8 +426,9 @@ export function ReplayZone() {
           </Row>
           <Row head="Baseten analysis">
             <>
-              <NeutralChip>OWNER-OBSERVED — UNVERIFIED</NeutralChip> 0
-              accepted analyses; attempts recorded spent
+              <NeutralChip>OWNER-OBSERVED — UNVERIFIED</NeutralChip> 1
+              accepted analysis (single observation, not a fix); 3 refusals
+              recorded spent
             </>
           </Row>
         </EvidenceTable>
