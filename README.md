@@ -197,11 +197,13 @@ flowchart TB
 
 **Solid paths** show implemented local behavior or recorded evidence. **Dashed paths** show gated historical requests and the explicit refusal of the real model proposal. They do not authorize a provider request or establish a verified AI-generated fix. Muse Wonder is configured but unused and untested.
 
+The **Historical model CSS proposal** (C2) and **Real proposal `c3-live-meta-001`** (C3) are the **same stored historical artifact** shown at two trust boundaries, not separate AI-generated fixes or separate model calls.
+
 ### C3 implementation status
 
 | C3 layer | Implemented and evidenced | Trust boundary |
 | --- | --- | --- |
-| **Zone P — provenance and authentication** | Read-only artifact validation, source evidence checks and detached Ed25519 signatures for enrolled synthetic test artifacts | A signature authenticates enrolled bytes, **not** historical model authorship or permission to execute. |
+| **Zone P — provenance and authentication** | Read-only artifact validation, source evidence checks and detached Ed25519 signature verification exercised with test keys on synthetic artifacts (committed trust roots are empty) | A signature authenticates enrolled bytes, **not** historical model authorship or permission to execute. |
 | **Zone E — registration** | Closed-grammar CSS re-validation, trusted rendering and provenance-tagged model candidate identity | Identical CSS cannot transfer the hand-authored PC-1 verdict to a model proposal. |
 | **Independent verification** | Disposable candidate stages, trusted Playwright mobile/desktop checks, three-replay decisions and hash-checked evidence | **PC-1 VERIFIED 3/3** applies only to the hand-authored control; model-path tests use synthetic fixtures. |
 | **Historical real proposal** | Stored model correction from Meta, labelled **UNTRUSTED** | **HARD-DISABLED at both CLI and exported verifier**. Not read, staged, executed, or verified through C3. |
