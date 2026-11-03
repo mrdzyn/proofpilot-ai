@@ -7,6 +7,8 @@
 <p align="center">Reproduce a UI defect. Treat AI output as a hypothesis. Verify changes with a separate, trusted browser oracle.</p>
 
 <p align="center">
+  <a href="#demo-in-90-seconds">Demo in 90 seconds</a> ·
+  <a href="#why-meta">Why Meta</a> ·
   <a href="#the-workflow">See the workflow</a> ·
   <a href="#architecture--trust-boundaries">Explore the architecture</a> ·
   <a href="#evidence-and-current-gates">Inspect the evidence</a> ·
@@ -28,6 +30,80 @@
 <p align="center"><sub>Illustrated workflow, not a product recording or live inference result. <a href="docs/assets/readme/proofpilot-workflow-poster.png">View the static poster</a> · <a href="docs/README-VISUAL-ASSETS.md">Read the visual asset plan</a></sub></p>
 
 ---
+
+## What ProofPilot can—and cannot—do today
+
+**The live AI currently analyzes the recording; it does not automatically repair the website.** The successful Baseten response described the visible broken Add to cart interaction and its uncertainties. It returned observations, **not an executable patch or a verified fix**.
+
+ProofPilot separately demonstrates a **hand-authored** CSS control (PC-1) that the trusted Playwright oracle verified in **three browser replays**. The historical model-generated correction was accepted as an **untrusted proposal** but **has not been applied or independently verified**. An end-to-end **AI-generated fix → safe application → independent verification** workflow is **not yet demonstrated or authorized**. The demo deliberately shows these boundaries instead of claiming autonomous repair.
+
+### At a glance
+
+| Claim | Status | Evidence |
+| --- | --- | --- |
+| F01 mobile defect reproduces (Cart stays at 0) | `REPRODUCED` | [Run the synthetic baseline](#run-the-synthetic-baseline) |
+| Hand-authored CSS control (PC-1) fixes it | `VERIFIED` 3/3 trusted browser replays — control only | [Evidence and current gates](#evidence-and-current-gates) |
+| Live AI watches the recording and describes the failure | Accepted, **UNVERIFIED** observation (one owner-run Baseten analysis) | [Actual Baseten F01 analysis](#actual-baseten-f01-analysis--owner-observed) |
+| AI-generated fix is applied and verified | **Not demonstrated, not authorized.** The one stored model proposal is untrusted and has never been run | [Evidence and current gates](#evidence-and-current-gates) |
+| Muse Wonder as a patcher | **Not tested**, not a dependency | [Model roles](#model-roles) |
+
+## Why Meta
+
+ProofPilot's central idea — *a model proposes, a separate trusted browser proves* — only works if the model can see the failure in the first place. The defect here is a silent mobile tap, which a screenshot cannot show and a screen recording can. Meta's models and tooling are used in these specific, evidenced ways:
+
+| Piece | Role in this project (as built) | Evidence |
+| --- | --- | --- |
+| **Muse Spark Open** (`meta-models/muse-spark-open-1026`, hackathon-issued deployment on **Baseten**) | The live analysis step: it watched the certified F01 recording and described the product page, two visible Add to cart taps and the unchanged Cart 0, and said what it could not know (tap registration, backend state). | [Actual Baseten F01 analysis](#actual-baseten-f01-analysis--owner-observed), [runbook §10](docs/UI-C3-02-D9-RUNBOOK.md) |
+| **Muse Spark 1.3** (Meta Model API) | Historical video-analysis smoke and the single stored, untrusted CSS proposal (`PROPOSAL_ACCEPTED`, never executed). | [Live smoke evidence](docs/LIVE-SMOKE.md), [execution report](docs/LIVE-C3-01-EXECUTION-REPORT.md) |
+| **Muse Wonder** (code-role model) | Configured default only. **Not used and not tested.** | [Model roles](#model-roles) |
+| **Muse Code** (coding agent, powered by Muse Spark per the handoff records) | Implementation agent in the later task handoffs; Claude Code is the implementation agent in the earlier ones. | [How it was built](#how-it-was-built-agent-handoffs) |
+
+**Why this matters beyond the demo**
+
+- **Video input changes what can be debugged.** Interaction bugs that leave no trace in a static capture become inspectable. This project shows one real, bounded example, not a general claim.
+- **Frontier models need a trust architecture.** The contribution is the harness: model output is labeled `UNVERIFIED`, proposals are restricted to a closed CSS grammar, every provider send is durably recorded before the request, and only an unmodified Playwright oracle can produce `VERIFIED`.
+- **Failures are part of the evidence.** The live path hit an HTTP 403, a response-shape failure and an output truncation before it succeeded. The harness recorded each one instead of hiding it (see the [attempt timeline](#attempt-timeline)).
+
+**Not claimed:** no AI-generated fix has been applied or verified; Muse Wonder is untested; provider billing is unverified.
+
+## Demo in 90 seconds
+
+**A synthetic mobile bug, a real AI observation, and an independently verified hand-authored control—not an AI-fixed website.** The owner has already completed an authorized live Baseten F01 analysis. The walkthrough below **reuses that captured result**; recording a demonstration does not authorize another paid request.
+
+| Segment | Show on screen | Explain |
+| --- | --- | --- |
+| **0–15s — The defect** | F01 Sample Store at **390 × 844**, with **Add to cart** tapped and the header still showing **Cart 0**. | The mobile tap does not update the cart; the desktop control is separate. |
+| **15–35s — Reproducible evidence** | Dashboard recording/baseline zones or the certified Playwright evidence. | A trusted browser oracle reproduces the mobile failure rather than relying on a model guess. |
+| **35–60s — Real Baseten analysis** | The **already completed** Zone L result: provider/model, **LIVE VIA BASETEN — UNVERIFIED**, and reported usage. | Muse Spark Open described two visible taps and an unchanged cart. It did **not** prove why the tap failed. |
+| **60–80s — Independent verification** | The hand-authored **PC-1 VERIFIED 3/3** control and its browser evidence. | This result belongs only to the hand-authored control; it does **not** verify or execute the historical AI proposal. |
+| **80–90s — The difference** | ProofPilot's verdict/provenance labels. | **Model output is a hypothesis. Reproducible browser evidence is the proof.** |
+
+The hero animation above is **illustrative**, not a real product recording. There is **no public hosted demo URL and no video linked here yet**; the owner will capture genuine local footage. Never show pairing codes, credentials, private local paths, or notifications. If the live result is no longer displayed, **do not spend another provider attempt to recreate a screenshot**.
+
+### Actual Baseten F01 analysis — owner-observed
+
+On **November 2, 2026**, after audited [PR #41](https://github.com/mrdzyn/proofpilot-ai/pull/41) increased the analysis output cap from **1,024 to 2,048 tokens**, the owner ran one manually permitted analysis of the certified synthetic F01 MP4 via the localhost companion.
+
+- **Model:** meta-models/muse-spark-open-1026 (hackathon-issued Baseten model).
+- **Run displayed locally:** local-2026-11-02-001.
+- **Provider-reported usage:** **1,631 prompt + 1,309 completion = 2,940 total tokens** (not a billing statement).
+- **Observed output:** the recording depicts an Enamel Trail Mug product page, two visible Add to cart tap indicators, and **Cart 0** remaining unchanged; the model explicitly stated that tap registration, network/backend state, and off-screen feedback were unknown.
+- **Classification:** **accepted live analysis, UNVERIFIED model observations** — **not** a root-cause diagnosis, a verified fix, or a provider billing audit.
+
+<p align="center"><img src="docs/assets/readme/zone-l-live-baseten-result.png" width="560" alt="Owner screenshot of the Zone L result panel after the accepted live run: verdict chip LIVE VIA BASETEN — UNVERIFIED MODEL OUTPUT, model meta-models/muse-spark-open-1026, run local-2026-11-02-001, transport baseten-live, usage prompt 1631 completion 1309 total 2940 (reported, not billing), and the quoted observations including the model's listed uncertainties." /></p>
+
+<p align="center"><sub>Owner screenshot of the accepted live result, cropped to the result panel. Quoted model text is UNVERIFIED; usage is provider-reported, not billing. The spend counter and companion controls are deliberately not shown.</sub></p>
+
+### Attempt timeline
+
+| Run | Outcome | What it shows |
+| --- | --- | --- |
+| D9-LIVE-01 | Refused — provider returned HTTP 403, no model output | The harness refused to treat an error as an analysis; the send was recorded as spent. |
+| D9-LIVE-02 | Refused — HTTP 2xx, but the response failed strict validation (`TRANSPORT_SHAPE`) | The strict validator rejected a reply that did not match the expected shape; recorded as spent. |
+| D9-LIVE-V2-QA-01, first send | Refused — `TRANSPORT_TRUNCATED` at the 1,024-token cap (an earlier permit expired before sending, with no spend) | The output was cut off; PR #41 then raised the cap to 2,048 and added usage diagnostics. |
+| D9-LIVE-V2-QA-01, second send | **Accepted** at 2,048 tokens — owner-observed, `UNVERIFIED` | The model described the visible failure and its own uncertainties. Provider-reported usage only, not billing. |
+
+The owner's screenshot of the accepted run is shown above. The 2,048-token request completed where the 1,024-token one truncated. This supports the bounded remediation but does not prove reasoning-token exhaustion caused the original refusal. **The post-success ledger count still awaits an owner readback**; the runtime records each send before POST and never refunds a spend. This README authorizes no further live inference.
 
 ## The workflow
 
@@ -60,51 +136,92 @@ Run eligible, hand-authored controls through the protected Playwright oracle and
 
 ## Product walkthrough
 
-The repository contains a local dashboard and localhost companion with a **mock-by-default** analysis path. That lets the offline flow be inspected without claiming that a real Baseten request occurred. A repeatable owner-supervised live path exists for the hackathon model, armed only explicitly per attempt (fresh terminal permit plus manual click, every send durably recorded); see the runbook.
+The repository includes a local React dashboard and localhost companion. It defaults to **mock analysis**, so anyone can inspect the flow and its safeguards without a Baseten key or a billable request.
 
-- **Synthetic defect:** F01 reproduces; the mobile cart stays at 0.
-- **Local mock flow:** Zone L mock analysis is labeled as mock output.
-- **Independent control:** hand-authored PC-1 is `VERIFIED` 3/3; the Muse Spark proposal remains `UNTRUSTED PROPOSAL — NOT VERIFIED`.
+- **Reproduction:** a trusted Playwright mobile tap reproduces F01 with a cart count of 0; the desktop baseline is a separate passing control.
+- **Analysis:** Zone L distinguishes mock output from the **owner-observed successful live Baseten analysis** documented above. Provider output is explicitly **UNVERIFIED**.
+- **Verification:** hand-authored PC-1 passed **three independent Playwright replays**. The historical model-generated proposal remains **unexecuted and unverified**.
+- **Safety:** live mode is owner-armed, limited to the certified synthetic recording, zero proposals, one fresh terminal permit plus one click per send, durable no-refund ledger, and no automatic retries.
 
-The hero above is an animated architectural illustration. It is not a browser capture, provider transcript, or demo recording. See the [visual asset plan](docs/README-VISUAL-ASSETS.md) for capture guidance.
+For a demo **without another paid call**, capture the owner's already completed Zone L screen and continue with the read-only evidence and verification panels. The [D9 runbook](docs/UI-C3-02-D9-RUNBOOK.md) is for strictly controlled owner operations, **not** a public live-inference quick-start.
+
+The README's animated illustration is not a browser capture, provider transcript, or actual product recording. See the [visual asset plan](docs/README-VISUAL-ASSETS.md) for genuine capture guidance.
 
 ## Architecture & trust boundaries
 
+**C2 and C3 serve different trust roles.** C2 observes the defect and records untrusted model output; C3 is the separate trusted browser-verification pipeline. C3 is implemented for hand-authored controls and synthetic model fixtures, but **not authorized to run the historical real model proposal**.
+
 ```mermaid
 flowchart TB
-    F["Synthetic F01 sample store"]
-    O["Trusted Playwright baseline"]
-    V["Validated local recording"]
-    S["Muse Spark 1.3 video-analysis target"]
-    H["Untrusted observation or historical proposal"]
-    W["Muse Wonder code-role default (unused; not a dependency)"]
-    C["Hand-authored PC-1 control"]
-    R["Protected browser verifier"]
-    E["Deterministic verdict + hashed evidence"]
-    L["Local companion · mock by default"]
-    B["Baseten live · owner-only, default off (explicit permit + click per attempt)"]
+    subgraph C2["C2 · Observe and propose (model output is untrusted)"]
+        F["Synthetic F01 mobile page"]
+        O["Trusted Playwright baseline"]
+        V["Validated F01 recording"]
+        M["Muse Spark 1.3 · historical Meta API"]
+        U["UNVERIFIED visual observations"]
+        P["Historical model CSS proposal · unexecuted"]
+        L["Local companion · mock by default"]
+        B["Muse Spark Open on Baseten · owner-only"]
 
-    F --> O --> E
-    V --> S --> H
-    C --> R --> E
-    L -->|"mock default"| V
-    L -. "gated manual opt-in" .-> B
+        F --> O
+        V --> M --> U
+        M -. "separate historical proposal request" .-> P
+        L -->|"upload"| V
+        L -. "fresh permit + owner click" .-> B
+        B -. "owner-observed analysis" .-> U
+    end
+
+    subgraph C3["C3 · Separate independent verification (offline)"]
+        S["Synthetic signed model fixture"]
+        ZP["Zone P · read-only provenance + Ed25519 authentication"]
+        ZE["Zone E · closed CSS grammar + provenance identity"]
+        PC["Hand-authored PC-1"]
+        ST["Disposable stage per replay"]
+        R["Trusted Playwright oracle · mobile + desktop"]
+        EV["3 replays + hash-verified evidence + candidate-specific verdict"]
+        REAL["Real proposal c3-live-meta-001 · NOT EXECUTED"]
+        BLOCK["REAL_ARTIFACT_DISABLED · CLI and exported verifier"]
+
+        S --> ZP --> ZE --> ST
+        PC --> ST --> R --> EV
+        REAL -. "refused, never staged" .-> BLOCK
+    end
+
+    O --> F01["F01: mobile REPRODUCED, desktop PASS"]
+    P -. "execution not authorized" .-> REAL
+    EV --> PCRES["PC-1 VERIFIED 3/3 · synthetic results separate"]
 
     classDef trusted fill:#10283a,color:#e8f7ff,stroke:#22c6f0,stroke-width:2px
     classDef untrusted fill:#311821,color:#ffe8e8,stroke:#ff4757,stroke-width:2px
     classDef gated fill:#1b2230,color:#e5e7eb,stroke:#94a3b8,stroke-dasharray:5 4
-    class O,R,E trusted
-    class S,H untrusted
-    class B gated
+    class O,F01,R,EV,PCRES trusted
+    class M,U,P,REAL untrusted
+    class B,BLOCK gated
 ```
 
-**Solid paths** show implemented local behavior or recorded evidence. **Dashed paths** show model targets or gated behavior; they do not imply an active provider request or a verified model fix.
+**Solid paths** show implemented local behavior or recorded evidence. **Dashed paths** show gated historical requests and the explicit refusal of the real model proposal. They do not authorize a provider request or establish a verified AI-generated fix. Muse Wonder is configured but unused and untested.
+
+The **Historical model CSS proposal** (C2) and **Real proposal `c3-live-meta-001`** (C3) are the **same stored historical artifact** shown at two trust boundaries, not separate AI-generated fixes or separate model calls.
+
+### C3 implementation status
+
+| C3 layer | Implemented and evidenced | Trust boundary |
+| --- | --- | --- |
+| **Zone P — provenance and authentication** | Read-only artifact validation, source evidence checks and detached Ed25519 signature verification exercised with test keys on synthetic artifacts (committed trust roots are empty) | A signature authenticates enrolled bytes, **not** historical model authorship or permission to execute. |
+| **Zone E — registration** | Closed-grammar CSS re-validation, trusted rendering and provenance-tagged model candidate identity | Identical CSS cannot transfer the hand-authored PC-1 verdict to a model proposal. |
+| **Independent verification** | Disposable candidate stages, trusted Playwright mobile/desktop checks, three-replay decisions and hash-checked evidence | **PC-1 VERIFIED 3/3** applies only to the hand-authored control; model-path tests use synthetic fixtures. |
+| **Historical real proposal** | Stored model correction from Meta, labelled **UNTRUSTED** | **HARD-DISABLED at both CLI and exported verifier**. Not read, staged, executed, or verified through C3. |
+
+See the [authenticated C3 command](scripts/c3-b2b-verify-authenticated.ts), [Zone P authentication](packages/provenance/src/artifact-auth.ts), [Zone E registration](packages/core/src/model-proposal.ts) and [independent verification](packages/core/src/model-verification.ts) for the implemented boundaries.
 
 ### Trust boundary at a glance
 
 - **Fixture → browser:** the trusted Playwright oracle observes the tap and cart state at fixed viewports.
 - **Recording → model:** media is validated before use; video content and model observations remain untrusted.
 - **Model → proposal:** structured output is validated and restricted to a closed CSS grammar. The historical Muse Spark proposal remains unverified.
+- **Signed synthetic artifact → C3 Zone P:** read-only loading, authenticated bytes and source provenance; model output remains untrusted data.
+- **C3 Zone P → Zone E:** only closed-grammar CSS triples and provenance labels are registered; no provider or credential capability crosses the bridge.
+- **C3 staging → oracle:** individual candidate replays produce independently attributable verdicts; the historical real proposal is hard-disabled and never reaches this path.
 - **Candidate → verdict:** a separate verifier derives results from browser evidence; the hand-authored PC-1 identity is kept separate.
 - **Local companion → provider:** the default path is mock-only. Owner-supervised live inference against the hackathon model is available only with an explicit per-attempt opt-in (durable spend ledger, zero proposals, no retries); historical one-shot attempts are spent and the ledgers are frozen.
 
@@ -115,8 +232,8 @@ The state below reflects repository evidence and the current project status. It 
 - **F01 mobile baseline — `REPRODUCED`:** the expected mobile failure is observed; desktop control passes.
 - **Hand-authored PC-1 — `VERIFIED` 3/3:** three clean trusted replays for the hand-authored control only.
 - **Historical Muse Spark proposal — `PROPOSAL_ACCEPTED`:** one proposal artifact exists; it is untrusted, unexecuted and not verified.
-- **Historical Muse Spark 1.3 video smoke — COMPLETED ONCE (operator-reported):** the second of two authorized Meta video-analysis attempts returned a schema-valid, untrusted symptom. This is neither a model-verified fix nor a current-access guarantee. **Muse Wonder smoke — NOT TESTED.** No successful Baseten analysis result; both owner-supervised attempts refused and spent (see below). See [live smoke evidence](docs/LIVE-SMOKE.md).
-- **Baseten live inference — owner-supervised only:** D9 approves the hackathon-issued `meta-models/muse-spark-open-1026` (zero proposals, no retries). Two owner-operated one-shot attempts are durably recorded as SPENT with no accepted model output (D9-LIVE-01: HTTP 403; D9-LIVE-02: HTTP 2xx `TRANSPORT_SHAPE`); billing unverified. Repeatable attempts run only under the versioned `d9live-v2-` approval identity with a fresh per-attempt permit and explicit click; see the D9 runbook.
+- **Historical Meta Muse Spark 1.3 video smoke — completed once (operator-reported):** the second of two authorized Meta video analyses produced a schema-valid, untrusted symptom. This neither verifies a fix nor guarantees ongoing account access. **Muse Wonder smoke — NOT TESTED.** See [live smoke evidence](docs/LIVE-SMOKE.md).
+- **Baseten live analysis — one accepted owner-operated result (UNVERIFIED):** three earlier attempts were refused (see the [attempt timeline](#attempt-timeline)), then an **accepted** F01 analysis at 2,048 tokens. Owner screenshot and usage are described above; the **post-success ledger count awaits owner readback**. The hackathon model pin, manual permit/click, synthetic F01 pin, zero proposals, and no-retry/no-refund rules remain. Billing unverified. See the [runbook](docs/UI-C3-02-D9-RUNBOOK.md).
 - **Public hosted sandbox / arbitrary-site auto-fix — unavailable:** outside the implemented local synthetic workflow.
 
 `VERIFIED` applies only to the **hand-authored PC-1 control**. Its CSS happens to match the historical Muse Spark proposal; that equality does not transfer evidence or provenance to the proposal.
@@ -155,6 +272,28 @@ pnpm fixture:serve
 
 Open `http://127.0.0.1:4173/product/demo` after starting the fixture server. The raw `pnpm test:e2e:f01` command is expected to exit non-zero on the intentionally defective mobile fixture; use `pnpm f01:baseline` for the green reproduction assertion.
 
+## Show the dashboard locally (no AI provider calls)
+
+For a **non-billable** local demonstration from a fresh checkout, use **Node.js 24+** (the companion runs a TypeScript entrypoint directly). Install the root dependencies using the baseline instructions above. The dashboard is a separate package with its own lockfile, so install its dependencies too, then build and serve:
+
+~~~bash
+pnpm --dir dashboard install --frozen-lockfile
+pnpm --dir dashboard build
+node scripts/c3-live-analysis.ts --port 5188 --serve "$PWD/dashboard/dist"
+~~~
+
+**Keep that terminal open.** The companion reads its commands (`pair`, `permit`, `status`, `quit`) from standard input and exits if it is started without an interactive terminal or with input closed.
+
+**Checked so far:** from a clean checkout on Linux with Node.js 24.22.2 and pnpm 12.6.0, the root and dashboard frozen installs and the Vite build succeed, and the companion started without `--live` and served the dashboard with its "mock transport, no live inference" banner. The pair → upload → mock-analysis flow was also run end to end on a synthetic, ffmpeg-generated MP4 (not the certified F01 recording) and returned a result labelled **MOCK FIXTURE — NOT A PROVIDER RESPONSE** with *live inference: no*, shown below. This is reviewer-run evidence, separate from the owner's macOS run and from the live Baseten result.
+
+<p align="center"><img src="docs/assets/readme/zone-l-mock-flow.png" width="640" alt="Zone L after a mock-only run: the result is labelled MOCK FIXTURE — NOT A PROVIDER RESPONSE, model mock-fixture-model (not a live model), transport mock-fixture, live inference no. Fixture token counts, not billing." /></p>
+
+<p align="center"><sub>Zone L, mock-only companion, synthetic MP4. Fixture text, not a provider response.</sub></p>
+
+Open **http://127.0.0.1:5188** and use the companion terminal's **pair** command to connect Zone L. Without the explicit **--live** flag, the companion starts in **mock-only** mode; it does not read Baseten credentials or send inference requests. To exercise mock analysis, choose an owner-generated synthetic MP4 and follow the UI's mock permit/upload flow. The certified F01 MP4 recording is **not checked into Git**.
+
+**For the owner's live-result demo:** keep the existing successful Zone L screen visible, and capture that result as-is. Do not start a second companion, click Analyze again, or spend another attempt to replace a vanished result. A real recording or screenshot can be shown in a narrated video after secret/privacy review. No key, private video, live spend ledger, or raw provider response belongs in this public repository.
+
 ## Repository map
 
 ```text
@@ -176,6 +315,17 @@ docs/                        Architecture, status, security and evidence
 ProofPilot AI was built for the **Meta Global AI Developer Hackathon — Push the Frontier (2026)**. The repository distinguishes pre-existing delivery scaffolding from hackathon work in [Hackathon Contributions & Provenance](HACKATHON_CONTRIBUTIONS.md).
 
 **Stack:** TypeScript · Node.js · React + Vite · Playwright / Chromium · FFmpeg · GitHub Actions · Meta Model API · Baseten transport (owner-supervised only).
+
+## How it was built: agent handoffs
+
+ProofPilot was built by AI coding agents working from written task contracts under the owner's direction, with independent review of exact commits before anything merges.
+
+- **Task contracts** in [`tasks/`](tasks/) define scope and acceptance tests before work starts.
+- **Handoffs** in [`docs/HANDOFFS.md`](docs/HANDOFFS.md) record, for each unit of work, who did it, the exact base and branch, what changed, how it was validated and what must happen next. Earlier handoffs name Claude Code as the implementation agent; later handoffs name Muse Code (powered by Muse Spark).
+- **Independent review** is done by a separate agent or session that rechecks the exact head commit; findings and remediation rounds are recorded in the pull-request threads and handoffs.
+- **Authorization gates** keep agents from merging, deploying or spending provider allowance without an explicit owner decision.
+
+**A note on attribution:** both agents work through the owner's GitHub account, so GitHub authorship does not show which agent wrote a change. Authorship is established by the handoff records (and commit trailers where present), not by the GitHub user name.
 
 ## Contributing and provenance
 
