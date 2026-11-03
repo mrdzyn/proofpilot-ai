@@ -145,42 +145,77 @@ The README's animated illustration is not a browser capture, provider transcript
 
 ## Architecture & trust boundaries
 
+**C2 and C3 serve different trust roles.** C2 observes the defect and records untrusted model output; C3 is the separate trusted browser-verification pipeline. C3 is implemented for hand-authored controls and synthetic model fixtures, but **not authorized to run the historical real model proposal**.
+
 ```mermaid
 flowchart TB
-    F["Synthetic F01 sample store"]
-    O["Trusted Playwright baseline"]
-    V["Validated local recording"]
-    S["Muse Spark 1.3 video-analysis target"]
-    H["Untrusted observation or historical proposal"]
-    W["Muse Wonder code-role default (unused; not a dependency)"]
-    C["Hand-authored PC-1 control"]
-    R["Protected browser verifier"]
-    E["Deterministic verdict + hashed evidence"]
-    L["Local companion · mock by default"]
-    B["Baseten live · owner-only, default off (explicit permit + click per attempt)"]
+    subgraph C2["C2 · Observe and propose (model output is untrusted)"]
+        F["Synthetic F01 mobile page"]
+        O["Trusted Playwright baseline"]
+        V["Validated F01 recording"]
+        M["Muse Spark 1.3 · historical Meta API"]
+        U["UNVERIFIED visual observations"]
+        P["Historical model CSS proposal · unexecuted"]
+        L["Local companion · mock by default"]
+        B["Muse Spark Open on Baseten · owner-only"]
 
-    F --> O --> E
-    V --> S --> H
-    C --> R --> E
-    L -->|"mock default"| V
-    L -. "gated manual opt-in" .-> B
-    B -. "owner-observed, unverified analysis" .-> H
+        F --> O
+        V --> M --> U
+        M -. "separate historical proposal request" .-> P
+        L -->|"upload"| V
+        L -. "fresh permit + owner click" .-> B
+        B -. "owner-observed analysis" .-> U
+    end
+
+    subgraph C3["C3 · Separate independent verification (offline)"]
+        S["Synthetic signed model fixture"]
+        ZP["Zone P · read-only provenance + Ed25519 authentication"]
+        ZE["Zone E · closed CSS grammar + provenance identity"]
+        PC["Hand-authored PC-1"]
+        ST["Disposable stage per replay"]
+        R["Trusted Playwright oracle · mobile + desktop"]
+        EV["3 replays + hash-verified evidence + candidate-specific verdict"]
+        REAL["Real proposal c3-live-meta-001 · NOT EXECUTED"]
+        BLOCK["REAL_ARTIFACT_DISABLED · CLI and exported verifier"]
+
+        S --> ZP --> ZE --> ST
+        PC --> ST --> R --> EV
+        REAL -. "refused, never staged" .-> BLOCK
+    end
+
+    O --> F01["F01: mobile REPRODUCED, desktop PASS"]
+    P -. "execution not authorized" .-> REAL
+    EV --> PCRES["PC-1 VERIFIED 3/3 · synthetic results separate"]
 
     classDef trusted fill:#10283a,color:#e8f7ff,stroke:#22c6f0,stroke-width:2px
     classDef untrusted fill:#311821,color:#ffe8e8,stroke:#ff4757,stroke-width:2px
     classDef gated fill:#1b2230,color:#e5e7eb,stroke:#94a3b8,stroke-dasharray:5 4
-    class O,R,E trusted
-    class S,H untrusted
-    class B gated
+    class O,F01,R,EV,PCRES trusted
+    class M,U,P,REAL untrusted
+    class B,BLOCK gated
 ```
 
-**Solid paths** show implemented local behavior or recorded evidence. **Dashed paths** show model targets or gated/owner-observed behavior; they do not imply an active provider request, an authorized repeat inference, or a verified model fix.
+**Solid paths** show implemented local behavior or recorded evidence. **Dashed paths** show gated historical requests and the explicit refusal of the real model proposal. They do not authorize a provider request or establish a verified AI-generated fix. Muse Wonder is configured but unused and untested.
+
+### C3 implementation status
+
+| C3 layer | Implemented and evidenced | Trust boundary |
+| --- | --- | --- |
+| **Zone P — provenance and authentication** | Read-only artifact validation, source evidence checks and detached Ed25519 signatures for enrolled synthetic test artifacts | A signature authenticates enrolled bytes, **not** historical model authorship or permission to execute. |
+| **Zone E — registration** | Closed-grammar CSS re-validation, trusted rendering and provenance-tagged model candidate identity | Identical CSS cannot transfer the hand-authored PC-1 verdict to a model proposal. |
+| **Independent verification** | Disposable candidate stages, trusted Playwright mobile/desktop checks, three-replay decisions and hash-checked evidence | **PC-1 VERIFIED 3/3** applies only to the hand-authored control; model-path tests use synthetic fixtures. |
+| **Historical real proposal** | Stored model correction from Meta, labelled **UNTRUSTED** | **HARD-DISABLED at both CLI and exported verifier**. Not read, staged, executed, or verified through C3. |
+
+See the [authenticated C3 command](scripts/c3-b2b-verify-authenticated.ts), [Zone P authentication](packages/provenance/src/artifact-auth.ts), [Zone E registration](packages/core/src/model-proposal.ts) and [independent verification](packages/core/src/model-verification.ts) for the implemented boundaries.
 
 ### Trust boundary at a glance
 
 - **Fixture → browser:** the trusted Playwright oracle observes the tap and cart state at fixed viewports.
 - **Recording → model:** media is validated before use; video content and model observations remain untrusted.
 - **Model → proposal:** structured output is validated and restricted to a closed CSS grammar. The historical Muse Spark proposal remains unverified.
+- **Signed synthetic artifact → C3 Zone P:** read-only loading, authenticated bytes and source provenance; model output remains untrusted data.
+- **C3 Zone P → Zone E:** only closed-grammar CSS triples and provenance labels are registered; no provider or credential capability crosses the bridge.
+- **C3 staging → oracle:** individual candidate replays produce independently attributable verdicts; the historical real proposal is hard-disabled and never reaches this path.
 - **Candidate → verdict:** a separate verifier derives results from browser evidence; the hand-authored PC-1 identity is kept separate.
 - **Local companion → provider:** the default path is mock-only. Owner-supervised live inference against the hackathon model is available only with an explicit per-attempt opt-in (durable spend ledger, zero proposals, no retries); historical one-shot attempts are spent and the ledgers are frozen.
 
