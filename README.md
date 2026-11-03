@@ -8,6 +8,7 @@
 
 <p align="center">
   <a href="#demo-in-90-seconds">Demo in 90 seconds</a> ·
+  <a href="#why-meta">Why Meta</a> ·
   <a href="#the-workflow">See the workflow</a> ·
   <a href="#architecture--trust-boundaries">Explore the architecture</a> ·
   <a href="#evidence-and-current-gates">Inspect the evidence</a> ·
@@ -36,6 +37,35 @@
 
 ProofPilot separately demonstrates a **hand-authored** CSS control (PC-1) that the trusted Playwright oracle verified in **three browser replays**. The historical model-generated correction was accepted as an **untrusted proposal** but **has not been applied or independently verified**. An end-to-end **AI-generated fix → safe application → independent verification** workflow is **not yet demonstrated or authorized**. The demo deliberately shows these boundaries instead of claiming autonomous repair.
 
+### At a glance
+
+| Claim | Status | Evidence |
+| --- | --- | --- |
+| F01 mobile defect reproduces (Cart stays at 0) | `REPRODUCED` | [Run the synthetic baseline](#run-the-synthetic-baseline) |
+| Hand-authored CSS control (PC-1) fixes it | `VERIFIED` 3/3 trusted browser replays — control only | [Evidence and current gates](#evidence-and-current-gates) |
+| Live AI watches the recording and describes the failure | Accepted, **UNVERIFIED** observation (one owner-run Baseten analysis) | [Actual Baseten F01 analysis](#actual-baseten-f01-analysis--owner-observed) |
+| AI-generated fix is applied and verified | **Not demonstrated, not authorized.** The one stored model proposal is untrusted and has never been run | [Evidence and current gates](#evidence-and-current-gates) |
+| Muse Wonder as a patcher | **Not tested**, not a dependency | [Model roles](#model-roles) |
+
+## Why Meta
+
+ProofPilot's central idea — *a model proposes, a separate trusted browser proves* — only works if the model can see the failure in the first place. The defect here is a silent mobile tap, which a screenshot cannot show and a screen recording can. Meta's models and tooling are used in these specific, evidenced ways:
+
+| Piece | Role in this project (as built) | Evidence |
+| --- | --- | --- |
+| **Muse Spark Open** (`meta-models/muse-spark-open-1026`, hackathon-issued deployment on **Baseten**) | The live analysis step: it watched the certified F01 recording and described the product page, two visible Add to cart taps and the unchanged Cart 0, and said what it could not know (tap registration, backend state). | [Actual Baseten F01 analysis](#actual-baseten-f01-analysis--owner-observed), [runbook §10](docs/UI-C3-02-D9-RUNBOOK.md) |
+| **Muse Spark 1.3** (Meta Model API) | Historical video-analysis smoke and the single stored, untrusted CSS proposal (`PROPOSAL_ACCEPTED`, never executed). | [Live smoke evidence](docs/LIVE-SMOKE.md), [execution report](docs/LIVE-C3-01-EXECUTION-REPORT.md) |
+| **Muse Wonder** (code-role model) | Configured default only. **Not used and not tested.** | [Model roles](#model-roles) |
+| **Muse Code** (coding agent, powered by Muse Spark per the handoff records) | Implementation agent in the later task handoffs; Claude Code is the implementation agent in the earlier ones. | [How it was built](#how-it-was-built-agent-handoffs) |
+
+**Why this matters beyond the demo**
+
+- **Video input changes what can be debugged.** Interaction bugs that leave no trace in a static capture become inspectable. This project shows one real, bounded example, not a general claim.
+- **Frontier models need a trust architecture.** The contribution is the harness: model output is labeled `UNVERIFIED`, proposals are restricted to a closed CSS grammar, every provider send is durably recorded before the request, and only an unmodified Playwright oracle can produce `VERIFIED`.
+- **Failures are part of the evidence.** The live path hit an HTTP 403, a response-shape failure and an output truncation before it succeeded. The harness recorded each one instead of hiding it (see the [attempt timeline](#attempt-timeline)).
+
+**Not claimed:** no AI-generated fix has been applied or verified; Muse Wonder is untested; provider billing is unverified.
+
 ## Demo in 90 seconds
 
 **A synthetic mobile bug, a real AI observation, and an independently verified hand-authored control—not an AI-fixed website.** The owner has already completed an authorized live Baseten F01 analysis. The walkthrough below **reuses that captured result**; recording a demonstration does not authorize another paid request.
@@ -60,7 +90,16 @@ On **November 2, 2026**, after audited [PR #41](https://github.com/mrdzyn/proofp
 - **Observed output:** the recording depicts an Enamel Trail Mug product page, two visible Add to cart tap indicators, and **Cart 0** remaining unchanged; the model explicitly stated that tap registration, network/backend state, and off-screen feedback were unknown.
 - **Classification:** **accepted live analysis, UNVERIFIED model observations** — **not** a root-cause diagnosis, a verified fix, or a provider billing audit.
 
-The owner supplied a screenshot and displayed observation text. The first authorized analysis in this three-attempt session previously refused as **TRANSPORT_TRUNCATED** at 1,024 tokens. The subsequent 2,048-token request completed. This supports the bounded remediation but does not prove reasoning-token exhaustion caused the original refusal. **The post-success ledger count still awaits an owner readback**; the runtime records each send before POST and never refunds a spend. This README authorizes no further live inference.
+### Attempt timeline
+
+| Run | Outcome | What it shows |
+| --- | --- | --- |
+| D9-LIVE-01 | Refused — provider returned HTTP 403, no model output | The harness refused to treat an error as an analysis; the send was recorded as spent. |
+| D9-LIVE-02 | Refused — HTTP 2xx, but the response failed strict validation (`TRANSPORT_SHAPE`) | The strict validator rejected a reply that did not match the expected shape; recorded as spent. |
+| D9-LIVE-V2-QA-01, first send | Refused — `TRANSPORT_TRUNCATED` at the 1,024-token cap (an earlier permit expired before sending, with no spend) | The output was cut off; PR #41 then raised the cap to 2,048 and added usage diagnostics. |
+| D9-LIVE-V2-QA-01, second send | **Accepted** at 2,048 tokens — owner-observed, `UNVERIFIED` | The model described the visible failure and its own uncertainties. Provider-reported usage only, not billing. |
+
+The owner supplied a screenshot and displayed observation text for the accepted run. The 2,048-token request completed where the 1,024-token one truncated. This supports the bounded remediation but does not prove reasoning-token exhaustion caused the original refusal. **The post-success ledger count still awaits an owner readback**; the runtime records each send before POST and never refunds a spend. This README authorizes no further live inference.
 
 ## The workflow
 
@@ -153,7 +192,7 @@ The state below reflects repository evidence and the current project status. It 
 - **Hand-authored PC-1 — `VERIFIED` 3/3:** three clean trusted replays for the hand-authored control only.
 - **Historical Muse Spark proposal — `PROPOSAL_ACCEPTED`:** one proposal artifact exists; it is untrusted, unexecuted and not verified.
 - **Historical Meta Muse Spark 1.3 video smoke — completed once (operator-reported):** the second of two authorized Meta video analyses produced a schema-valid, untrusted symptom. This neither verifies a fix nor guarantees ongoing account access. **Muse Wonder smoke — NOT TESTED.** See [live smoke evidence](docs/LIVE-SMOKE.md).
-- **Baseten live analysis — one accepted owner-operated result (UNVERIFIED):** after two historical refused/spent one-shot attempts (D9-LIVE-01 HTTP 403, D9-LIVE-02 HTTP 2xx TRANSPORT_SHAPE), the D9-LIVE-V2-QA-01 session produced a TRUNCATED refusal at 1,024 tokens and then an **accepted** F01 analysis at 2,048. Owner screenshot and usage are described above; the **post-success ledger count awaits owner readback**. The hackathon model pin, manual permit/click, synthetic F01 pin, zero proposals, and no-retry/no-refund rules remain. Billing unverified. See the [runbook](docs/UI-C3-02-D9-RUNBOOK.md).
+- **Baseten live analysis — one accepted owner-operated result (UNVERIFIED):** three earlier attempts were refused (see the [attempt timeline](#attempt-timeline)), then an **accepted** F01 analysis at 2,048 tokens. Owner screenshot and usage are described above; the **post-success ledger count awaits owner readback**. The hackathon model pin, manual permit/click, synthetic F01 pin, zero proposals, and no-retry/no-refund rules remain. Billing unverified. See the [runbook](docs/UI-C3-02-D9-RUNBOOK.md).
 - **Public hosted sandbox / arbitrary-site auto-fix — unavailable:** outside the implemented local synthetic workflow.
 
 `VERIFIED` applies only to the **hand-authored PC-1 control**. Its CSS happens to match the historical Muse Spark proposal; that equality does not transfer evidence or provenance to the proposal.
@@ -194,9 +233,10 @@ Open `http://127.0.0.1:4173/product/demo` after starting the fixture server. The
 
 ## Show the dashboard locally (no AI provider calls)
 
-For a **non-billable** local demonstration from a fresh checkout, install the dependencies using the baseline instructions above, then:
+For a **non-billable** local demonstration from a fresh checkout, use **Node.js 24+** (the companion runs a TypeScript entrypoint directly). Install the root dependencies using the baseline instructions above. The dashboard is a separate package with its own lockfile, so install its dependencies too, then build and serve:
 
 ~~~bash
+pnpm --dir dashboard install --frozen-lockfile
 pnpm --dir dashboard build
 node scripts/c3-live-analysis.ts --port 5188 --serve "$PWD/dashboard/dist"
 ~~~
@@ -226,6 +266,17 @@ docs/                        Architecture, status, security and evidence
 ProofPilot AI was built for the **Meta Global AI Developer Hackathon — Push the Frontier (2026)**. The repository distinguishes pre-existing delivery scaffolding from hackathon work in [Hackathon Contributions & Provenance](HACKATHON_CONTRIBUTIONS.md).
 
 **Stack:** TypeScript · Node.js · React + Vite · Playwright / Chromium · FFmpeg · GitHub Actions · Meta Model API · Baseten transport (owner-supervised only).
+
+## How it was built: agent handoffs
+
+ProofPilot was built by AI coding agents working from written task contracts under the owner's direction, with independent review of exact commits before anything merges.
+
+- **Task contracts** in [`tasks/`](tasks/) define scope and acceptance tests before work starts.
+- **Handoffs** in [`docs/HANDOFFS.md`](docs/HANDOFFS.md) record, for each unit of work, who did it, the exact base and branch, what changed, how it was validated and what must happen next. Earlier handoffs name Claude Code as the implementation agent; later handoffs name Muse Code (powered by Muse Spark).
+- **Independent review** is done by a separate agent or session that rechecks the exact head commit; findings and remediation rounds are recorded in the pull-request threads and handoffs.
+- **Authorization gates** keep agents from merging, deploying or spending provider allowance without an explicit owner decision.
+
+**A note on attribution:** both agents work through the owner's GitHub account, so GitHub authorship does not show which agent wrote a change. Authorship is established by the handoff records (and commit trailers where present), not by the GitHub user name.
 
 ## Contributing and provenance
 
