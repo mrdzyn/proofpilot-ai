@@ -280,7 +280,11 @@ node scripts/c3-live-analysis.ts --port 5188 --serve "$PWD/dashboard/dist"
 
 **Keep that terminal open.** The companion reads its commands (`pair`, `permit`, `status`, `quit`) from standard input and exits if it is started without an interactive terminal or with input closed.
 
-**Checked so far:** from a clean checkout on Linux with Node.js 24.22.2 and pnpm 12.6.0, the root and dashboard frozen installs and the Vite build succeed, and the companion started without `--live` and served the dashboard with its "mock transport, no live inference" banner. The pair → upload → mock-analysis flow has **not** been independently evidenced; it is owner-run.
+**Checked so far:** from a clean checkout on Linux with Node.js 24.22.2 and pnpm 12.6.0, the root and dashboard frozen installs and the Vite build succeed, and the companion started without `--live` and served the dashboard with its "mock transport, no live inference" banner. The pair → upload → mock-analysis flow was also run end to end on a synthetic, ffmpeg-generated MP4 (not the certified F01 recording) and returned a result labelled **MOCK FIXTURE — NOT A PROVIDER RESPONSE** with *live inference: no*, shown below. This is reviewer-run evidence, separate from the owner's macOS run and from the live Baseten result.
+
+<p align="center"><img src="docs/assets/readme/zone-l-mock-flow.png" width="640" alt="Zone L after a mock-only run: the result is labelled MOCK FIXTURE — NOT A PROVIDER RESPONSE, model mock-fixture-model (not a live model), transport mock-fixture, live inference no. Fixture token counts, not billing." /></p>
+
+<p align="center"><sub>Zone L, mock-only companion, synthetic MP4. Fixture text, not a provider response.</sub></p>
 
 Open **http://127.0.0.1:5188** and use the companion terminal's **pair** command to connect Zone L. Without the explicit **--live** flag, the companion starts in **mock-only** mode; it does not read Baseten credentials or send inference requests. To exercise mock analysis, choose an owner-generated synthetic MP4 and follow the UI's mock permit/upload flow. The certified F01 MP4 recording is **not checked into Git**.
 
