@@ -90,6 +90,10 @@ On **November 2, 2026**, after audited [PR #41](https://github.com/mrdzyn/proofp
 - **Observed output:** the recording depicts an Enamel Trail Mug product page, two visible Add to cart tap indicators, and **Cart 0** remaining unchanged; the model explicitly stated that tap registration, network/backend state, and off-screen feedback were unknown.
 - **Classification:** **accepted live analysis, UNVERIFIED model observations** — **not** a root-cause diagnosis, a verified fix, or a provider billing audit.
 
+<p align="center"><img src="docs/assets/readme/zone-l-live-baseten-result.png" width="560" alt="Owner screenshot of the Zone L result panel after the accepted live run: verdict chip LIVE VIA BASETEN — UNVERIFIED MODEL OUTPUT, model meta-models/muse-spark-open-1026, run local-2026-11-02-001, transport baseten-live, usage prompt 1631 completion 1309 total 2940 (reported, not billing), and the quoted observations including the model's listed uncertainties." /></p>
+
+<p align="center"><sub>Owner screenshot of the accepted live result, cropped to the result panel. Quoted model text is UNVERIFIED; usage is provider-reported, not billing. The spend counter and companion controls are deliberately not shown.</sub></p>
+
 ### Attempt timeline
 
 | Run | Outcome | What it shows |
@@ -99,7 +103,7 @@ On **November 2, 2026**, after audited [PR #41](https://github.com/mrdzyn/proofp
 | D9-LIVE-V2-QA-01, first send | Refused — `TRANSPORT_TRUNCATED` at the 1,024-token cap (an earlier permit expired before sending, with no spend) | The output was cut off; PR #41 then raised the cap to 2,048 and added usage diagnostics. |
 | D9-LIVE-V2-QA-01, second send | **Accepted** at 2,048 tokens — owner-observed, `UNVERIFIED` | The model described the visible failure and its own uncertainties. Provider-reported usage only, not billing. |
 
-The owner supplied a screenshot and displayed observation text for the accepted run. The 2,048-token request completed where the 1,024-token one truncated. This supports the bounded remediation but does not prove reasoning-token exhaustion caused the original refusal. **The post-success ledger count still awaits an owner readback**; the runtime records each send before POST and never refunds a spend. This README authorizes no further live inference.
+The owner's screenshot of the accepted run is shown above. The 2,048-token request completed where the 1,024-token one truncated. This supports the bounded remediation but does not prove reasoning-token exhaustion caused the original refusal. **The post-success ledger count still awaits an owner readback**; the runtime records each send before POST and never refunds a spend. This README authorizes no further live inference.
 
 ## The workflow
 
