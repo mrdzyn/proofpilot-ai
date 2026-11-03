@@ -133,7 +133,11 @@ bundle before anything is reported.
   command; every stale lock requires the positive-confirmation protocol above.
 - **Failure behavior:** any refusal or non-VERIFIED verdict ends the procedure. Do not re-run
   with altered parameters to chase VERIFIED; file the outcome (section 8 of the QA runbook)
-  and return to the owner for a new decision.
+  and return to the owner for a new decision. Note: under the future
+  single-use authorization design (`docs/C3-FINAL-READINESS-SPRINT.md` §3),
+  the mint membership is consumed up front even if verification later throws
+  (for example a busy lock) — so any retry, however innocent, restarts from
+  the full gate, never from a retained authorization.
 
 ## 7. What this procedure must never become
 

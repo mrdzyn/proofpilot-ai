@@ -119,7 +119,10 @@ caller-controlled CLI values alone.
 **Exact allowed files (enabling change; separate reviewed implementation PR only):**
 - `config/c3-real-run-authorization.json` (new, reviewed, narrow): the single
   runtime-checked authorization record. Exact fields: `runId`
-  (`c3-live-meta-001`), `artifactSha256`, `verificationSha` (exact V),
+  (`c3-live-meta-001`), `artifactSha256`, `verificationParentSha` (exact
+  `V`, the parent — never the record's own commit),
+  `trustRootsSha256` (SHA-256 of the exact enrolled
+  `config/artifact-trust-roots.json` file bytes in `W`),
   `sourceSha`, `sourceFixtureTree`, `sourceAnalysisId`, `keyId`,
   `approvalId` (names the out-of-band D-R1 record). Parent-binding (no
   self-reference): a committed record cannot contain the SHA of the commit
@@ -133,14 +136,26 @@ caller-controlled CLI values alone.
   containing **only** the authorization record (plus the §7 enrollment
   update; see the allow-list). The record names
   `verificationParentSha = V` (its parent, known before `W` exists), never
-  its own SHA. The runtime checkout is `W` (code byte-identical to `V`
-  except the allow-listed files), but the **verification revision is `V`**
-  (`verificationSha := V = HEAD~1`) for every downstream gate (E2 revision
-  checks, anchors, attestation, scoreboard binding). The CLI verifies
-  read-only: the tree is clean, `HEAD~1` equals the record's
-  `verificationParentSha`, `git diff --name-only V..HEAD` is exactly the
-  allow-list (no code difference), run id matches, and the five CLI values
-  equal the record's fields. Any absence, mismatch, dirty tree, non-parent
+  its own SHA. The real run happens at `W` itself, by SHA: a detached
+  checkout resolving to `W` (`git rev-parse HEAD == W`) on the unmerged
+  implementation branch or a verified fast-forward of it — never at a merge
+  product. The repo allows squash and rebase merges (PR #41 was
+  squash-merged), which would destroy `V` and `W` as addressable commits;
+  the gate then refuses fail-closed (`HEAD~1 != V`), but the procedure
+  breaks — so the run is never relocated to a merge product. D-R4 approves
+  merging the branch only as a merge commit preserving `V` and `W` as
+  ancestors (never squash or rebase), and even then any run stays pinned to
+  `W`, not the merge commit. A HEAD with two parents is refused outright
+  with a typed code: `HEAD~1` is ambiguous on a merge commit, so
+  parent-binding is unverifiable there. The runtime checkout is `W` (code
+  byte-identical to `V` except the allow-listed files), but the
+  **verification revision is `V`** (`verificationSha := V = HEAD~1`) for
+  every downstream gate (E2 revision checks, anchors, attestation,
+  scoreboard binding). The CLI verifies read-only: exactly one parent, the
+  tree is clean, `HEAD~1` equals the record's `verificationParentSha`,
+  `git diff --name-only V..HEAD` is exactly the allow-list (no code
+  difference), run id matches, and the five CLI values equal the record's
+  fields. Any absence, mismatch, dirty tree, merge-commit HEAD, non-parent
   `V`, or out-of-allow-list diff refuses **before the real artifact is
   accessed** (proven by asserting the P2 loader is never invoked: no read of
   the real artifact path). The record authorizes exactly one revision (`V`):
@@ -175,17 +190,30 @@ caller-controlled CLI values alone.
   primitives instead of trusting caller assertion**: it parses and validates
   the raw manifest bytes (exact eight `MANIFEST_KEYS`, same strict parser),
   verifies the Ed25519 signature itself with `node:crypto` against the
-  pinned `TrustRoots` bytes, requires the E1-registered proposal **object
+  supplied `TrustRoots` bytes, requires the E1-registered proposal **object
   identity** (`assertRegisteredModelProposal` — copies refused), and checks
-  equality across all four bindings: proposal, manifest, authorization
+  equality across all bindings: proposal, manifest, authorization
   record and CLI-observed `V` must agree on
   (`runId = c3-live-meta-001`, `artifactSha256`, `approvedSha = V =
-  record.verificationParentSha`). An exported helper trusting a caller
-  boolean, an `AuthenticatedArtifact` object, or a publicly registered
-  proposal is forbidden — only bytes that verify under the pinned key mint.
-  The git-parent observation (`HEAD~1`, diff allowlist) is performed by the
-  CLI under the §2 window and passed as observed strings; mint binds them by
-  equality to the crypto-bound `V` rather than re-observing git from Zone E.
+  record.verificationParentSha`), and the SHA-256 of the supplied
+  `TrustRoots` bytes must equal `record.trustRootsSha256`. An exported
+  helper trusting a caller boolean, an `AuthenticatedArtifact` object, or a
+  publicly registered proposal is forbidden — only bytes that verify under
+  the key named by the record mint. Trust-roots provenance, stated plainly:
+  the mint has no filesystem access, so the roots arrive solely as a CLI
+  argument read by the CLI from the fixed committed path
+  (`config/artifact-trust-roots.json` in `W`); "pinned" holds only because
+  the authenticated CLI is the sole permitted production importer of the
+  mint module (enforced by the importer allow-list test), plus the
+  `trustRootsSha256` comparison, which makes substituted roots fail even
+  when passed directly. `V` itself is **not** cryptographically bound — the
+  manifest carries no `V`, so `V` equality is between the unsigned record
+  and CLI-observed git strings; `V`'s integrity rests on git
+  parent-binding, the diff allowlist, D-R1/D-R5 and the §2 window, never on
+  the artifact signature. The git-parent observation (`HEAD~1`, diff
+  allowlist) is performed by the CLI under the §2 window and passed as
+  observed strings; mint binds them by equality to that observed `V`
+  rather than re-observing git from Zone E.
 - `packages/core/src/model-verification.ts`: narrowly extend the exported
   `verifyRegisteredProposal` hard-disable
   (`model-verification.ts:192-204`) so the real id is admitted **only**
@@ -193,7 +221,10 @@ caller-controlled CLI values alone.
   lives solely in the new module's private set, scoped to the exact
   (`runId`, `artifactSha256`, `approvedSha=V`) triple. Consumption: the
   first verification call deletes the membership (one-shot; re-entry
-  requires the full gate again). Unreachability: the set is module-private,
+  requires the full gate again). The membership is deleted up front when
+  consumed, so if verification later throws (for example a busy lock), the
+  authorization is already spent — any retry restarts from the full gate
+  (see the runbook failure-behavior note). Unreachability: the set is module-private,
   never exported, never serialized; synthetic fixtures live in a disjoint
   run-id namespace and can never mint the real id (mint hard-requires the
   real run id **and** a signature verifying under the pinned roots).
@@ -225,11 +256,19 @@ caller-controlled CLI values alone.
   - `tests/unit/c3-real-mint.test.ts` (new bridge battery) — the mint
     function refuses: caller-asserted booleans / `AuthenticatedArtifact`
     lookalikes bypassing crypto, forged or replayed signatures, unknown key
-    ids, manifest/record/CLI `V` disagreement, synthetic run ids, second use
-    of a consumed membership, and replay of a handle across a different `V`.
+    ids, substituted trust roots (`trustRootsSha256` mismatch), manifest
+    record/CLI `V` disagreement, synthetic run ids, second use of a
+    consumed membership, and replay of a handle across a different `V`.
     Positive case only with test-key bytes that actually verify plus exactly
     matching bindings; asserts the public `registerModelProposal` path alone
-    never creates AUTHORIZED membership.
+    never creates AUTHORIZED membership. Differential requirement: the
+    mint's manifest parser and Ed25519 check must agree with Zone P
+    (`parseSignatureManifest` / `verifyArtifactAuthentication` in
+    `packages/provenance/src/artifact-auth.ts`) on shared vectors — every
+    valid vector mints-or-verifies in both, every malformed/tampered vector
+    refuses in both; any drift (mint accepts what Zone P rejects or vice
+    versa) fails, since the mint cannot import provenance code and the two
+    implementations would otherwise diverge silently.
   - `tests/security/c3-real-bypass.test.ts` — a direct call to exported
     `verifyRegisteredProposal` with the real id and no minted membership
     throws `REAL_ARTIFACT_DISABLED`; membership cannot be forged, replayed
@@ -350,11 +389,13 @@ explicitly prefers a second model opinion over the recorded finding.
 4. Independent security review of the exact final HEAD (`W`: code from `V`
    plus the trivial allow-listed child diff) against the
    `tasks/PP-META-I2-C3-B2B.md` §9 checklist; owner merge approval (D-R4
-   scope: merge of `W`).
+   scope: merge-commit of the branch preserving `V`/`W` — never squash or
+   rebase).
 5. Owner performs runbook §3 prerequisites, records them, and runs the single
-   supervised real execution at checkout `W` (D-R5 go-order names `V`, `W`
-   and the artifact hash); evidence re-verified independently from persisted
-   bytes.
+   supervised real execution at a detached checkout resolving to `W` by SHA
+   (D-R5 go-order names `V`, `W` and the artifact hash; a merge-commit HEAD
+   is never a run location); evidence re-verified independently from
+   persisted bytes.
 6. Publish the outcome whichever way it falls (VERIFIED or a legitimate negative); no re-chase.
 
 No step rebuilds the oracle, staging, coordinator, grammar, scoreboard, registration, or authentication infrastructure — all reused as audited.
@@ -372,7 +413,7 @@ Exact remaining owner decisions (all out of band, all required before any real r
 | D-R1 | Execution approval naming exact V (recorded only after V is frozen), S, fixture tree, analysis id, key id, artifact hash | Written approval referencing this spec §3 |
 | D-R2 | P2 ancestor-swap residual acceptance (separate-UID/snapshot, or documented single-writer trust) | Written risk acceptance per `docs/SEC-P2-01-FINDINGS.md` §6 |
 | D-R3 | Historical-artifact enrollment per runbook §7, or recorded cancel (which ends Option A) | Enrollment record or cancel notice |
-| D-R4 | Merge approval for the enabling implementation PR after independent review | Review sign-off on the exact final HEAD (`W`, including the parent-binding record and enrollment) |
+| D-R4 | Merge approval for the enabling implementation PR after independent review (merge-commit only — never squash or rebase, so `V` and `W` survive as addressable SHAs; the run stays pinned to `W` regardless) | Review sign-off on the exact final HEAD (`W`, including the parent-binding record and enrollment) |
 | D-R5 | Authorization of exactly one supervised owner-run execution at checkout `W` | Written go-order for the single run (names `V`, `W`, artifact hash) |
 
 Until D-R1…D-R5 are all recorded, the answer to "can an actual AI-generated correction be evaluated" remains: **the machine is ready; the authorization is not.**
