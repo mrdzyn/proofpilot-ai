@@ -2200,4 +2200,34 @@ Independent exact-HEAD audit of the new Draft PR; STOP afterwards — no merge, 
 ### Next action
 Independent security review of the exact PR head against the §3 allow-list and the C3-B2B §9 checklist; then owner decisions. STOP afterwards — no merge, deploy, spend, key reads, proposal access or live inference.
 
+## Handoff: C3-ENABLE-V2 — C3 enabling REV1 fixes (new V candidate, new Draft PR head)
+
+- **Task / phase:** C3-FINAL-READINESS §3 + §5 step 1; fixes 1–4 + minors from the C3-ENABLE-V1-REV1 independent review (comment 6595933333 on PR #45)
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** Independent security re-reviewer, then project owner
+- **Branch:** `phase/c3-real-run-enable` (from `origin/main@b1bb51f`)
+- **Implementation head:** `a862f06121b1b82f8c3ad17918b5e00468df72ca` (REV1 fixes; the branch tip adds only this handoff and the STATUS pointer)
+- **PR:** #45 (Draft, unmerged)
+- **State:** READY FOR RE-REVIEW
+
+### Completed
+- Fix 1: the REAL `refuseUnlessRealRunAuthorized` gate runs against disposable synthetic git repos (no record → HARD-DISABLED; dirty → DIRTY_TREE; merge → NOT_SINGLE_PARENT; bad parent → NOT_PARENT_CHILD; extra diff → DIFF_NOT_ALLOWLISTED; 5 CLI mismatches → RECORD_MISMATCH; fully consistent child passes into Zone P artifact loading). No re-implementation: the reviewed command file itself is copied into each temp checkout.
+- Fix 2: the CLI pre-checks all five CLI values against the record before any artifact/manifest/sidecar access.
+- Fix 3: post-authentication sidecar re-read through the pinned descriptor with byte-compare; the mint verifies the re-read bytes, so a mid-flight swap fails closed instead of splitting the two verifications.
+- Fix 4 (as approved in the review): the E2 boundary expectation gains the authorization-bridge edge; title names the bridge.
+- Minors: explicitly labeled M3 mutant test; importer scan extended to `dashboard/` and `verifier/`; garbled `model-verification.ts` comment rewritten.
+- Unchanged by this round: the mint module, the three unit test files, and every production semantic from V1. Still no record, no trust-roots change, no W; the real id still refuses.
+
+### Validation
+- `pnpm lint` — 271 files, 0 problems. `pnpm typecheck` — clean. `pnpm test:unit` — 603/603. `pnpm test:security` — 151/151 (the stale-expectation failure is gone via the approved one-liner; all four guard-removal mutants caught, importer allow-list holds). Integration refusal file — 6/6 (2 drill + 4 real-gate). `git diff --check` — clean.
+- Hosted CI on the final head: see the PR checks (exact HEAD + run id reported in the completion summary, not repeated here so this record never rots).
+
+### Continuation notes
+- V is NOT cryptographically bound by the manifest (it carries no V): V rests on git parent-binding, the diff allowlist, the record (which names `verificationParentSha` plus `trustRootsSha256`), D-R1/D-R5 and the §2 single-writer window — never on the artifact signature.
+- Process constraints for later steps (per the review): W must be created directly on V — the handoff-docs tip must not sit between V and W (the CLI requires `HEAD~1 == verificationParentSha`); freeze this V, then record D-R1. PR #45 must merge with a merge commit, never squash or rebase.
+- V is the code commit above; D-R1…D-R5, W creation, enrollment, the single supervised run and any merge decision are NOT AUTHORIZED by this work.
+
+### Next action
+Independent security re-review of the exact PR head against the §3 allow-list and the C3-B2B §9 checklist. STOP afterwards — no merge, deploy, spend, key reads, proposal access or live inference.
+
 <!-- HANDOFF_ENTRIES_END -->
