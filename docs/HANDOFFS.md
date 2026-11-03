@@ -2228,4 +2228,28 @@ Independent review of the exact PR head; then owner decisions. STOP afterwards �
 ### Next action
 Independent review of the exact PR head; then owner decisions. STOP afterwards — no merge, deploy, inference, signing, enrollment or real-proposal execution.
 
+## Handoff: UI-C3-L-DEMO-01B — PR #47 evidence-accuracy audit remediation
+
+- **Task / phase:** UI-C3-L-DEMO-01B (correction to UI-C3-L-DEMO-01/01A; leaves those handoffs unedited)
+- **From:** Implementation agent (Muse Code, powered by Muse Spark)
+- **To:** Independent reviewer, then project owner
+- **Branch:** `phase/ui-c3-l-demo-01` (from `origin/main@b1bb51f`; does not touch frozen V `a862f06`, authorization branch W, or PR #45 history)
+- **Implementation head:** `f82be29b9e257be1c5f31fc4f395e4c6ff103917` (Stage 2 accepted-analysis section + Stage 5 three replay rows + manifest data; the branch tip adds only this handoff and the STATUS pointer)
+- **PR:** #47 (Draft, unmerged)
+- **State:** READY FOR REVIEW
+
+### Completed
+- **MAJOR-1:** Stage 2 no longer says "0 accepted model analyses". It keeps the three refused/spent attempts and adds the later owner-observed accepted Baseten F01 analysis (run `local-2026-11-02-001`, `baseten-live` provenance, 2048 cap, 1631/1309/2940 provider-reported usage, owner-pasted observations, UNVERIFIED marker, ledger-readback-pending spend note). Facts sourced read-only from runbook §10 on the PR #42 docs branch (pending review); raw model body never accessed, agent never ran it. No fix/diagnosis/billing claim; footer provenance label updated to match.
+- **MAJOR-2:** Stage 5 no longer aggregates. Three separate replay rows cite the real per-replay records from offline C3 run `c3-b1-20261103T115426Z-b46ad0`: nonce, `PC-1/replay-N` dir, ORACLE_PASS + exit 0, mobile/desktop Cart 1, candidate-record SHA and oracle-report SHA prefixes (replays 2/3 report SHAs recomputed with the identical method as replay 1, which matches the previously committed value). Nothing fabricated; rows stay labeled hand-authored PC-1, never the model proposal.
+- **MINOR-1:** PR #47 body updated (620 KB single-file build, untracked-clip arrangement, `media-src 'self' blob:`). `docs/STATUS.md` header reconciled to the active UI-C3-L-DEMO-01B task/branch (phase, working branch, active task lines only); all historic milestone/gate records untouched.
+
+### Validation
+- Dashboard `typecheck` clean; `vite build` clean (single-file `dist/index.html` ~620 KB + untracked `dist/replay/` clip served alongside).
+- Root `lint` 0 problems; `test:unit` 586/586; `test:security` 141/141 (boundary + T-ABSENT-1 green on the new content).
+- UI smoke (throwaway probe, deleted after run): 27/27 — three refusals + accepted-analysis text/usage/spend shown, zero-accepted claims gone, three replay rows with real nonces + report SHAs, aggregated row gone, hand-authored label kept, clip plays 10.04 s when present, unavailable state when blocked, zero non-loopback requests, zero page errors in both states. Walkthrough re-record not required (no visual/staging change to the recorded path beyond added rows).
+- `git diff --check` clean. Frozen V, W and PR #45 untouched; no merge, deploy, inference, signing, enrollment or real-proposal execution.
+
+### Next action
+Independent exact-HEAD recheck of PR #47; STOP afterwards — no merge, deploy, inference, signing, enrollment or real-proposal execution.
+
 <!-- HANDOFF_ENTRIES_END -->
